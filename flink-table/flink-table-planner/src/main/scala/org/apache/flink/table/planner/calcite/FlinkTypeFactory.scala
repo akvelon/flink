@@ -162,6 +162,9 @@ class FlinkTypeFactory(
       case LogicalTypeRoot.BITMAP =>
         new BitmapRelDataType(t.asInstanceOf[BitmapType])
 
+      case LogicalTypeRoot.GEOGRAPHY =>
+        new GeographyRelDataType(t.asInstanceOf[GeographyType])
+
       case _ @t =>
         throw new TableException(s"Type is not supported: $t")
     }
@@ -426,6 +429,10 @@ class FlinkTypeFactory(
     canonize(new BitmapRelDataType(new BitmapType()))
   }
 
+  override def createGeographyType(): RelDataType = {
+    canonize(new GeographyRelDataType(new GeographyType()))
+  }
+
   override def createSqlType(typeName: SqlTypeName): RelDataType = {
     if (typeName == DECIMAL) {
       // if we got here, the precision and scale are not specified, here we
@@ -456,6 +463,9 @@ class FlinkTypeFactory(
 
       case bitmap: BitmapRelDataType =>
         bitmap.createWithNullability(isNullable)
+
+      case geography: GeographyRelDataType =>
+        geography.createWithNullability(isNullable)
 
       case generic: GenericRelDataType =>
         new GenericRelDataType(generic.genericType, isNullable, typeSystem)
@@ -694,6 +704,9 @@ object FlinkTypeFactory {
 
       case OTHER if relDataType.isInstanceOf[BitmapRelDataType] =>
         relDataType.asInstanceOf[BitmapRelDataType].getBitmapType
+
+      case OTHER if relDataType.isInstanceOf[GeographyRelDataType] =>
+        relDataType.asInstanceOf[GeographyRelDataType].getGeographyType
 
       case _ @t =>
         throw new TableException(s"Type is not supported: $t")
