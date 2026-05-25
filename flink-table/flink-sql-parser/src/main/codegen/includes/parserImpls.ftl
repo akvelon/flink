@@ -2630,6 +2630,17 @@ SqlTypeNameSpec SqlBitmapTypeName() :
     }
 }
 
+/** Parses GEOGRAPHY type. */
+SqlTypeNameSpec SqlGeographyTypeName() :
+{
+}
+{
+    <GEOGRAPHY>
+    {
+        return new SqlGeographyTypeNameSpec(getPos());
+    }
+}
+
 /**
 * Parse a "name1 type1 [ NULL | NOT NULL] [ comment ]
 * [, name2 type2 [ NULL | NOT NULL] [ comment ] ]* ..." list.
