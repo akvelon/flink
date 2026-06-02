@@ -21,6 +21,7 @@ package org.apache.flink.table.types;
 import org.apache.flink.api.common.typeinfo.Types;
 import org.apache.flink.api.common.typeutils.base.VoidSerializer;
 import org.apache.flink.table.api.DataTypes;
+import org.apache.flink.table.data.GeographyData;
 import org.apache.flink.table.types.logical.ArrayType;
 import org.apache.flink.table.types.logical.BigIntType;
 import org.apache.flink.table.types.logical.BinaryType;
@@ -235,7 +236,7 @@ class DataTypesTest {
                         .expectConversionClass(Bitmap.class),
                 TestSpec.forDataType(GEOGRAPHY())
                         .expectLogicalType(new GeographyType())
-                        .expectConversionClass(Object.class),
+                        .expectConversionClass(GeographyData.class),
                 TestSpec.forUnresolvedDataType(RAW(Types.VOID))
                         .expectUnresolvedString("[RAW('java.lang.Void', '?')]")
                         .lookupReturns(dummyRaw(Void.class))
