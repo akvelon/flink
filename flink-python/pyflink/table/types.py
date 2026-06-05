@@ -248,6 +248,17 @@ class VarBinaryType(AtomicType):
         return "VarBinaryType(%d, %s)" % (self.length, str(self._nullable).lower())
 
 
+class GeographyType(AtomicType):
+    """
+    Geography data type. SQL GEOGRAPHY
+
+    :param nullable: boolean, whether the field can be null (None) or not.
+    """
+
+    def __init__(self, nullable=True):
+        super(GeographyType, self).__init__(nullable)
+
+
 class BooleanType(AtomicType):
     """
     Boolean data types. SQL BOOLEAN
@@ -1700,6 +1711,8 @@ def _from_java_data_type(j_data_type):
             data_type = DataTypes.BINARY(logical_type.getLength(), logical_type.isNullable())
         elif is_instance_of(logical_type, gateway.jvm.VarBinaryType):
             data_type = DataTypes.VARBINARY(logical_type.getLength(), logical_type.isNullable())
+        elif is_instance_of(logical_type, gateway.jvm.GeographyType):
+            data_type = DataTypes.GEOGRAPHY(logical_type.isNullable())
         elif is_instance_of(logical_type, gateway.jvm.DecimalType):
             data_type = DataTypes.DECIMAL(logical_type.getPrecision(),
                                           logical_type.getScale(),
@@ -1850,6 +1863,8 @@ def _to_java_data_type(data_type: DataType):
         j_data_type = JDataTypes.VARBINARY(data_type.length)
     elif isinstance(data_type, BinaryType):
         j_data_type = JDataTypes.BINARY(data_type.length)
+    elif isinstance(data_type, GeographyType):
+        j_data_type = JDataTypes.GEOGRAPHY()
     elif isinstance(data_type, DecimalType):
         j_data_type = JDataTypes.DECIMAL(data_type.precision, data_type.scale)
     elif isinstance(data_type, DateType):
@@ -2443,6 +2458,15 @@ class DataTypes(object):
         .. seealso:: :func:`~DataTypes.VARBINARY`
         """
         return DataTypes.VARBINARY(0x7fffffff, nullable)
+
+    @staticmethod
+    def GEOGRAPHY(nullable: bool = True) -> GeographyType:
+        """
+        Data type of a geography value.
+
+        :param nullable: boolean, whether the type can be null (None) or not.
+        """
+        return GeographyType(nullable)
 
     @staticmethod
     def DECIMAL(precision: int, scale: int, nullable: bool = True) -> DecimalType:

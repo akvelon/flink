@@ -22,6 +22,19 @@ from pyflink.testing.test_case_utils import PyFlinkTestCase
 
 
 class SchemaTest(PyFlinkTestCase):
+    def test_schema_with_geography(self):
+        schema = Schema.new_builder() \
+            .column("id", DataTypes.BIGINT()) \
+            .column("location", DataTypes.GEOGRAPHY()) \
+            .column("required_location", DataTypes.GEOGRAPHY().not_null()) \
+            .build()
+
+        self.assertEqual("""(
+  `id` BIGINT,
+  `location` GEOGRAPHY,
+  `required_location` GEOGRAPHY NOT NULL
+)""", str(schema))
+
     def test_schema_basic(self):
         old_schema = Schema.new_builder() \
             .from_row_data_type(DataTypes.ROW(

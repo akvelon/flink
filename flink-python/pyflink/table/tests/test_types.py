@@ -806,6 +806,7 @@ class DataTypeConvertTests(PyFlinkTestCase):
         test_types = [DataTypes.STRING(),
                       DataTypes.BOOLEAN(),
                       DataTypes.BYTES(),
+                      DataTypes.GEOGRAPHY(),
                       DataTypes.TINYINT(),
                       DataTypes.SMALLINT(),
                       DataTypes.INT(),
@@ -829,6 +830,7 @@ class DataTypeConvertTests(PyFlinkTestCase):
                       JDataTypes.TIMESTAMP(3).notNull(),
                       JDataTypes.VARBINARY(100).notNull(),
                       JDataTypes.BINARY(2).notNull(),
+                      JDataTypes.GEOGRAPHY().notNull(),
                       JDataTypes.VARCHAR(30).notNull(),
                       JDataTypes.CHAR(50).notNull(),
                       JDataTypes.DECIMAL(20, 10).notNull()]
@@ -839,6 +841,7 @@ class DataTypeConvertTests(PyFlinkTestCase):
                     DataTypes.TIMESTAMP(3).not_null(),
                     DataTypes.VARBINARY(100, False),
                     DataTypes.BINARY(2, False),
+                    DataTypes.GEOGRAPHY(False),
                     DataTypes.VARCHAR(30, False),
                     DataTypes.CHAR(50, False),
                     DataTypes.DECIMAL(20, 10, False)]
