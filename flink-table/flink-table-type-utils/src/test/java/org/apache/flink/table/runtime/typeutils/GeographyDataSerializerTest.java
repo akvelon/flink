@@ -18,6 +18,7 @@
 
 package org.apache.flink.table.runtime.typeutils;
 
+import org.apache.flink.api.common.typeutils.SerializerTestBase;
 import org.apache.flink.api.common.typeutils.TypeSerializer;
 import org.apache.flink.core.memory.DataInputViewStreamWrapper;
 import org.apache.flink.core.memory.DataOutputViewStreamWrapper;
@@ -37,12 +38,46 @@ import java.io.ByteArrayOutputStream;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /** Tests for {@link GeographyDataSerializer}. */
-class GeographyDataSerializerTest {
+class GeographyDataSerializerTest extends SerializerTestBase<GeographyData> {
 
     private static final byte[] POINT_WKB =
             new byte[] {
                 1, GeographyData.POINT, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
             };
+
+    private static final byte[] BIG_ENDIAN_POINT_WKB =
+            new byte[] {
+                0, 0, 0, 0, GeographyData.POINT, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
+            };
+
+    @Override
+    protected TypeSerializer<GeographyData> createSerializer() {
+        return GeographyDataSerializer.INSTANCE;
+    }
+
+    @Override
+    protected int getLength() {
+        return -1;
+    }
+
+    @Override
+    protected Class<GeographyData> getTypeClass() {
+        return GeographyData.class;
+    }
+
+    @Override
+    protected GeographyData[] getTestData() {
+        return new GeographyData[] {
+            GeographyData.fromBytes(POINT_WKB),
+            GeographyData.fromBytes(BIG_ENDIAN_POINT_WKB),
+            GeographyDataSerializer.INSTANCE.createInstance()
+        };
+    }
+
+    @Override
+    protected void deepEquals(String message, GeographyData should, GeographyData is) {
+        assertThat(is.toBytes()).as(message).isEqualTo(should.toBytes());
+    }
 
     @Test
     void testInternalSerializerRoundTripsRawWkb() throws Exception {
