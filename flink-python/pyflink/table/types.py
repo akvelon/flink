@@ -258,6 +258,23 @@ class GeographyType(AtomicType):
     def __init__(self, nullable=True):
         super(GeographyType, self).__init__(nullable)
 
+    def need_conversion(self):
+        return True
+
+    def to_sql_type(self, value):
+        if value is None:
+            return None
+        if isinstance(value, (bytes, bytearray, memoryview)):
+            return bytes(value)
+        raise TypeError("GEOGRAPHY values must be WKB bytes, but got: %s" % type(value))
+
+    def from_sql_type(self, value):
+        if value is None:
+            return None
+        if isinstance(value, (bytes, bytearray, memoryview)):
+            return bytes(value)
+        raise TypeError("GEOGRAPHY values must be WKB bytes, but got: %s" % type(value))
+
 
 class BooleanType(AtomicType):
     """
@@ -1970,6 +1987,7 @@ _acceptable_types = {
     VarCharType: (str,),
     BinaryType: (bytearray,),
     VarBinaryType: (bytearray,),
+    GeographyType: (bytes, bytearray, memoryview),
     DateType: (datetime.date, datetime.datetime),
     TimeType: (datetime.time,),
     TimestampType: (datetime.datetime,),

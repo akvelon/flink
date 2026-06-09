@@ -786,6 +786,21 @@ class StreamTableEnvironmentTests(PyFlinkStreamTableTestCase):
                 collected_result.append(i)
             self.assertEqual(expected_result, collected_result)
 
+    def test_geography_wkb_bytes_round_trip(self):
+        point_wkb = bytes.fromhex("010100000000000000000000000000000000000000")
+        source = self.t_env.from_elements(
+            [(point_wkb,), (bytearray(point_wkb),), (memoryview(point_wkb),), (None,)],
+            DataTypes.ROW([DataTypes.FIELD("g", DataTypes.GEOGRAPHY())]))
+
+        table_result = source.execute()
+        with table_result.collect() as result:
+            collected_result = list(result)
+
+        self.assertEqual([Row(point_wkb), Row(point_wkb), Row(point_wkb), Row(None)],
+                         collected_result)
+        for row in collected_result[:3]:
+            self.assertIsInstance(row[0], bytes)
+
     def test_row_form_consistency_with_elements(self):
         schema = DataTypes.ROW(
             [

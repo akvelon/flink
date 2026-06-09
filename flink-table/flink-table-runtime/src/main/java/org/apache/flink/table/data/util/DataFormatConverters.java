@@ -35,6 +35,7 @@ import org.apache.flink.table.data.DecimalDataUtils;
 import org.apache.flink.table.data.GenericArrayData;
 import org.apache.flink.table.data.GenericMapData;
 import org.apache.flink.table.data.GenericRowData;
+import org.apache.flink.table.data.GeographyData;
 import org.apache.flink.table.data.MapData;
 import org.apache.flink.table.data.RawValueData;
 import org.apache.flink.table.data.RowData;
@@ -192,6 +193,13 @@ public class DataFormatConverters {
             case BINARY:
             case VARBINARY:
                 return PrimitiveByteArrayConverter.INSTANCE;
+            case GEOGRAPHY:
+                if (clazz == GeographyData.class) {
+                    return GeographyDataConverter.INSTANCE;
+                } else {
+                    throw new RuntimeException(
+                            "Not support conversion class for GEOGRAPHY: " + clazz);
+                }
             case DECIMAL:
                 Tuple2<Integer, Integer> ps = getPrecision(logicalType);
                 if (clazz == BigDecimal.class) {
@@ -1054,6 +1062,21 @@ public class DataFormatConverters {
         @Override
         byte[] toExternalImpl(RowData row, int column) {
             return row.getBinary(column);
+        }
+    }
+
+    /** Converter for {@link GeographyData}. */
+    public static final class GeographyDataConverter extends IdentityConverter<GeographyData> {
+
+        private static final long serialVersionUID = 1L;
+
+        public static final GeographyDataConverter INSTANCE = new GeographyDataConverter();
+
+        private GeographyDataConverter() {}
+
+        @Override
+        GeographyData toExternalImpl(RowData row, int column) {
+            return row.getGeography(column);
         }
     }
 

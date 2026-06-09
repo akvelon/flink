@@ -19,6 +19,7 @@ import glob
 import os
 import subprocess
 
+from pyflink.common import Row
 from pyflink.find_flink_home import _find_flink_source_root
 from pyflink.java_gateway import get_gateway
 from pyflink.table import ResultKind, ExplainDetail
@@ -29,6 +30,13 @@ from pyflink.testing.test_case_utils import PyFlinkStreamTableTestCase, \
 
 
 class StreamSqlTests(PyFlinkStreamTableTestCase):
+
+    def test_geography_sql_smoke(self):
+        table_result = self.t_env.execute_sql("SELECT CAST(NULL AS GEOGRAPHY) AS g")
+
+        self.assert_equals(table_result.get_resolved_schema().get_column_names(), ["g"])
+        with table_result.collect() as result:
+            self.assertEqual([Row(None)], list(result))
 
     def test_sql_ddl(self):
         self.t_env.execute_sql("create temporary function func1 as "
