@@ -19,7 +19,6 @@
 package org.apache.flink.table.runtime.typeutils;
 
 import org.apache.flink.annotation.Internal;
-import org.apache.flink.api.common.typeutils.SimpleTypeSerializerSnapshot;
 import org.apache.flink.api.common.typeutils.TypeSerializerSnapshot;
 import org.apache.flink.api.common.typeutils.base.TypeSerializerSingleton;
 import org.apache.flink.core.memory.DataInputView;
@@ -28,18 +27,23 @@ import org.apache.flink.table.data.GeographyData;
 
 import java.io.IOException;
 
-/** Serializer for {@link GeographyData}. */
+/**
+ * Serializer for {@link GeographyData} values of {@link
+ * org.apache.flink.table.types.logical.GeographyType}.
+ */
 @Internal
-public final class GeographyDataSerializer extends TypeSerializerSingleton<GeographyData> {
+public final class GeographyTypeSerializer extends TypeSerializerSingleton<GeographyData> {
 
     private static final long serialVersionUID = 1L;
+
+    private static final int FORMAT_VERSION = 1;
 
     private static final byte[] EMPTY_GEOMETRY_COLLECTION =
             new byte[] {1, GeographyData.GEOMETRY_COLLECTION, 0, 0, 0, 0, 0, 0, 0};
 
-    public static final GeographyDataSerializer INSTANCE = new GeographyDataSerializer();
+    public static final GeographyTypeSerializer INSTANCE = new GeographyTypeSerializer();
 
-    private GeographyDataSerializer() {}
+    private GeographyTypeSerializer() {}
 
     @Override
     public boolean isImmutableType() {
@@ -69,13 +73,15 @@ public final class GeographyDataSerializer extends TypeSerializerSingleton<Geogr
     @Override
     public void serialize(GeographyData record, DataOutputView target) throws IOException {
         final byte[] bytes = record.toBytes();
+        target.writeByte(FORMAT_VERSION);
         target.writeInt(bytes.length);
         target.write(bytes);
     }
 
     @Override
     public GeographyData deserialize(DataInputView source) throws IOException {
-        final int length = source.readInt();
+        readFormatVersion(source);
+        final int length = readPayloadLength(source);
         final byte[] bytes = new byte[length];
         source.readFully(bytes);
         return GeographyData.fromBytes(bytes);
@@ -88,23 +94,34 @@ public final class GeographyDataSerializer extends TypeSerializerSingleton<Geogr
 
     @Override
     public void copy(DataInputView source, DataOutputView target) throws IOException {
-        final int length = source.readInt();
+        final int version = readFormatVersion(source);
+        final int length = readPayloadLength(source);
+        target.writeByte(version);
         target.writeInt(length);
         target.write(source, length);
     }
 
     @Override
     public TypeSerializerSnapshot<GeographyData> snapshotConfiguration() {
-        return new GeographyDataSerializerSnapshot();
+        return new GeographyTypeSerializerSnapshot();
     }
 
-    /** Serializer configuration snapshot for compatibility and format evolution. */
-    @SuppressWarnings("WeakerAccess")
-    public static final class GeographyDataSerializerSnapshot
-            extends SimpleTypeSerializerSnapshot<GeographyData> {
-
-        public GeographyDataSerializerSnapshot() {
-            super(() -> INSTANCE);
+    private static int readFormatVersion(DataInputView source) throws IOException {
+        final int version = source.readUnsignedByte();
+        if (version != FORMAT_VERSION) {
+            throw new IOException(
+                    String.format(
+                            "Unsupported GEOGRAPHY serializer format version %d. Expected %d.",
+                            version, FORMAT_VERSION));
         }
+        return version;
+    }
+
+    private static int readPayloadLength(DataInputView source) throws IOException {
+        final int length = source.readInt();
+        if (length < 0) {
+            throw new IOException(String.format("Invalid GEOGRAPHY payload length %d.", length));
+        }
+        return length;
     }
 }
