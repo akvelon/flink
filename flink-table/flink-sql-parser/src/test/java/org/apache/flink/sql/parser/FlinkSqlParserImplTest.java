@@ -4086,6 +4086,8 @@ class FlinkSqlParserImplTest extends SqlParserTest {
         // GEOGRAPHY takes no parameters
         sql("CREATE TABLE t (\n" + "g geography^(^1)" + "\n)")
                 .fails("(?s).*Encountered \"\\(\" at line 2, column 12.\n.*");
+        sql("CREATE TABLE t (\n" + "g geography^(^4326)" + "\n)")
+                .fails("(?s).*Encountered \"\\(\" at line 2, column 12.\n.*");
 
         // GEOGRAPHY is a reserved keyword and cannot be used as an identifier without escaping
         sql("CREATE TABLE t (\n" + "^geography^ INT" + "\n)")
