@@ -20,6 +20,8 @@ package org.apache.flink.table.runtime.typeutils;
 
 import org.apache.flink.api.common.typeutils.SerializerTestBase;
 import org.apache.flink.api.common.typeutils.TypeSerializer;
+import org.apache.flink.api.common.typeutils.TypeSerializerSnapshot;
+import org.apache.flink.api.common.typeutils.TypeSerializerSnapshotSerializationUtil;
 import org.apache.flink.core.memory.DataInputViewStreamWrapper;
 import org.apache.flink.core.memory.DataOutputViewStreamWrapper;
 import org.apache.flink.table.data.GenericArrayData;
@@ -34,11 +36,15 @@ import org.junit.jupiter.api.Test;
 
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
+import java.io.IOException;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
-/** Tests for {@link GeographyDataSerializer}. */
-class GeographyDataSerializerTest extends SerializerTestBase<GeographyData> {
+/** Tests for {@link GeographyTypeSerializer}. */
+class GeographyTypeSerializerTest extends SerializerTestBase<GeographyData> {
+
+    private static final int FORMAT_VERSION = 1;
 
     private static final byte[] POINT_WKB =
             new byte[] {
@@ -52,7 +58,7 @@ class GeographyDataSerializerTest extends SerializerTestBase<GeographyData> {
 
     @Override
     protected TypeSerializer<GeographyData> createSerializer() {
-        return GeographyDataSerializer.INSTANCE;
+        return GeographyTypeSerializer.INSTANCE;
     }
 
     @Override
@@ -70,7 +76,7 @@ class GeographyDataSerializerTest extends SerializerTestBase<GeographyData> {
         return new GeographyData[] {
             GeographyData.fromBytes(POINT_WKB),
             GeographyData.fromBytes(BIG_ENDIAN_POINT_WKB),
-            GeographyDataSerializer.INSTANCE.createInstance()
+            GeographyTypeSerializer.INSTANCE.createInstance()
         };
     }
 
@@ -97,9 +103,65 @@ class GeographyDataSerializerTest extends SerializerTestBase<GeographyData> {
     }
 
     @Test
+    void testSerializedFormUsesVersionedLengthEnvelope() throws Exception {
+        final ByteArrayOutputStream bytes = new ByteArrayOutputStream();
+
+        GeographyTypeSerializer.INSTANCE.serialize(
+                GeographyData.fromBytes(POINT_WKB), new DataOutputViewStreamWrapper(bytes));
+        final DataInputViewStreamWrapper input =
+                new DataInputViewStreamWrapper(new ByteArrayInputStream(bytes.toByteArray()));
+        final byte[] payload = new byte[POINT_WKB.length];
+
+        assertThat(input.readUnsignedByte()).isEqualTo(FORMAT_VERSION);
+        assertThat(input.readInt()).isEqualTo(POINT_WKB.length);
+        input.readFully(payload);
+        assertThat(payload).isEqualTo(POINT_WKB);
+    }
+
+    @Test
+    void testRejectsUnsupportedPayloadVersion() throws Exception {
+        final ByteArrayOutputStream bytes = new ByteArrayOutputStream();
+        final DataOutputViewStreamWrapper output = new DataOutputViewStreamWrapper(bytes);
+        output.writeByte(2);
+        output.writeInt(POINT_WKB.length);
+        output.write(POINT_WKB);
+
+        assertThatThrownBy(
+                        () ->
+                                GeographyTypeSerializer.INSTANCE.deserialize(
+                                        new DataInputViewStreamWrapper(
+                                                new ByteArrayInputStream(bytes.toByteArray()))))
+                .isInstanceOf(IOException.class)
+                .hasMessageContaining("Unsupported GEOGRAPHY serializer format version 2");
+    }
+
+    @Test
+    void testSnapshotSelfCompatibility() throws Exception {
+        final TypeSerializerSnapshot<GeographyData> snapshot =
+                GeographyTypeSerializer.INSTANCE.snapshotConfiguration();
+        final ByteArrayOutputStream bytes = new ByteArrayOutputStream();
+
+        TypeSerializerSnapshotSerializationUtil.writeSerializerSnapshot(
+                new DataOutputViewStreamWrapper(bytes), snapshot);
+        final TypeSerializerSnapshot<GeographyData> restoredSnapshot =
+                TypeSerializerSnapshotSerializationUtil.readSerializerSnapshot(
+                        new DataInputViewStreamWrapper(
+                                new ByteArrayInputStream(bytes.toByteArray())),
+                        getClass().getClassLoader());
+
+        assertThat(
+                        GeographyTypeSerializer.INSTANCE
+                                .snapshotConfiguration()
+                                .resolveSchemaCompatibility(restoredSnapshot)
+                                .isCompatibleAsIs())
+                .isTrue();
+        assertThat(restoredSnapshot.restoreSerializer()).isSameAs(GeographyTypeSerializer.INSTANCE);
+    }
+
+    @Test
     void testCopyPreservesRawWkbBytes() {
         final GeographyData geography = GeographyData.fromBytes(POINT_WKB);
-        final GeographyData copied = GeographyDataSerializer.INSTANCE.copy(geography);
+        final GeographyData copied = GeographyTypeSerializer.INSTANCE.copy(geography);
 
         assertThat(copied).isNotSameAs(geography);
         assertThat(copied.toBytes()).isEqualTo(POINT_WKB);
@@ -108,7 +170,7 @@ class GeographyDataSerializerTest extends SerializerTestBase<GeographyData> {
 
     @Test
     void testCreateInstanceReturnsValidGeographyData() {
-        final GeographyData instance = GeographyDataSerializer.INSTANCE.createInstance();
+        final GeographyData instance = GeographyTypeSerializer.INSTANCE.createInstance();
 
         assertThat(instance.subtypeId()).isEqualTo(GeographyData.GEOMETRY_COLLECTION);
         assertThat(instance.sizeInBytes()).isEqualTo(9);
