@@ -3105,6 +3105,31 @@ public final class BuiltInFunctionDefinitions {
                             "org.apache.flink.table.runtime.functions.scalar.StGeogFromWkbFunction")
                     .build();
 
+    public static final BuiltInFunctionDefinition ST_ASTEXT =
+            BuiltInFunctionDefinition.newBuilder()
+                    .name("ST_ASTEXT")
+                    .kind(SCALAR)
+                    .inputTypeStrategy(
+                            sequence(
+                                    Collections.singletonList("geography"),
+                                    Collections.singletonList(logical(LogicalTypeRoot.GEOGRAPHY))))
+                    .outputTypeStrategy(nullableIfArgs(explicit(DataTypes.STRING())))
+                    .runtimeClass(
+                            "org.apache.flink.table.runtime.functions.scalar.StAsTextFunction")
+                    .build();
+
+    public static final BuiltInFunctionDefinition ST_ASWKB =
+            BuiltInFunctionDefinition.newBuilder()
+                    .name("ST_ASWKB")
+                    .kind(SCALAR)
+                    .inputTypeStrategy(
+                            sequence(
+                                    Collections.singletonList("geography"),
+                                    Collections.singletonList(logical(LogicalTypeRoot.GEOGRAPHY))))
+                    .outputTypeStrategy(nullableIfArgs(explicit(DataTypes.BYTES())))
+                    .runtimeClass("org.apache.flink.table.runtime.functions.scalar.StAsWkbFunction")
+                    .build();
+
     // --------------------------------------------------------------------------------------------
     // Bitmap functions
     // --------------------------------------------------------------------------------------------

@@ -31,6 +31,7 @@ import org.locationtech.jts.io.ParseException;
 import org.locationtech.jts.io.WKBReader;
 import org.locationtech.jts.io.WKBWriter;
 import org.locationtech.jts.io.WKTReader;
+import org.locationtech.jts.io.WKTWriter;
 
 import java.util.regex.Pattern;
 
@@ -46,6 +47,7 @@ final class GeographyConversionUtils {
     private static final WKBReader WKB_READER = new WKBReader();
     private static final WKBWriter WKB_WRITER =
             new WKBWriter(2, ByteOrderValues.LITTLE_ENDIAN, false);
+    private static final WKTWriter WKT_WRITER = new WKTWriter(2);
 
     private GeographyConversionUtils() {}
 
@@ -84,6 +86,22 @@ final class GeographyConversionUtils {
 
         validateGeometry(readGeometry(geography));
         return geography;
+    }
+
+    static StringData asText(GeographyData geography) {
+        if (geography == null) {
+            return null;
+        }
+
+        return StringData.fromString(WKT_WRITER.write(readGeometry(geography)));
+    }
+
+    static byte[] asWkb(GeographyData geography) {
+        if (geography == null) {
+            return null;
+        }
+
+        return geography.toBytes();
     }
 
     private static GeographyData fromValidatedGeometry(Geometry geometry) {
