@@ -28,6 +28,7 @@ import org.apache.flink.table.calcite.ExtendedRelTypeFactory;
 import org.apache.flink.table.legacy.api.TableSchema;
 import org.apache.flink.table.legacy.types.logical.TypeInformationRawType;
 import org.apache.flink.table.planner.plan.schema.BitmapRelDataType;
+import org.apache.flink.table.planner.plan.schema.GeographyRelDataType;
 import org.apache.flink.table.planner.plan.schema.GenericRelDataType;
 import org.apache.flink.table.planner.plan.schema.RawRelDataType;
 import org.apache.flink.table.planner.plan.schema.StructuredRelDataType;
@@ -46,6 +47,7 @@ import org.apache.flink.table.types.logical.DecimalType;
 import org.apache.flink.table.types.logical.DescriptorType;
 import org.apache.flink.table.types.logical.DoubleType;
 import org.apache.flink.table.types.logical.FloatType;
+import org.apache.flink.table.types.logical.GeographyType;
 import org.apache.flink.table.types.logical.IntType;
 import org.apache.flink.table.types.logical.LegacyTypeInformationType;
 import org.apache.flink.table.types.logical.LocalZonedTimestampType;
@@ -161,6 +163,11 @@ public class FlinkTypeFactory extends JavaTypeFactoryImpl implements ExtendedRel
     }
 
     @Override
+    public RelDataType createGeographyType() {
+        return canonize(new GeographyRelDataType(new GeographyType()));
+    }
+
+    @Override
     public RelDataType createArrayType(RelDataType elementType, long maxCardinality) {
         // Just validate type, make sure there is a failure in validate phase.
         checkForNullType(elementType);
@@ -230,6 +237,8 @@ public class FlinkTypeFactory extends JavaTypeFactoryImpl implements ExtendedRel
             newType = ((StructuredRelDataType) relDataType).createWithNullability(isNullable);
         } else if (relDataType instanceof BitmapRelDataType) {
             newType = ((BitmapRelDataType) relDataType).createWithNullability(isNullable);
+        } else if (relDataType instanceof GeographyRelDataType) {
+            newType = ((GeographyRelDataType) relDataType).createWithNullability(isNullable);
         } else if (relDataType instanceof GenericRelDataType) {
             final GenericRelDataType generic = (GenericRelDataType) relDataType;
             newType = new GenericRelDataType(generic.genericType(), isNullable, getTypeSystem());
@@ -491,6 +500,9 @@ public class FlinkTypeFactory extends JavaTypeFactoryImpl implements ExtendedRel
 
             case BITMAP:
                 return new BitmapRelDataType((BitmapType) logicalType);
+
+            case GEOGRAPHY:
+                return new GeographyRelDataType((GeographyType) logicalType);
 
             default:
                 throw new TableException("Type is not supported: " + logicalType);
@@ -865,6 +877,8 @@ public class FlinkTypeFactory extends JavaTypeFactoryImpl implements ExtendedRel
                     return ((RawRelDataType) relDataType).getRawType();
                 } else if (relDataType instanceof BitmapRelDataType) {
                     return ((BitmapRelDataType) relDataType).getBitmapType();
+                } else if (relDataType instanceof GeographyRelDataType) {
+                    return ((GeographyRelDataType) relDataType).getGeographyType();
                 } else {
                     throw new TableException("Type is not supported: " + relDataType);
                 }
