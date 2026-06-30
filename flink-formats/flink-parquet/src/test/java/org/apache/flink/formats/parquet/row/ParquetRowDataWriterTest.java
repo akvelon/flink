@@ -91,9 +91,7 @@ class ParquetRowDataWriterTest {
             };
 
     private static final byte[] SECOND_POINT_WKB =
-            new byte[] {
-                1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0x40, 0, 0, 0, 0, 0, 0, 8, 0x40
-            };
+            new byte[] {1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0x40, 0, 0, 0, 0, 0, 0, 8, 0x40};
 
     private static final RowType ROW_TYPE =
             RowType.of(
