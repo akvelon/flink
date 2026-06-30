@@ -146,8 +146,7 @@ class AvroFormatFactoryTest {
                                         geographySchema.toPhysicalRowDataType()))
                 .hasMessageContaining("Unsupported to derive Schema for type: GEOGRAPHY");
 
-        DynamicTableSink sink =
-                FactoryMocks.createTableSink(geographySchema, getAllOptions(true));
+        DynamicTableSink sink = FactoryMocks.createTableSink(geographySchema, getAllOptions(true));
         assertThat(sink).isInstanceOf(TestDynamicTableFactory.DynamicTableSinkMock.class);
         TestDynamicTableFactory.DynamicTableSinkMock sinkMock =
                 (TestDynamicTableFactory.DynamicTableSinkMock) sink;
