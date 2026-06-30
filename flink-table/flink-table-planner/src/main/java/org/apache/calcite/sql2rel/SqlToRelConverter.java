@@ -4918,7 +4918,7 @@ public class SqlToRelConverter {
      *
      * <p>The field {@code r.order_id} is declared {@code NOT NULL} inside a {@code NOT NULL} ROW.
      * However, in a LEFT JOIN when there is no match on the right side, the entire {@code b} row is
-     * null-padded — so {@code b.r} is null, and {@code b.r.order_id} must produce {@code null}.
+     * null-padded â€” so {@code b.r} is null, and {@code b.r.order_id} must produce {@code null}.
      *
      * <p>Without this adjustment, the {@link RexFieldAccess} built by {@code convertIdentifier}
      * still carries the pre-join {@link RexInputRef} type ({@code NOT NULL}), so the field access
@@ -6037,7 +6037,7 @@ public class SqlToRelConverter {
                     requireNonNull(subQuery, "subQuery");
                     rex = requireNonNull(subQuery.expr);
                     return StandardConvertletTable.castToValidatedType(
-                            expr.getParserPosition(), expr, rex, validator(), rexBuilder, false);
+                            expr, rex, validator(), rexBuilder, false);
 
                 case SELECT:
                 case EXISTS:
