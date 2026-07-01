@@ -101,6 +101,26 @@ Format Options
     </tbody>
 </table>
 
+`GEOGRAPHY` values are written as Parquet `BINARY` with the Parquet `GEOGRAPHY` logical annotation
+and store WKB payload bytes. `ST_GEOGFROMWKB` followed by `ST_ASWKB` therefore preserves
+user-provided WKB bytes at Flink SQL boundaries after validation, while `ST_GEOGFROMTEXT` writes
+Flink's validated 2D WKB form.
+
+The behavior described here applies to Flink's built-in Parquet format. Connector integrations that
+maintain their own schema mapping layer, especially Iceberg table behavior maintained in the
+Iceberg repository, are tracked separately and should not be assumed to inherit this support until
+those connectors document it explicitly.
+
+`GEOGRAPHY` values are written as Parquet `BINARY` with the Parquet `GEOGRAPHY` logical annotation
+and store WKB payload bytes. `ST_GEOGFROMWKB` followed by `ST_ASWKB` therefore preserves
+user-provided WKB bytes at Flink SQL boundaries after validation, while `ST_GEOGFROMTEXT` writes
+Flink's validated 2D WKB form.
+
+The behavior described here applies to Flink's built-in Parquet format. Connector integrations that
+maintain their own schema mapping layer, especially Iceberg table behavior maintained in the
+Iceberg repository, are tracked separately and should not be assumed to inherit this support until
+those connectors document it explicitly.
+
 Parquet format also supports configuration from [ParquetOutputFormat](https://www.javadoc.io/doc/org.apache.parquet/parquet-hadoop/1.10.0/org/apache/parquet/hadoop/ParquetOutputFormat.html).
 For example, you can configure `parquet.compression=GZIP` to enable gzip compression.
 
@@ -142,6 +162,12 @@ The following table lists the type mapping from Flink type to Parquet type.
       <td>BINARY</td>
       <td></td>
       <td></td>
+    </tr>
+    <tr>
+      <td>GEOGRAPHY</td>
+      <td>BINARY</td>
+      <td>GEOGRAPHY</td>
+      <td>Stores ISO/OGC WKB payload bytes. Connector-specific GEOGRAPHY mappings outside Flink's built-in Parquet format remain follow-up work.</td>
     </tr>
     <tr>
       <td>DECIMAL</td>
@@ -229,3 +255,13 @@ The following table lists the type mapping from Flink type to Parquet type.
     </tr>
     </tbody>
 </table>
+
+`GEOGRAPHY` values are written as Parquet `BINARY` with the Parquet `GEOGRAPHY` logical annotation
+and store WKB payload bytes. `ST_GEOGFROMWKB` followed by `ST_ASWKB` therefore preserves
+user-provided WKB bytes at Flink SQL boundaries after validation, while `ST_GEOGFROMTEXT` writes
+Flink's validated 2D WKB form.
+
+The behavior described here applies to Flink's built-in Parquet format. Connector integrations that
+maintain their own schema mapping layer, especially Iceberg table behavior maintained in the
+Iceberg repository, are tracked separately and should not be assumed to inherit this support until
+those connectors document it explicitly.

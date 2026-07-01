@@ -1600,7 +1600,8 @@ Data type of 2D geospatial values in CRS84 longitude/latitude coordinates.
 `GEOGRAPHY` is a user-facing type for SQL and Table API schemas. In v1, values are created and
 accessed through the built-in geography functions. `ST_GEOGFROMTEXT` parses WKT text,
 `ST_GEOGFROMWKB` parses WKB bytes, `ST_ASTEXT` serializes to WKT, and `ST_ASWKB` exposes WKB
-bytes.
+bytes. Direct casts between `GEOGRAPHY` and `STRING`, `BYTES`, or `VARBINARY` are intentionally
+unsupported in this version.
 
 **Declaration**
 
@@ -1632,6 +1633,16 @@ and latitudes in `[-90, 90]`. Z and M coordinates are rejected.
 `ST_GEOGFROMTEXT`, Flink stores a 2D WKB representation without SRID metadata.
 
 `NULL` inputs to `ST_GEOGFROMTEXT`, `ST_GEOGFROMWKB`, `ST_ASTEXT`, and `ST_ASWKB` return `NULL`.
+
+Streaming checkpoint and restore paths are covered for native `GEOGRAPHY` runtime values inside
+mixed state rows. Published-version savepoint compatibility remains a follow-up boundary until a
+released serializer baseline exists.
+
+Flink core supports the `GEOGRAPHY` logical/runtime type and the implemented SQL functions. Flink's
+Parquet format supports native `GEOGRAPHY` read/write behavior where implemented. Connector
+integrations outside Flink core and Parquet, including Iceberg connector behavior maintained in the
+Iceberg repository, remain follow-up work and should not be assumed to work unless documented by
+that connector.
 {{< /tab >}}
 {{< tab "Java" >}}
 ```java
@@ -1671,16 +1682,25 @@ wkb = next(result.collect())[0]
 {{< /tab >}}
 {{< /tabs >}}
 
-Migration from `VARBINARY` plus custom WKB UDFs to `GEOGRAPHY` is usually a boundary refactor:
+Migration from existing text or byte columns to `GEOGRAPHY` is usually a boundary refactor:
+
+```sql
+INSERT INTO new_places
+SELECT id, ST_GEOGFROMTEXT(old_location_wkt)
+FROM old_places_with_text;
+```
 
 ```sql
 INSERT INTO new_places
 SELECT id, ST_GEOGFROMWKB(old_location_wkb)
-FROM old_places;
+FROM old_places_with_wkb;
 ```
 
 Use `ST_ASWKB(location)` when a sink or downstream system still expects WKB bytes. Unsupported
 connector mappings fail explicitly instead of silently degrading `GEOGRAPHY` to `VARBINARY`.
+Likewise, users migrating from custom `STRING` or `BYTES` plus UDF conventions should keep those
+conversions at SQL boundaries rather than expecting implicit casts or automatic connector coercion.
+
 #### `RAW`
 
 Data type of an arbitrary serialized type. This type is a black box within the table ecosystem
@@ -1987,8 +2007,3 @@ Not supported.
 {{< /tabs >}}
 
 {{< top >}}
-
-
-
-
-
