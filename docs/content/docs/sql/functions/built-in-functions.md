@@ -97,6 +97,7 @@ Notes:
 - `GEOGRAPHY` coordinates are validated as 2D CRS84 longitude/latitude values. Longitudes must be in `[-180, 180]`; latitudes must be in `[-90, 90]`.
 - `ST_ASWKB` returns the raw WKB bytes stored in the value. `ST_GEOGFROMWKB` followed by `ST_ASWKB` therefore preserves user-provided bytes after validation.
 - Values created from `ST_GEOGFROMTEXT` are stored as 2D WKB without SRID metadata.
+- Direct casts between `GEOGRAPHY` and `STRING`, `BYTES`, or `VARBINARY` are intentionally unsupported; use the constructor and accessor functions at SQL boundaries instead.
 - PyFlink uses `bytes` for WKB boundaries, so no extra Python geospatial dependency is required for round-trip handling.
 
 #### Current Limitations And Follow-up Work
@@ -105,7 +106,7 @@ Notes:
 - `GEOMETRY`, typed geography literals, and a broader geography function set remain follow-up work.
 - Unsupported connector mappings fail explicitly instead of silently degrading `GEOGRAPHY` to `VARBINARY`; broader mappings for Iceberg, Avro, JDBC, Debezium, and additional external systems remain follow-up work.
 - Spatial pruning, spatial joins, and related optimizer/runtime work are intentionally deferred.
-- Published-version savepoint restore tests remain a follow-up because `GEOGRAPHY` does not yet have a released serializer baseline. Current coverage is limited to local SQL/runtime validation plus serializer versioning tests.
+- Checkpoint and restore behavior is covered for native `GEOGRAPHY` runtime values inside mixed state rows. Published-version savepoint upgrade validation remains follow-up work until a released serializer baseline exists.
 
 ### JSON Functions
 
@@ -332,8 +333,3 @@ table.select(
 {{< /tabs >}}
 
 {{< top >}}
-
-
-
-
-
