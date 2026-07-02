@@ -67,6 +67,7 @@ import org.apache.flink.table.types.logical.TinyIntType;
 import org.apache.flink.table.types.logical.VarBinaryType;
 import org.apache.flink.table.types.logical.VarCharType;
 import org.apache.flink.table.types.logical.VariantType;
+import org.apache.flink.table.types.logical.utils.LogicalTypeMerging;
 import org.apache.flink.table.typeutils.TimeIndicatorTypeInfo;
 import org.apache.flink.table.utils.TableSchemaUtils;
 import org.apache.flink.util.Preconditions;
@@ -263,13 +264,43 @@ public class FlinkTypeFactory extends JavaTypeFactoryImpl implements ExtendedRel
     @Override
     public RelDataType leastRestrictive(List<RelDataType> types) {
         final Optional<RelDataType> resolved = resolveAllIdenticalTypes(types);
-        final RelDataType leastRestrictive =
-                resolved.orElseGet(() -> super.leastRestrictive(types));
+        if (resolved.isPresent()) {
+            return normalizeLeastRestrictive(resolved.get());
+        }
+
+        if (containsFlinkExtensionType(types)) {
+            return normalizeLeastRestrictive(
+                    resolveCommonTypeForFlinkExtensions(types).orElse(null));
+        }
+
+        final RelDataType leastRestrictive = super.leastRestrictive(types);
+        return normalizeLeastRestrictive(leastRestrictive);
+    }
+
+    private RelDataType normalizeLeastRestrictive(RelDataType leastRestrictive) {
         // NULL is reserved for untyped literals only
         if (leastRestrictive == null || leastRestrictive.getSqlTypeName() == SqlTypeName.NULL) {
             return null;
         }
         return leastRestrictive;
+    }
+
+    private Optional<RelDataType> resolveCommonTypeForFlinkExtensions(List<RelDataType> types) {
+        return LogicalTypeMerging.findCommonType(
+                        types.stream()
+                                .map(FlinkTypeFactory::toLogicalType)
+                                .collect(Collectors.toList()))
+                .map(this::createFieldTypeFromLogicalType);
+    }
+
+    private boolean containsFlinkExtensionType(List<RelDataType> types) {
+        return types.stream().anyMatch(FlinkTypeFactory::isFlinkExtensionType);
+    }
+
+    private static boolean isFlinkExtensionType(RelDataType type) {
+        return type instanceof RawRelDataType
+                || type instanceof BitmapRelDataType
+                || type instanceof GeographyRelDataType;
     }
 
     private Optional<RelDataType> resolveAllIdenticalTypes(List<RelDataType> types) {
