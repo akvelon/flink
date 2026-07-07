@@ -121,6 +121,7 @@ For vectorized Python UDFs, the input types and output type are `pandas.Series`.
 | `DOUBLE` | `float` | `numpy.float64` |
 | `VARCHAR` | `str` | `str` |
 | `VARBINARY` | `bytes` | `bytes` |
+| `GEOGRAPHY` | `bytes` | `bytes` |
 | `DECIMAL` | `decimal.Decimal` | `decimal.Decimal` |
 | `DATE` | `datetime.date` | `datetime.date` |
 | `TIME` | `datetime.time` | `datetime.time` |
@@ -215,6 +216,7 @@ The default planner supports the following set of SQL types:
 | `MULTISET`       |                                                    |
 | `MAP`            |                                                    |
 | `ROW`            |                                                    |
+| `GEOGRAPHY`      | 2D CRS84 longitude/latitude geospatial type.      |
 | `RAW`            |                                                    |
 | Structured types | Only exposed in user-defined functions yet.        |
 | `VARIANT`        |                                                    |
@@ -1591,6 +1593,94 @@ DataTypes.BITMAP()
 {{< /tab >}}
 {{< /tabs >}}
 
+#### `GEOGRAPHY`
+
+Data type of 2D geospatial values in CRS84 longitude/latitude coordinates.
+
+`GEOGRAPHY` is a user-facing type for SQL and Table API schemas. In v1, values are created and
+accessed through the built-in geography functions. `ST_GEOGFROMTEXT` parses WKT text,
+`ST_GEOGFROMWKB` parses WKB bytes, `ST_ASTEXT` serializes to WKT, and `ST_ASWKB` exposes WKB
+bytes.
+
+**Declaration**
+
+{{< tabs "geography-data-type" >}}
+{{< tab "SQL" >}}
+```text
+GEOGRAPHY
+```
+{{< /tab >}}
+{{< tab "Java/Scala" >}}
+```java
+DataTypes.GEOGRAPHY()
+```
+{{< /tab >}}
+{{< tab "Python" >}}
+```python
+DataTypes.GEOGRAPHY()
+```
+{{< /tab >}}
+{{< /tabs >}}
+
+{{< tabs "geography-notes" >}}
+{{< tab "SQL/Java/Scala/Python" >}}
+Coordinates are validated as 2D CRS84 longitude/latitude values. Longitudes must be in `[-180, 180]`
+and latitudes in `[-90, 90]`. Z and M coordinates are rejected.
+
+`ST_ASWKB` returns the raw ISO/OGC WKB bytes stored in the value. When a value originates from
+`ST_GEOGFROMWKB`, the bytes round-trip unchanged after validation. When a value originates from
+`ST_GEOGFROMTEXT`, Flink stores a 2D WKB representation without SRID metadata.
+
+`NULL` inputs to `ST_GEOGFROMTEXT`, `ST_GEOGFROMWKB`, `ST_ASTEXT`, and `ST_ASWKB` return `NULL`.
+{{< /tab >}}
+{{< tab "Java" >}}
+```java
+import org.apache.flink.table.api.DataTypes;
+import org.apache.flink.table.api.Schema;
+
+Schema schema =
+        Schema.newBuilder()
+                .column("id", DataTypes.BIGINT())
+                .column("location", DataTypes.GEOGRAPHY())
+                .build();
+
+// Use SQL functions to construct or access GEOGRAPHY values.
+tableEnv.executeSql(
+        "INSERT INTO sink "
+                + "SELECT id, ST_GEOGFROMTEXT(wkt) "
+                + "FROM source");
+```
+{{< /tab >}}
+{{< tab "Python" >}}
+```python
+from pyflink.table import Schema
+from pyflink.table.types import DataTypes
+
+schema = (
+    Schema.new_builder()
+        .column("id", DataTypes.BIGINT())
+        .column("location", DataTypes.GEOGRAPHY())
+        .build()
+)
+
+# PyFlink uses bytes at WKB boundaries.
+result = table_env.execute_sql(
+    "SELECT ST_ASWKB(ST_GEOGFROMTEXT('POINT (1 2)'))")
+wkb = next(result.collect())[0]
+```
+{{< /tab >}}
+{{< /tabs >}}
+
+Migration from `VARBINARY` plus custom WKB UDFs to `GEOGRAPHY` is usually a boundary refactor:
+
+```sql
+INSERT INTO new_places
+SELECT id, ST_GEOGFROMWKB(old_location_wkb)
+FROM old_places;
+```
+
+Use `ST_ASWKB(location)` when a sink or downstream system still expects WKB bytes. Unsupported
+connector mappings fail explicitly instead of silently degrading `GEOGRAPHY` to `VARBINARY`.
 #### `RAW`
 
 Data type of an arbitrary serialized type. This type is a black box within the table ecosystem
@@ -1897,3 +1987,8 @@ Not supported.
 {{< /tabs >}}
 
 {{< top >}}
+
+
+
+
+
