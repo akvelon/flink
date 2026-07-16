@@ -946,7 +946,8 @@ public final class BuiltInFunctionDefinitions {
                     .inputTypeStrategy(LATERAL_SNAPSHOT_INPUT_TYPE_STRATEGY)
                     .outputTypeStrategy(LATERAL_SNAPSHOT_OUTPUT_TYPE_STRATEGY)
                     .runtimeProvided()
-                    // TODO: disableSystemArguments(true), once we have a dedicated translation rule
+                    // SNAPSHOT does not support the implicit PTF system arguments (on_time, uid)
+                    .disableSystemArguments(true)
                     .notDeterministic()
                     .build();
 
@@ -2929,7 +2930,7 @@ public final class BuiltInFunctionDefinitions {
                                     sequence(
                                             logical(LogicalTypeFamily.CHARACTER_STRING),
                                             symbol(JsonType.class))))
-                    .outputTypeStrategy(explicit(BOOLEAN().notNull()))
+                    .outputTypeStrategy(nullableIfArgs(explicit(BOOLEAN())))
                     .runtimeDeferred()
                     .build();
 
@@ -3113,6 +3114,63 @@ public final class BuiltInFunctionDefinitions {
                     .outputTypeStrategy(forceNullable(explicit(DataTypes.VARIANT())))
                     .runtimeClass(
                             "org.apache.flink.table.runtime.functions.scalar.TryParseJsonFunction")
+                    .build();
+
+    // --------------------------------------------------------------------------------------------
+    // Geography functions
+    // --------------------------------------------------------------------------------------------
+
+    public static final BuiltInFunctionDefinition ST_GEOGFROMTEXT =
+            BuiltInFunctionDefinition.newBuilder()
+                    .name("ST_GEOGFROMTEXT")
+                    .kind(SCALAR)
+                    .inputTypeStrategy(
+                            sequence(
+                                    Collections.singletonList("text"),
+                                    Collections.singletonList(
+                                            logical(LogicalTypeFamily.CHARACTER_STRING))))
+                    .outputTypeStrategy(nullableIfArgs(explicit(DataTypes.GEOGRAPHY())))
+                    .runtimeClass(
+                            "org.apache.flink.table.runtime.functions.scalar.StGeogFromTextFunction")
+                    .build();
+
+    public static final BuiltInFunctionDefinition ST_GEOGFROMWKB =
+            BuiltInFunctionDefinition.newBuilder()
+                    .name("ST_GEOGFROMWKB")
+                    .kind(SCALAR)
+                    .inputTypeStrategy(
+                            sequence(
+                                    Collections.singletonList("bytes"),
+                                    Collections.singletonList(
+                                            logical(LogicalTypeFamily.BINARY_STRING))))
+                    .outputTypeStrategy(nullableIfArgs(explicit(DataTypes.GEOGRAPHY())))
+                    .runtimeClass(
+                            "org.apache.flink.table.runtime.functions.scalar.StGeogFromWkbFunction")
+                    .build();
+
+    public static final BuiltInFunctionDefinition ST_ASTEXT =
+            BuiltInFunctionDefinition.newBuilder()
+                    .name("ST_ASTEXT")
+                    .kind(SCALAR)
+                    .inputTypeStrategy(
+                            sequence(
+                                    Collections.singletonList("geography"),
+                                    Collections.singletonList(logical(LogicalTypeRoot.GEOGRAPHY))))
+                    .outputTypeStrategy(nullableIfArgs(explicit(DataTypes.STRING())))
+                    .runtimeClass(
+                            "org.apache.flink.table.runtime.functions.scalar.StAsTextFunction")
+                    .build();
+
+    public static final BuiltInFunctionDefinition ST_ASWKB =
+            BuiltInFunctionDefinition.newBuilder()
+                    .name("ST_ASWKB")
+                    .kind(SCALAR)
+                    .inputTypeStrategy(
+                            sequence(
+                                    Collections.singletonList("geography"),
+                                    Collections.singletonList(logical(LogicalTypeRoot.GEOGRAPHY))))
+                    .outputTypeStrategy(nullableIfArgs(explicit(DataTypes.BYTES())))
+                    .runtimeClass("org.apache.flink.table.runtime.functions.scalar.StAsWkbFunction")
                     .build();
 
     // --------------------------------------------------------------------------------------------

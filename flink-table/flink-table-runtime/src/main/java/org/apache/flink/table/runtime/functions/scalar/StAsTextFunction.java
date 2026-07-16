@@ -16,4 +16,25 @@
  * limitations under the License.
  */
 
-declare module 'd3-tip';
+package org.apache.flink.table.runtime.functions.scalar;
+
+import org.apache.flink.annotation.Internal;
+import org.apache.flink.table.data.GeographyData;
+import org.apache.flink.table.data.StringData;
+import org.apache.flink.table.functions.BuiltInFunctionDefinitions;
+import org.apache.flink.table.functions.SpecializedFunction.SpecializedContext;
+
+import javax.annotation.Nullable;
+
+/** Implementation of {@link BuiltInFunctionDefinitions#ST_ASTEXT}. */
+@Internal
+public class StAsTextFunction extends BuiltInScalarFunction {
+
+    public StAsTextFunction(SpecializedContext context) {
+        super(BuiltInFunctionDefinitions.ST_ASTEXT, context);
+    }
+
+    public @Nullable StringData eval(@Nullable GeographyData geography) {
+        return GeographyConversionUtils.asText(geography);
+    }
+}
