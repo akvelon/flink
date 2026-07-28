@@ -108,6 +108,7 @@ public final class InternalSerializers {
                 MapType mapType = (MapType) type;
                 return new MapDataSerializer(mapType.getKeyType(), mapType.getValueType());
             case ROW:
+                return new RowDataSerializer((RowType) type);
             case STRUCTURED_TYPE:
                 return new RowDataSerializer(type.getChildren().toArray(new LogicalType[0]));
             case DISTINCT_TYPE:
@@ -129,6 +130,8 @@ public final class InternalSerializers {
                 return VariantSerializer.INSTANCE;
             case BITMAP:
                 return BitmapSerializer.INSTANCE;
+            case GEOGRAPHY:
+                return GeographyTypeSerializer.INSTANCE;
             case NULL:
             case SYMBOL:
             case UNRESOLVED:

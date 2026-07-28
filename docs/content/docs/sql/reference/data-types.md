@@ -219,6 +219,7 @@ The default planner supports the following set of SQL types:
 | Structured types | Only exposed in user-defined functions yet.        |
 | `VARIANT`        |                                                    |
 | `BITMAP`         |                                                    |
+| `GEOGRAPHY`      | Geography values in OGC:CRS84.                    |
 
 ### Character Strings
 
@@ -1523,6 +1524,12 @@ without requiring upfront schema definition. For example, if a new field is adde
 can be directly incorporated into the `VARIANT` data without modifying the table schema. This is 
 particularly useful in dynamic environments where schemas may evolve over time.
 
+A primitive-valued `VARIANT` can be converted to a scalar type with `CAST` or `TRY_CAST`. Numeric 
+targets are lenient: a variant holding any numeric value casts to any numeric type, so a JSON integer 
+such as `PARSE_JSON('42')` casts to `INT` or `BIGINT`. Other targets require the stored value to be of 
+the matching kind. When the value cannot be converted, `CAST` fails the job and `TRY_CAST` returns 
+`NULL`. Use the `JSON_STRING` function to obtain the JSON string representation of a `VARIANT`.
+
 **Declaration**
 
 {{< tabs "25c30432-8460-441d-a036-9416d8202882" >}}
@@ -1590,6 +1597,47 @@ DataTypes.BITMAP()
 
 {{< /tab >}}
 {{< /tabs >}}
+
+#### `GEOGRAPHY`
+
+Data type of geography data.
+
+`GEOGRAPHY` represents geospatial values in the OGC:CRS84 coordinate reference system.
+The type itself does not define SQL constructors, accessors, or spatial predicate functions.
+Those functions are expected to be added separately.
+
+Flink represents geography payloads as ISO WKB bytes. ISO WKB does not encode CRS or SRID
+metadata, so CRS validation, CRS transformation, and EWKB/SRID handling belong to
+constructors, functions, or connector-specific schema mapping.
+
+The geography type is an extension to the SQL standard.
+
+**Declaration**
+
+{{< tabs "9fef5895-3fa0-4b9b-9f92-9c94ba96ef1a" >}}
+{{< tab "SQL" >}}
+```text
+GEOGRAPHY
+```
+
+{{< /tab >}}
+{{< tab "Java/Scala" >}}
+```java
+DataTypes.GEOGRAPHY()
+```
+
+**Bridging to JVM Types**
+
+| Java Type                                      | Input | Output | Remarks   |
+|:-----------------------------------------------|:-----:|:------:|:----------|
+| `org.apache.flink.table.data.GeographyData`    |   X   |   X    | *Default* |
+
+{{< /tab >}}
+{{< /tabs >}}
+
+`GEOGRAPHY` values cannot be constructed with `CAST` from character or binary string
+types. Likewise, `GEOGRAPHY` values cannot be cast to character or binary string types.
+Use explicit geography functions for those conversions once such functions are available.
 
 #### `RAW`
 
@@ -1738,7 +1786,7 @@ The matrix below describes the supported cast pairs, where "Y" means supported, 
 | `ROW`                                  |                   Y                   |                    N                     |     N     |     N     |     N     |     N      |     N     |    N     |    N    |    N     |   N    |   N    |      N      |        N        |     N      |    N    |     N      |   N   |  !³   |      N       |   N   |     N     |    N     |
 | `STRUCTURED`                           |                   Y                   |                    N                     |     N     |     N     |     N     |     N      |     N     |    N     |    N    |    N     |   N    |   N    |      N      |        N        |     N      |    N    |     N      |   N   |   N   |      !³      |   N   |     N     |    N     |
 | `RAW`                                  |                   Y                   |                    !                     |     N     |     N     |     N     |     N      |     N     |    N     |    N    |    N     |   N    |   N    |      N      |        N        |     N      |    N    |     N      |   N   |   N   |      N       |  Y⁴   |     N     |    N     |
-| `VARIANT`                              |                   N                   |                    N                     |     N     |     N     |     N     |     N      |     N     |    N     |    N    |    N     |   N    |   N    |      N      |        N        |     N      |    N    |     N      |   N   |   N   |      N       |   N   |     N     |    N     |
+| `VARIANT`                              |                   N                   |                    !                     |     !     |     !     |     !     |     !      |     !     |    !     |    !    |    !     |   !    |   N    |      !      |        !        |     N      |    N    |     N      |   N   |   N   |      N       |   N   |     Y     |    N     |
 | `BITMAP`                               |                   Y                   |                   Y⁷                     |     N     |     N     |     N     |     N      |     N     |    N     |    N    |    N     |   N    |   N    |      N      |        N        |     N      |    N    |     N      |   N   |   N   |      N       |   N   |     N     |    N     |
 
 Notes:

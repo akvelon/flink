@@ -233,12 +233,16 @@ object CodeGenUtils {
       value match {
         case JFloat.NEGATIVE_INFINITY => "java.lang.Float.NEGATIVE_INFINITY"
         case JFloat.POSITIVE_INFINITY => "java.lang.Float.POSITIVE_INFINITY"
+        // NaN is not equal to itself, so it can't be matched by value like the infinities above.
+        case f: JFloat if f.isNaN => "java.lang.Float.NaN"
         case _ => value.toString + "f"
       }
     case _: JDouble =>
       value match {
         case JDouble.NEGATIVE_INFINITY => "java.lang.Double.NEGATIVE_INFINITY"
         case JDouble.POSITIVE_INFINITY => "java.lang.Double.POSITIVE_INFINITY"
+        // NaN is not equal to itself, so it can't be matched by value like the infinities above.
+        case d: JDouble if d.isNaN => "java.lang.Double.NaN"
         case _ => value.toString + "d"
       }
     case sd: StringData =>
@@ -279,6 +283,7 @@ object CodeGenUtils {
     case DESCRIPTOR => className[ColumnList]
     case VARIANT => className[Variant]
     case BITMAP => className[Bitmap]
+    case GEOGRAPHY => className[GeographyData]
     case SYMBOL | UNRESOLVED =>
       throw new IllegalArgumentException("Illegal type: " + t)
   }
@@ -385,6 +390,8 @@ object CodeGenUtils {
         val serTerm = ctx.addReusableObject(serializer, "serializer")
         s"$term.toObject($serTerm).hashCode()"
       case BITMAP =>
+        s"$term.hashCode()"
+      case GEOGRAPHY =>
         s"$term.hashCode()"
       case NULL | SYMBOL | UNRESOLVED =>
         throw new IllegalArgumentException("Illegal type: " + t)
@@ -538,6 +545,8 @@ object CodeGenUtils {
         s"$rowTerm.getVariant($indexTerm)"
       case BITMAP =>
         s"$rowTerm.getBitmap($indexTerm)"
+      case GEOGRAPHY =>
+        s"$rowTerm.getGeography($indexTerm)"
       case NULL | SYMBOL | UNRESOLVED =>
         throw new IllegalArgumentException("Illegal type: " + t)
     }
@@ -835,6 +844,8 @@ object CodeGenUtils {
       s"$writerTerm.writeVariant($indexTerm, $fieldValTerm)"
     case BITMAP =>
       s"$writerTerm.writeBitmap($indexTerm, $fieldValTerm)"
+    case GEOGRAPHY =>
+      s"$writerTerm.writeGeography($indexTerm, $fieldValTerm)"
     case NULL | SYMBOL | UNRESOLVED =>
       throw new IllegalArgumentException("Illegal type: " + t);
   }
