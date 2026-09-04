@@ -20,15 +20,22 @@ package org.apache.flink.types.variant;
 
 import org.apache.flink.annotation.PublicEvolving;
 
+import java.io.Serializable;
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.LocalTime;
 import java.util.List;
 
-/** Variant represent a semi-structured data. */
+/**
+ * Variant represent a semi-structured data.
+ *
+ * <p>Instances are serializable so that they can be held as member variables of user-defined
+ * functions or passed into their constructors.
+ */
 @PublicEvolving
-public interface Variant {
+public interface Variant extends Serializable {
 
     /** Returns true if the variant is a primitive typed value, such as INT, DOUBLE, STRING, etc. */
     boolean isPrimitive();
@@ -94,7 +101,8 @@ public interface Variant {
     float getFloat() throws VariantTypeException;
 
     /**
-     * Get the scalar value of variant as BigDecimal, if the variant type is {@link Type#DECIMAL}.
+     * Get the scalar value of variant as {@link BigDecimal}, if the variant type is {@link
+     * Type#DECIMAL}.
      *
      * @throws VariantTypeException If this variant is not a scalar value or is not {@link
      *     Type#DECIMAL}.
@@ -118,7 +126,8 @@ public interface Variant {
     String getString() throws VariantTypeException;
 
     /**
-     * Get the scalar value of variant as LocalDate, if the variant type is {@link Type#DATE}.
+     * Get the scalar value of variant as {@link LocalDate}, if the variant type is {@link
+     * Type#DATE}.
      *
      * @throws VariantTypeException If this variant is not a scalar value or is not {@link
      *     Type#DATE}.
@@ -126,21 +135,33 @@ public interface Variant {
     LocalDate getDate() throws VariantTypeException;
 
     /**
-     * Get the scalar value of variant as LocalDateTime, if the variant type is {@link
-     * Type#TIMESTAMP}.
+     * Get the scalar value of variant as {@link LocalDateTime}, if the variant type is {@link
+     * Type#TIMESTAMP} or {@link Type#TIMESTAMP_NS}. The returned value has microsecond or
+     * nanosecond precision, matching the variant's actual type.
      *
      * @throws VariantTypeException If this variant is not a scalar value or is not {@link
-     *     Type#TIMESTAMP}.
+     *     Type#TIMESTAMP} or {@link Type#TIMESTAMP_NS}.
      */
     LocalDateTime getDateTime() throws VariantTypeException;
 
     /**
-     * Get the scalar value of variant as Instant, if the variant type is {@link Type#TIMESTAMP}.
+     * Get the scalar value of variant as {@link Instant}, if the variant type is {@link
+     * Type#TIMESTAMP_LTZ} or {@link Type#TIMESTAMP_LTZ_NS}. The returned value has microsecond or
+     * nanosecond precision, matching the variant's actual type.
      *
      * @throws VariantTypeException If this variant is not a scalar value or is not {@link
-     *     Type#TIMESTAMP}.
+     *     Type#TIMESTAMP_LTZ} or {@link Type#TIMESTAMP_LTZ_NS}.
      */
     Instant getInstant() throws VariantTypeException;
+
+    /**
+     * Get the scalar value of variant as {@link LocalTime}, if the variant type is {@link
+     * Type#TIME}. The returned value has microsecond precision.
+     *
+     * @throws VariantTypeException If this variant is not a scalar value or is not {@link
+     *     Type#TIME}.
+     */
+    LocalTime getTime() throws VariantTypeException;
 
     /**
      * Get the scalar value of variant as byte array, if the variant type is {@link Type#BYTES}.
@@ -223,8 +244,11 @@ public interface Variant {
         DECIMAL,
         STRING,
         DATE,
+        TIME,
         TIMESTAMP,
         TIMESTAMP_LTZ,
+        TIMESTAMP_NS,
+        TIMESTAMP_LTZ_NS,
         BYTES
     }
 

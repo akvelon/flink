@@ -36,6 +36,7 @@ import org.apache.flink.table.types.logical.DecimalType;
 import org.apache.flink.table.types.logical.DescriptorType;
 import org.apache.flink.table.types.logical.DoubleType;
 import org.apache.flink.table.types.logical.FloatType;
+import org.apache.flink.table.types.logical.GeographyType;
 import org.apache.flink.table.types.logical.IntType;
 import org.apache.flink.table.types.logical.LegacyTypeInformationType;
 import org.apache.flink.table.types.logical.LocalZonedTimestampType;
@@ -54,6 +55,7 @@ import org.apache.flink.table.types.logical.TimeType;
 import org.apache.flink.table.types.logical.TimestampType;
 import org.apache.flink.table.types.logical.TinyIntType;
 import org.apache.flink.table.types.logical.UnresolvedUserDefinedType;
+import org.apache.flink.table.types.logical.UuidType;
 import org.apache.flink.table.types.logical.VarBinaryType;
 import org.apache.flink.table.types.logical.VarCharType;
 import org.apache.flink.table.types.logical.VariantType;
@@ -336,7 +338,9 @@ public final class LogicalTypeParser {
         DESCRIPTOR,
         STRUCTURED,
         VARIANT,
-        BITMAP
+        BITMAP,
+        UUID,
+        GEOGRAPHY
     }
 
     private static final Set<String> KEYWORDS =
@@ -586,6 +590,10 @@ public final class LogicalTypeParser {
                     return new VariantType();
                 case BITMAP:
                     return new BitmapType();
+                case UUID:
+                    return new UuidType();
+                case GEOGRAPHY:
+                    return new GeographyType();
                 default:
                     throw parsingError("Unsupported type: " + token().value);
             }

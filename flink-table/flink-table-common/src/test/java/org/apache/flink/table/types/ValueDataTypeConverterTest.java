@@ -26,7 +26,6 @@ import org.apache.flink.table.types.logical.SymbolType;
 import org.apache.flink.table.types.utils.ValueDataTypeConverter;
 import org.apache.flink.types.bitmap.Bitmap;
 import org.apache.flink.types.bitmap.RoaringBitmapData;
-import org.apache.flink.types.variant.BinaryVariant;
 import org.apache.flink.types.variant.Variant;
 
 import org.junit.jupiter.params.ParameterizedTest;
@@ -87,6 +86,10 @@ class ValueDataTypeConverterTest {
                         DataTypes.INTERVAL(DataTypes.YEAR(4), DataTypes.MONTH())
                                 .bridgedTo(Period.class)),
                 of(
+                        Period.ofMonths(470),
+                        DataTypes.INTERVAL(DataTypes.YEAR(2), DataTypes.MONTH())
+                                .bridgedTo(Period.class)),
+                of(
                         Duration.ofMillis(1100),
                         DataTypes.INTERVAL(DataTypes.DAY(1), DataTypes.SECOND(1))
                                 .bridgedTo(Duration.class)),
@@ -117,9 +120,7 @@ class ValueDataTypeConverterTest {
                         DataTypes.ARRAY(DataTypes.ARRAY(DataTypes.INT()))),
                 of(TimePointUnit.HOUR, new AtomicDataType(new SymbolType<>(), TimePointUnit.class)),
                 of(new BigDecimal[0], null),
-                of(
-                        Variant.newBuilder().of("hello"),
-                        DataTypes.VARIANT().bridgedTo(BinaryVariant.class)),
+                of(Variant.newBuilder().of("hello"), DataTypes.VARIANT()),
                 of(Bitmap.empty(), DataTypes.BITMAP().bridgedTo(RoaringBitmapData.class)),
                 of(
                         Bitmap.fromArray(new int[] {1, 2}),

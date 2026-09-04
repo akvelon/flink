@@ -29,7 +29,6 @@ import unittest
 from abc import abstractmethod
 from decimal import Decimal
 from functools import wraps
-
 from py4j.java_gateway import JavaObject
 
 from pyflink.common import JobExecutionResult, Time, Instant, Row
@@ -155,6 +154,56 @@ class PyFlinkUTTestCase(PyFlinkTestCase):
         self.t_env.get_config().set("python.fn-execution.bundle.size", "1")
 
 
+class PyFlinkDataFrameUTTestCase(PyFlinkUTTestCase):
+    """Base class for planner-backed DataFrame interface tests."""
+
+    def setUp(self) -> None:
+        from pyflink.dataframe import get_table_environment, set_table_environment
+
+        super().setUp()
+        previous_environment = get_table_environment()
+        self.addCleanup(set_table_environment, previous_environment)
+        set_table_environment(self.t_env)
+
+    def assert_dataframe_schema(
+        self,
+        dataframe,
+        expected_column_names,
+        expected_column_data_types=None,
+    ):
+        resolved_schema = dataframe._table.get_resolved_schema()
+        self.assertEqual(
+            list(resolved_schema.get_column_names()),
+            expected_column_names,
+        )
+        if expected_column_data_types is not None:
+            self.assertEqual(
+                resolved_schema.get_column_data_types(),
+                expected_column_data_types,
+            )
+
+    def assert_dataframe_sql(self, dataframe, expected_sql, invoke):
+        environment = dataframe._table._t_env
+        original = environment.sql_query
+        captured = {}
+
+        def capture(query):
+            captured["sql"] = query
+            return original(query)
+
+        environment.sql_query = capture
+        try:
+            invoke()
+        finally:
+            del environment.sql_query
+
+        if "sql" in captured:
+            actual_sql = re.sub(r"UnnamedTable\$\d+", "SRC", captured["sql"])
+        else:
+            actual_sql = None
+        self.assertEqual(actual_sql, expected_sql)
+
+
 class PyFlinkStreamTableTestCase(PyFlinkITTestCase):
     """
     Base class for table stream tests.
@@ -167,6 +216,27 @@ class PyFlinkStreamTableTestCase(PyFlinkITTestCase):
         cls.env.set_parallelism(2)
         cls.t_env = StreamTableEnvironment.create(cls.env)
         cls.t_env.get_config().set("python.fn-execution.bundle.size", "1")
+
+
+class PyFlinkStreamDataFrameTestCase(PyFlinkStreamTableTestCase):
+    """Base class for DataFrame streaming tests."""
+
+    @classmethod
+    def setUpClass(cls):
+        from pyflink.dataframe import get_table_environment, set_table_environment
+
+        cls._previous_table_environment = get_table_environment()
+        super(PyFlinkStreamDataFrameTestCase, cls).setUpClass()
+        set_table_environment(cls.t_env)
+
+    @classmethod
+    def tearDownClass(cls):
+        from pyflink.dataframe import set_table_environment
+
+        try:
+            super(PyFlinkStreamDataFrameTestCase, cls).tearDownClass()
+        finally:
+            set_table_environment(cls._previous_table_environment)
 
 
 class PyFlinkBatchTableTestCase(PyFlinkITTestCase):
