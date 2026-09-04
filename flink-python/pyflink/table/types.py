@@ -29,7 +29,7 @@ from functools import reduce
 from threading import RLock
 
 from py4j.java_gateway import get_java_class
-from typing import List, Union
+from typing import List, Protocol, Union
 
 from pyflink.common.types import _create_row
 from pyflink.util.api_stability_decorators import PublicEvolving
@@ -121,6 +121,14 @@ class DataType(object):
         Converts an internal SQL object into a native Python object.
         """
         return obj
+
+
+class _SupportsToTableDataType(Protocol):
+    def _to_table_data_type(self) -> DataType:
+        ...
+
+
+_TableDataTypeLike = Union[DataType, _SupportsToTableDataType]
 
 
 class AtomicType(DataType):
@@ -228,6 +236,15 @@ class BinaryType(AtomicType):
     def __repr__(self):
         return "BinaryType(%d, %s)" % (self.length, str(self._nullable).lower())
 
+    def need_conversion(self):
+        return True
+
+    def to_sql_type(self, obj):
+        return bytearray(obj) if obj is not None else obj
+
+    def from_sql_type(self, obj):
+        return bytes(obj) if obj is not None else obj
+
 
 class VarBinaryType(AtomicType):
     """
@@ -246,6 +263,37 @@ class VarBinaryType(AtomicType):
 
     def __repr__(self):
         return "VarBinaryType(%d, %s)" % (self.length, str(self._nullable).lower())
+
+    def need_conversion(self):
+        return True
+
+    def to_sql_type(self, obj):
+        return bytearray(obj) if obj is not None else obj
+
+    def from_sql_type(self, obj):
+        return bytes(obj) if obj is not None else obj
+
+
+class GeographyType(AtomicType):
+    """
+    Geography data type. SQL GEOGRAPHY.
+
+    The Python representation uses WKB bytes.
+
+    :param nullable: boolean, whether the field can be null (None) or not.
+    """
+
+    def __init__(self, nullable=True):
+        super(GeographyType, self).__init__(nullable)
+
+    def need_conversion(self):
+        return True
+
+    def to_sql_type(self, obj):
+        return bytearray(obj) if obj is not None else obj
+
+    def from_sql_type(self, obj):
+        return bytes(obj) if obj is not None else obj
 
 
 class BooleanType(AtomicType):
@@ -923,7 +971,7 @@ class ArrayType(DataType):
     def from_sql_type(self, obj):
         if not self.need_conversion():
             return obj
-        return obj and [self.element_type.to_sql_type(v) for v in obj]
+        return obj and [self.element_type.from_sql_type(v) for v in obj]
 
 
 class ListViewType(DataType):
@@ -1051,7 +1099,7 @@ class MultisetType(DataType):
     def from_sql_type(self, obj):
         if not self.need_conversion():
             return obj
-        return obj and [self.element_type.to_sql_type(v) for v in obj]
+        return obj and [self.element_type.from_sql_type(v) for v in obj]
 
 
 class RowField(object):
@@ -1216,7 +1264,8 @@ class RowType(DataType):
             raise TypeError('RowType keys should be strings, integers or slices')
 
     def __repr__(self):
-        return "RowType(%s)" % ",".join(repr(field) for field in self)
+        fields = ",".join(repr(field) for field in self)
+        return f"RowType({fields}, {str(self._nullable).lower()})"
 
     def field_names(self):
         """
@@ -1385,6 +1434,7 @@ _type_mappings = {
     int: BigIntType(),
     float: DoubleType(),
     str: VarCharType(0x7fffffff),
+    bytes: VarBinaryType(0x7fffffff),
     bytearray: VarBinaryType(0x7fffffff),
     decimal.Decimal: DecimalType(38, 18),
     datetime.date: DateType(),
@@ -1491,7 +1541,7 @@ def _infer_type(obj):
     elif isinstance(obj, list):
         for v in obj:
             if v is not None:
-                return ArrayType(_infer_type(obj[0]))
+                return ArrayType(_infer_type(v))
         else:
             return ArrayType(NullType())
     elif isinstance(obj, array):
@@ -1700,6 +1750,8 @@ def _from_java_data_type(j_data_type):
             data_type = DataTypes.BINARY(logical_type.getLength(), logical_type.isNullable())
         elif is_instance_of(logical_type, gateway.jvm.VarBinaryType):
             data_type = DataTypes.VARBINARY(logical_type.getLength(), logical_type.isNullable())
+        elif is_instance_of(logical_type, gateway.jvm.GeographyType):
+            data_type = DataTypes.GEOGRAPHY(logical_type.isNullable())
         elif is_instance_of(logical_type, gateway.jvm.DecimalType):
             data_type = DataTypes.DECIMAL(logical_type.getPrecision(),
                                           logical_type.getScale(),
@@ -1709,7 +1761,8 @@ def _from_java_data_type(j_data_type):
         elif is_instance_of(logical_type, gateway.jvm.TimeType):
             data_type = DataTypes.TIME(logical_type.getPrecision(), logical_type.isNullable())
         elif is_instance_of(logical_type, gateway.jvm.TimestampType):
-            data_type = DataTypes.TIMESTAMP(precision=3, nullable=logical_type.isNullable())
+            data_type = DataTypes.TIMESTAMP(
+                precision=logical_type.getPrecision(), nullable=logical_type.isNullable())
         elif is_instance_of(logical_type, gateway.jvm.BooleanType):
             data_type = DataTypes.BOOLEAN(logical_type.isNullable())
         elif is_instance_of(logical_type, gateway.jvm.TinyIntType):
@@ -1729,7 +1782,8 @@ def _from_java_data_type(j_data_type):
                 TypeError("Unsupported type: %s, ZonedTimestampType is not supported yet."
                           % j_data_type)
         elif is_instance_of(logical_type, gateway.jvm.LocalZonedTimestampType):
-            data_type = DataTypes.TIMESTAMP_WITH_LOCAL_TIME_ZONE(nullable=logical_type.isNullable())
+            data_type = DataTypes.TIMESTAMP_WITH_LOCAL_TIME_ZONE(
+                precision=logical_type.getPrecision(), nullable=logical_type.isNullable())
         elif is_instance_of(logical_type, gateway.jvm.DayTimeIntervalType) or \
                 is_instance_of(logical_type, gateway.jvm.YearMonthIntervalType):
             data_type = _from_java_interval_type(logical_type)
@@ -1759,6 +1813,8 @@ def _from_java_data_type(j_data_type):
                                 % type_info)
         elif is_instance_of(logical_type, gateway.jvm.RawType):
             data_type = RawType()
+        elif is_instance_of(logical_type, gateway.jvm.NullType):
+            data_type = DataTypes.NULL()
         else:
             raise TypeError("Unsupported type: %s, it is not supported yet in current python type"
                             " system" % j_data_type)
@@ -1821,10 +1877,15 @@ def _from_java_data_type(j_data_type):
         TypeError("Unsupported data type: %s" % j_data_type)
 
 
-def _to_java_data_type(data_type: DataType):
+def _to_java_data_type(data_type: _TableDataTypeLike):
     """
     Converts the specified Python DataType to Java DataType.
     """
+    if not isinstance(data_type, DataType):
+        to_table_data_type = getattr(data_type, "_to_table_data_type", None)
+        if callable(to_table_data_type):
+            data_type = to_table_data_type()
+
     gateway = get_gateway()
     JDataTypes = gateway.jvm.org.apache.flink.table.api.DataTypes
 
@@ -1850,6 +1911,8 @@ def _to_java_data_type(data_type: DataType):
         j_data_type = JDataTypes.VARBINARY(data_type.length)
     elif isinstance(data_type, BinaryType):
         j_data_type = JDataTypes.BINARY(data_type.length)
+    elif isinstance(data_type, GeographyType):
+        j_data_type = JDataTypes.GEOGRAPHY()
     elif isinstance(data_type, DecimalType):
         j_data_type = JDataTypes.DECIMAL(data_type.precision, data_type.scale)
     elif isinstance(data_type, DateType):
@@ -1953,8 +2016,9 @@ _acceptable_types = {
     DecimalType: (decimal.Decimal,),
     CharType: (str,),
     VarCharType: (str,),
-    BinaryType: (bytearray,),
-    VarBinaryType: (bytearray,),
+    BinaryType: (bytes, bytearray),
+    VarBinaryType: (bytes, bytearray),
+    GeographyType: (bytes, bytearray),
     DateType: (datetime.date, datetime.datetime),
     TimeType: (datetime.time,),
     TimestampType: (datetime.datetime,),
@@ -2254,21 +2318,28 @@ def from_arrow_type(arrow_type, nullable: bool = True) -> DataType:
         else:
             return TimestampType(9, nullable)
     elif types.is_map(arrow_type):
-        return MapType(from_arrow_type(arrow_type.key_type),
-                       from_arrow_type(arrow_type.item_type),
-                       nullable)
+        item_field = getattr(arrow_type, 'item_field', None)
+        item_nullable = item_field.nullable if item_field is not None else True
+        key_type = from_arrow_type(arrow_type.key_type, nullable=False)
+        value_type = from_arrow_type(arrow_type.item_type, nullable=item_nullable)
+        return MapType(key_type, value_type, nullable)
     elif types.is_list(arrow_type):
-        return ArrayType(from_arrow_type(arrow_type.value_type), nullable)
+        return ArrayType(
+            from_arrow_type(
+                arrow_type.value_type, nullable=arrow_type.value_field.nullable
+            ),
+            nullable,
+        )
     elif types.is_struct(arrow_type):
         if any(types.is_struct(field.type) for field in arrow_type):
             raise TypeError("Nested RowType is not supported in conversion from Arrow: " +
                             str(arrow_type))
         return RowType([RowField(field.name, from_arrow_type(field.type, field.nullable))
-                        for field in arrow_type])
+                        for field in arrow_type], nullable)
     elif types.is_null(arrow_type):
         return NullType()
     else:
-        raise TypeError("Unsupported data type to convert to Arrow type: " + str(dt))
+        raise TypeError("Unsupported data type to convert from Arrow type: " + str(arrow_type))
 
 
 def to_arrow_type(data_type: DataType):
@@ -2294,6 +2365,8 @@ def to_arrow_type(data_type: DataType):
         return pa.utf8()
     elif isinstance(data_type, BinaryType):
         return pa.binary(data_type.length)
+    elif isinstance(data_type, GeographyType):
+        return pa.binary()
     elif isinstance(data_type, VarBinaryType):
         return pa.binary()
     elif isinstance(data_type, DecimalType):
@@ -2443,6 +2516,15 @@ class DataTypes(object):
         .. seealso:: :func:`~DataTypes.VARBINARY`
         """
         return DataTypes.VARBINARY(0x7fffffff, nullable)
+
+    @staticmethod
+    def GEOGRAPHY(nullable: bool = True) -> GeographyType:
+        """
+        Data type of geography data represented as WKB bytes in Python.
+
+        :param nullable: boolean, whether the type can be null (None) or not.
+        """
+        return GeographyType(nullable)
 
     @staticmethod
     def DECIMAL(precision: int, scale: int, nullable: bool = True) -> DecimalType:

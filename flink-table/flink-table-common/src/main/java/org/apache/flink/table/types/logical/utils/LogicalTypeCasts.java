@@ -79,6 +79,7 @@ import static org.apache.flink.table.types.logical.LogicalTypeRoot.TIME_WITHOUT_
 import static org.apache.flink.table.types.logical.LogicalTypeRoot.TINYINT;
 import static org.apache.flink.table.types.logical.LogicalTypeRoot.VARBINARY;
 import static org.apache.flink.table.types.logical.LogicalTypeRoot.VARCHAR;
+import static org.apache.flink.table.types.logical.LogicalTypeRoot.VARIANT;
 import static org.apache.flink.table.types.logical.utils.LogicalTypeChecks.getDayPrecision;
 import static org.apache.flink.table.types.logical.utils.LogicalTypeChecks.getFractionalPrecision;
 import static org.apache.flink.table.types.logical.utils.LogicalTypeChecks.getLength;
@@ -208,7 +209,7 @@ public final class LogicalTypeCasts {
         castTo(CHAR)
                 .implicitFrom(CHAR)
                 .explicitFromFamily(PREDEFINED, CONSTRUCTED)
-                .explicitFrom(RAW, NULL, STRUCTURED_TYPE, BITMAP)
+                .explicitFrom(RAW, NULL, STRUCTURED_TYPE, BITMAP, VARIANT)
                 .injectiveFrom(WHEN_LENGTH_FITS, CHAR)
                 .injectiveFrom(WHEN_MAX_CHAR_LENGTH_FITS, STRING_INJECTIVE_SOURCES)
                 .injectiveFrom(WHEN_CHAR_LENGTH_FITS_UTF8, BINARY, VARBINARY)
@@ -217,7 +218,7 @@ public final class LogicalTypeCasts {
         castTo(VARCHAR)
                 .implicitFromFamily(CHARACTER_STRING)
                 .explicitFromFamily(PREDEFINED, CONSTRUCTED)
-                .explicitFrom(RAW, NULL, STRUCTURED_TYPE, BITMAP)
+                .explicitFrom(RAW, NULL, STRUCTURED_TYPE, BITMAP, VARIANT)
                 .injectiveFrom(WHEN_LENGTH_FITS, CHAR, VARCHAR)
                 .injectiveFrom(WHEN_MAX_CHAR_LENGTH_FITS, STRING_INJECTIVE_SOURCES)
                 .injectiveFrom(WHEN_CHAR_LENGTH_FITS_UTF8, BINARY, VARBINARY)
@@ -230,7 +231,7 @@ public final class LogicalTypeCasts {
         castTo(BINARY)
                 .implicitFrom(BINARY)
                 .explicitFromFamily(CHARACTER_STRING)
-                .explicitFrom(VARBINARY, RAW)
+                .explicitFrom(VARBINARY, RAW, VARIANT)
                 .injectiveFrom(WHEN_LENGTH_FITS, BINARY)
                 .injectiveFrom(WHEN_BINARY_LENGTH_FITS_UTF8, CHAR, VARCHAR)
                 .build();
@@ -238,7 +239,7 @@ public final class LogicalTypeCasts {
         castTo(VARBINARY)
                 .implicitFromFamily(BINARY_STRING)
                 .explicitFromFamily(CHARACTER_STRING)
-                .explicitFrom(BINARY, RAW)
+                .explicitFrom(BINARY, RAW, VARIANT)
                 .injectiveFrom(WHEN_LENGTH_FITS, BINARY, VARBINARY)
                 .injectiveFrom(WHEN_BINARY_LENGTH_FITS_UTF8, CHAR, VARCHAR)
                 .build();
@@ -250,35 +251,55 @@ public final class LogicalTypeCasts {
         castTo(TINYINT)
                 .implicitFrom(TINYINT)
                 .explicitFromFamily(NUMERIC, CHARACTER_STRING, INTERVAL)
-                .explicitFrom(BOOLEAN, TIMESTAMP_WITHOUT_TIME_ZONE, TIMESTAMP_WITH_LOCAL_TIME_ZONE)
+                .explicitFrom(
+                        BOOLEAN,
+                        TIMESTAMP_WITHOUT_TIME_ZONE,
+                        TIMESTAMP_WITH_LOCAL_TIME_ZONE,
+                        VARIANT)
                 .injectiveFrom(TINYINT)
                 .build();
 
         castTo(SMALLINT)
                 .implicitFrom(TINYINT, SMALLINT)
                 .explicitFromFamily(NUMERIC, CHARACTER_STRING, INTERVAL)
-                .explicitFrom(BOOLEAN, TIMESTAMP_WITHOUT_TIME_ZONE, TIMESTAMP_WITH_LOCAL_TIME_ZONE)
+                .explicitFrom(
+                        BOOLEAN,
+                        TIMESTAMP_WITHOUT_TIME_ZONE,
+                        TIMESTAMP_WITH_LOCAL_TIME_ZONE,
+                        VARIANT)
                 .injectiveFrom(TINYINT, SMALLINT)
                 .build();
 
         castTo(INTEGER)
                 .implicitFrom(TINYINT, SMALLINT, INTEGER)
                 .explicitFromFamily(NUMERIC, CHARACTER_STRING, INTERVAL)
-                .explicitFrom(BOOLEAN, TIMESTAMP_WITHOUT_TIME_ZONE, TIMESTAMP_WITH_LOCAL_TIME_ZONE)
+                .explicitFrom(
+                        BOOLEAN,
+                        TIMESTAMP_WITHOUT_TIME_ZONE,
+                        TIMESTAMP_WITH_LOCAL_TIME_ZONE,
+                        VARIANT)
                 .injectiveFrom(TINYINT, SMALLINT, INTEGER)
                 .build();
 
         castTo(BIGINT)
                 .implicitFrom(TINYINT, SMALLINT, INTEGER, BIGINT)
                 .explicitFromFamily(NUMERIC, CHARACTER_STRING, INTERVAL)
-                .explicitFrom(BOOLEAN, TIMESTAMP_WITHOUT_TIME_ZONE, TIMESTAMP_WITH_LOCAL_TIME_ZONE)
+                .explicitFrom(
+                        BOOLEAN,
+                        TIMESTAMP_WITHOUT_TIME_ZONE,
+                        TIMESTAMP_WITH_LOCAL_TIME_ZONE,
+                        VARIANT)
                 .injectiveFrom(TINYINT, SMALLINT, INTEGER, BIGINT)
                 .build();
 
         castTo(DECIMAL)
                 .implicitFromFamily(NUMERIC)
                 .explicitFromFamily(CHARACTER_STRING, INTERVAL)
-                .explicitFrom(BOOLEAN, TIMESTAMP_WITHOUT_TIME_ZONE, TIMESTAMP_WITH_LOCAL_TIME_ZONE)
+                .explicitFrom(
+                        BOOLEAN,
+                        TIMESTAMP_WITHOUT_TIME_ZONE,
+                        TIMESTAMP_WITH_LOCAL_TIME_ZONE,
+                        VARIANT)
                 .injectiveFrom(WHEN_PRECISION_AND_SCALE_MATCH, DECIMAL)
                 .build();
 
@@ -289,14 +310,22 @@ public final class LogicalTypeCasts {
         castTo(FLOAT)
                 .implicitFrom(TINYINT, SMALLINT, INTEGER, BIGINT, FLOAT, DECIMAL)
                 .explicitFromFamily(NUMERIC, CHARACTER_STRING)
-                .explicitFrom(BOOLEAN, TIMESTAMP_WITHOUT_TIME_ZONE, TIMESTAMP_WITH_LOCAL_TIME_ZONE)
+                .explicitFrom(
+                        BOOLEAN,
+                        TIMESTAMP_WITHOUT_TIME_ZONE,
+                        TIMESTAMP_WITH_LOCAL_TIME_ZONE,
+                        VARIANT)
                 .injectiveFrom(FLOAT)
                 .build();
 
         castTo(DOUBLE)
                 .implicitFromFamily(NUMERIC)
                 .explicitFromFamily(CHARACTER_STRING)
-                .explicitFrom(BOOLEAN, TIMESTAMP_WITHOUT_TIME_ZONE, TIMESTAMP_WITH_LOCAL_TIME_ZONE)
+                .explicitFrom(
+                        BOOLEAN,
+                        TIMESTAMP_WITHOUT_TIME_ZONE,
+                        TIMESTAMP_WITH_LOCAL_TIME_ZONE,
+                        VARIANT)
                 .injectiveFrom(DOUBLE)
                 .build();
 
@@ -307,6 +336,7 @@ public final class LogicalTypeCasts {
         castTo(BOOLEAN)
                 .implicitFrom(BOOLEAN)
                 .explicitFromFamily(CHARACTER_STRING, INTEGER_NUMERIC)
+                .explicitFrom(VARIANT)
                 .injectiveFrom(BOOLEAN)
                 .build();
 
@@ -317,6 +347,7 @@ public final class LogicalTypeCasts {
         castTo(DATE)
                 .implicitFrom(DATE, TIMESTAMP_WITHOUT_TIME_ZONE)
                 .explicitFromFamily(TIMESTAMP, CHARACTER_STRING)
+                .explicitFrom(VARIANT)
                 .injectiveFrom(DATE)
                 .build();
 
@@ -329,6 +360,7 @@ public final class LogicalTypeCasts {
         castTo(TIMESTAMP_WITHOUT_TIME_ZONE)
                 .implicitFrom(TIMESTAMP_WITHOUT_TIME_ZONE, TIMESTAMP_WITH_LOCAL_TIME_ZONE)
                 .explicitFromFamily(DATETIME, CHARACTER_STRING, NUMERIC)
+                .explicitFrom(VARIANT)
                 .injectiveFrom(
                         WHEN_PRECISION_MATCHES,
                         TIMESTAMP_WITHOUT_TIME_ZONE,
@@ -344,6 +376,7 @@ public final class LogicalTypeCasts {
         castTo(TIMESTAMP_WITH_LOCAL_TIME_ZONE)
                 .implicitFrom(TIMESTAMP_WITH_LOCAL_TIME_ZONE, TIMESTAMP_WITHOUT_TIME_ZONE)
                 .explicitFromFamily(DATETIME, CHARACTER_STRING, NUMERIC)
+                .explicitFrom(VARIANT)
                 .injectiveFrom(
                         WHEN_PRECISION_MATCHES,
                         TIMESTAMP_WITH_LOCAL_TIME_ZONE,
