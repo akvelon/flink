@@ -21,6 +21,7 @@ import org.apache.flink.annotation.Internal;
 import org.apache.flink.api.common.typeutils.TypeSerializer;
 import org.apache.flink.table.data.ArrayData;
 import org.apache.flink.table.data.DecimalData;
+import org.apache.flink.table.data.GeographyData;
 import org.apache.flink.table.data.MapData;
 import org.apache.flink.table.data.RawValueData;
 import org.apache.flink.table.data.RowData;
@@ -90,6 +91,8 @@ public interface BinaryWriter {
     void writeVariant(int pos, Variant variant);
 
     void writeBitmap(int pos, Bitmap bitmap);
+
+    void writeGeography(int pos, GeographyData geography);
 
     /** Finally, complete write to set real size to binary. */
     void complete();
@@ -166,6 +169,7 @@ public interface BinaryWriter {
                 break;
             case BINARY:
             case VARBINARY:
+            case UUID:
                 writer.writeBinary(pos, (byte[]) o);
                 break;
             case VARIANT:
@@ -173,6 +177,9 @@ public interface BinaryWriter {
                 break;
             case BITMAP:
                 writer.writeBitmap(pos, (Bitmap) o);
+                break;
+            case GEOGRAPHY:
+                writer.writeGeography(pos, (GeographyData) o);
                 break;
             default:
                 throw new UnsupportedOperationException("Not support type: " + type);
@@ -194,6 +201,7 @@ public interface BinaryWriter {
                 return (writer, pos, value) -> writer.writeBoolean(pos, (boolean) value);
             case BINARY:
             case VARBINARY:
+            case UUID:
                 return (writer, pos, value) -> writer.writeBinary(pos, (byte[]) value);
             case DECIMAL:
                 final int decimalPrecision = getPrecision(elementType);
@@ -253,6 +261,8 @@ public interface BinaryWriter {
                 return (writer, pos, value) -> writer.writeVariant(pos, (Variant) value);
             case BITMAP:
                 return (writer, pos, value) -> writer.writeBitmap(pos, (Bitmap) value);
+            case GEOGRAPHY:
+                return (writer, pos, value) -> writer.writeGeography(pos, (GeographyData) value);
             case NULL:
             case SYMBOL:
             case UNRESOLVED:

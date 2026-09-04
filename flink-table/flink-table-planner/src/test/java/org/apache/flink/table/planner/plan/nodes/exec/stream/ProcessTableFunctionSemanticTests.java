@@ -42,6 +42,8 @@ public class ProcessTableFunctionSemanticTests extends SemanticTestBase {
                 ProcessTableFunctionTestPrograms.PROCESS_SET_SEMANTIC_TABLE_TABLE_API_INLINE,
                 ProcessTableFunctionTestPrograms.PROCESS_SET_SEMANTIC_TABLE_TABLE_API_INLINE_NAMED,
                 ProcessTableFunctionTestPrograms.PROCESS_TYPED_SET_SEMANTIC_TABLE,
+                ProcessTableFunctionTestPrograms.PROCESS_MULTI_PARTITION_BY,
+                ProcessTableFunctionTestPrograms.PROCESS_MULTI_PARTITION_BY_AND_ORDER_BY,
                 ProcessTableFunctionTestPrograms.PROCESS_TYPED_SET_SEMANTIC_TABLE_TABLE_API,
                 ProcessTableFunctionTestPrograms.PROCESS_POJO_ARGS,
                 ProcessTableFunctionTestPrograms.PROCESS_INTERVAL_DAY_ARGS,
@@ -95,6 +97,10 @@ public class ProcessTableFunctionSemanticTests extends SemanticTestBase {
                 ProcessTableFunctionTestPrograms.PROCESS_ORDER_BY,
                 ProcessTableFunctionTestPrograms.PROCESS_MULTI_INPUT_ORDER_BY,
                 ProcessTableFunctionTestPrograms.PROCESS_ORDER_BY_TABLE_API,
-                ProcessTableFunctionTestPrograms.PROCESS_IMPLICIT_CASTS);
+                ProcessTableFunctionTestPrograms.PROCESS_IMPLICIT_CASTS,
+                ProcessTableFunctionTestPrograms.PROCESS_ROW_DATA_CONVERSION_TABLE,
+                ProcessTableFunctionTestPrograms.PROCESS_VARIANT,
+                ProcessTableFunctionTestPrograms.PROCESS_VARIANT_TABLE_ARG,
+                ProcessTableFunctionTestPrograms.PROCESS_VARIANT_STATE);
     }
 }

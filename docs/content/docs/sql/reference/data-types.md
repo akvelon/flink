@@ -121,6 +121,7 @@ For vectorized Python UDFs, the input types and output type are `pandas.Series`.
 | `DOUBLE` | `float` | `numpy.float64` |
 | `VARCHAR` | `str` | `str` |
 | `VARBINARY` | `bytes` | `bytes` |
+| `GEOGRAPHY` | `bytes` | `bytes` |
 | `DECIMAL` | `decimal.Decimal` | `decimal.Decimal` |
 | `DATE` | `datetime.date` | `datetime.date` |
 | `TIME` | `datetime.time` | `datetime.time` |
@@ -215,10 +216,12 @@ The default planner supports the following set of SQL types:
 | `MULTISET`       |                                                    |
 | `MAP`            |                                                    |
 | `ROW`            |                                                    |
+| `GEOGRAPHY`      | 2D CRS84 longitude/latitude geospatial type.      |
 | `RAW`            |                                                    |
 | Structured types | Only exposed in user-defined functions yet.        |
 | `VARIANT`        |                                                    |
 | `BITMAP`         |                                                    |
+| `GEOGRAPHY`      | Geography values in OGC:CRS84.                    |
 
 ### Character Strings
 
@@ -1094,7 +1097,7 @@ The type can be declared using the above combinations where `p1` is the number o
 and `9` (both inclusive). If no `p1` is specified, it is equal to `2` by default. If no `p2` is
 specified, it is equal to `6` by default.
 
-### Constructured Data Types
+### Constructed Data Types
 
 #### `ARRAY`
 
@@ -1515,13 +1518,86 @@ close to the semantics of JSON. Compared to `ROW` and `STRUCTURED` type, `VARIAN
 flexibility to support highly nested and evolving schema.
 
 `VARIANT` allows for deeply nested data structures, such as arrays within arrays, maps within maps, 
-or combinations of both.This capability makes `VARIANT` ideal for scenarios where data complexity 
+or combinations of both. This capability makes `VARIANT` ideal for scenarios where data complexity 
 and nesting are significant.
 
 `VARIANT` allows schema evolution, enabling the storage of data with changing or unknown schemas 
 without requiring upfront schema definition. For example, if a new field is added to the data, it 
 can be directly incorporated into the `VARIANT` data without modifying the table schema. This is 
 particularly useful in dynamic environments where schemas may evolve over time.
+
+A `VARIANT` stores a single value of one of the following kinds: `NULL`, `BOOLEAN`, `TINYINT`,
+`SMALLINT`, `INT`, `BIGINT`, `FLOAT`, `DOUBLE`, `DECIMAL` (up to precision 38), `STRING`, `DATE`,
+`TIMESTAMP`, `TIMESTAMP_LTZ`, `BYTES`, or a nested array or object. `TIMESTAMP` and `TIMESTAMP_LTZ`
+are stored with microsecond precision.
+
+The `PARSE_JSON` function produces only the kinds that JSON syntax can express:
+
+| JSON input                                          | Stored `VARIANT` kind                           |
+|-----------------------------------------------------|-------------------------------------------------|
+| `null`                                              | `NULL`                                          |
+| `true` / `false`                                    | `BOOLEAN`                                       |
+| Integer within the 64-bit signed range              | smallest of `TINYINT`/`SMALLINT`/`INT`/`BIGINT` |
+| Integer beyond 64-bit, up to 38 significant digits  | `DECIMAL`                                       |
+| Decimal in plain notation, up to precision/scale 38 | `DECIMAL`                                       |
+| Number in scientific notation, e.g. `1.5e3`         | `DOUBLE`                                        |
+| Number exceeding 38 digits of precision or scale    | `DOUBLE`                                        |
+| String                                              | `STRING`                                        |
+| Array                                               | array (elements encoded by the same rules)      |
+| Object                                              | object (values encoded by the same rules)       |
+
+Because JSON has no literal for them, `PARSE_JSON` never produces `FLOAT`, `DATE`, `TIMESTAMP`,
+`TIMESTAMP_LTZ`, or `BYTES`.
+
+The JSON specification has no `NaN` or infinity literals, so `PARSE_JSON('NaN')`,
+`PARSE_JSON('Infinity')`, and `PARSE_JSON('-Infinity')` fail. `PARSE_JSON('1e400')` fails as well
+because a value outside the `DOUBLE` range cannot be stored as a finite number. In all of these
+cases `TRY_PARSE_JSON` returns `NULL`.
+A `VARIANT` has no dedicated kind for these values. To keep one, store it as a JSON string and cast
+it back out, for example `CAST(CAST(PARSE_JSON('"Infinity"') AS STRING) AS FLOAT)`.
+
+A `VARIANT` can be converted to a scalar type with `CAST` or `TRY_CAST`. A cast succeeds only when
+the target holds the stored value without reinterpreting it, so a value is never wrapped or rounded
+to make it fit. Otherwise `CAST` fails and `TRY_CAST` returns `NULL`.
+
+| Stored kind     | Succeeds for                                        |
+|-----------------|-----------------------------------------------------|
+| numeric kinds   | any numeric target that holds the value             |
+| `BOOLEAN`       | `BOOLEAN`                                           |
+| `DATE`          | `DATE`                                              |
+| `TIMESTAMP`     | `TIMESTAMP(p)`                                      |
+| `TIMESTAMP_LTZ` | `TIMESTAMP_LTZ(p)`                                  |
+| `BYTES`         | `BINARY(n)`, `VARBINARY(n)`, and a character string |
+| any scalar      | `STRING`, `CHAR(n)`, `VARCHAR(n)`                   |
+| `NULL`          | SQL `NULL` for any nullable target                  |
+
+The conditions above mean:
+
+- An **integer target** needs the value in range and without a fractional part, so
+  `PARSE_JSON('7.0')` reaches `INT` as `7` while `PARSE_JSON('7.2')` does not, and
+  `CAST(PARSE_JSON('1000') AS TINYINT)` fails instead of wrapping.
+- A **`DECIMAL`** target has to fit the precision and the scale. Trailing zeros may be appended, so
+  `42` reaches `DECIMAL(5, 2)` as `42.00`, but a scale that would have to round is rejected.
+- **`FLOAT`** and **`DOUBLE`** are approximate by definition, so they take any numeric kind and drop
+  decimal digits, rejecting only a magnitude out of range such as `1e40` to a `FLOAT`.
+- A **length or precision** is adjusted the same way a regular cast into that type would: a value
+  longer than the target is trimmed, fractional seconds beyond the target precision are truncated,
+  and the fixed width types `CHAR(n)` and `BINARY(n)` pad a shorter value.
+
+To reach a type the table does not list, wrap the cast in a regular cast. Only the inner cast is a
+`VARIANT` cast, so the outer one applies the usual rules and may round, truncate, or overflow:
+
+```sql
+CAST(CAST(PARSE_JSON('1000') AS SMALLINT) AS TINYINT)     -- returns -24 (after overflow)
+CAST(CAST(PARSE_JSON('3.9') AS DECIMAL(2, 1)) AS INT)     -- returns 3 (truncated)
+```
+
+A cast to a character string renders the value exactly as a regular SQL cast of the stored kind
+would, so a boolean becomes `TRUE`, a timestamp uses the SQL format, a `TIMESTAMP_LTZ` is shifted into
+the session time zone, and a binary value is read as UTF-8. Only an object or an array has no such
+rendering. Use `JSON_STRING` for the JSON representation instead, where a string stays quoted as
+`"foo"` and an object or array is serialized. A variant that stores a JSON `null` casts to SQL
+`NULL`.
 
 **Declaration**
 
@@ -1590,6 +1666,47 @@ DataTypes.BITMAP()
 
 {{< /tab >}}
 {{< /tabs >}}
+
+#### `GEOGRAPHY`
+
+Data type of geography data.
+
+`GEOGRAPHY` represents geospatial values in the OGC:CRS84 coordinate reference system.
+The type itself does not define SQL constructors, accessors, or spatial predicate functions.
+Those functions are expected to be added separately.
+
+Flink represents geography payloads as ISO WKB bytes. ISO WKB does not encode CRS or SRID
+metadata, so CRS validation, CRS transformation, and EWKB/SRID handling belong to
+constructors, functions, or connector-specific schema mapping.
+
+The geography type is an extension to the SQL standard.
+
+**Declaration**
+
+{{< tabs "9fef5895-3fa0-4b9b-9f92-9c94ba96ef1a" >}}
+{{< tab "SQL" >}}
+```text
+GEOGRAPHY
+```
+
+{{< /tab >}}
+{{< tab "Java/Scala" >}}
+```java
+DataTypes.GEOGRAPHY()
+```
+
+**Bridging to JVM Types**
+
+| Java Type                                      | Input | Output | Remarks   |
+|:-----------------------------------------------|:-----:|:------:|:----------|
+| `org.apache.flink.table.data.GeographyData`    |   X   |   X    | *Default* |
+
+{{< /tab >}}
+{{< /tabs >}}
+
+`GEOGRAPHY` values cannot be constructed with `CAST` from character or binary string
+types. Likewise, `GEOGRAPHY` values cannot be cast to character or binary string types.
+Use explicit geography functions for those conversions once such functions are available.
 
 #### `RAW`
 
@@ -1738,7 +1855,7 @@ The matrix below describes the supported cast pairs, where "Y" means supported, 
 | `ROW`                                  |                   Y                   |                    N                     |     N     |     N     |     N     |     N      |     N     |    N     |    N    |    N     |   N    |   N    |      N      |        N        |     N      |    N    |     N      |   N   |  !³   |      N       |   N   |     N     |    N     |
 | `STRUCTURED`                           |                   Y                   |                    N                     |     N     |     N     |     N     |     N      |     N     |    N     |    N    |    N     |   N    |   N    |      N      |        N        |     N      |    N    |     N      |   N   |   N   |      !³      |   N   |     N     |    N     |
 | `RAW`                                  |                   Y                   |                    !                     |     N     |     N     |     N     |     N      |     N     |    N     |    N    |    N     |   N    |   N    |      N      |        N        |     N      |    N    |     N      |   N   |   N   |      N       |  Y⁴   |     N     |    N     |
-| `VARIANT`                              |                   N                   |                    N                     |     N     |     N     |     N     |     N      |     N     |    N     |    N    |    N     |   N    |   N    |      N      |        N        |     N      |    N    |     N      |   N   |   N   |      N       |   N   |     N     |    N     |
+| `VARIANT`                              |                   N                   |                    !                     |     !     |     !     |     !     |     !      |     !     |    !     |    !    |    !     |   !    |   N    |      !      |        !        |     N      |    N    |     N      |   N   |   N   |      N       |   N   |     Y     |    N     |
 | `BITMAP`                               |                   Y                   |                   Y⁷                     |     N     |     N     |     N     |     N      |     N     |    N     |    N    |    N     |   N    |   N    |      N      |        N        |     N      |    N    |     N      |   N   |   N   |      N       |   N   |     N     |    N     |
 
 Notes:
@@ -1897,3 +2014,8 @@ Not supported.
 {{< /tabs >}}
 
 {{< top >}}
+
+
+
+
+

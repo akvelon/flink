@@ -78,6 +78,7 @@ import static org.apache.flink.table.api.DataTypes.VARBINARY;
 import static org.apache.flink.table.api.DataTypes.VARCHAR;
 import static org.apache.flink.table.api.DataTypes.YEAR;
 import static org.apache.flink.table.api.Expressions.$;
+import static org.apache.flink.table.api.Expressions.call;
 import static org.apache.flink.util.CollectionUtil.entry;
 import static org.apache.flink.util.CollectionUtil.map;
 import static org.assertj.core.api.Assertions.assertThat;
@@ -132,7 +133,250 @@ public class CastFunctionITCase extends BuiltInFunctionTestBase {
         specs.addAll(numericBounds());
         specs.addAll(constructedTypes());
         specs.addAll(bitmapCasts());
+        specs.addAll(variantCasts());
         return specs.stream();
+    }
+
+    private static List<TestSetSpec> variantCasts() {
+        // A variant is produced with PARSE_JSON since there is no VARIANT literal. Numeric casts
+        // succeed only when the value is preserved exactly, otherwise CAST fails and TRY_CAST
+        // returns NULL.
+        return List.of(
+                TestSetSpec.forExpression("Cast a VARIANT produced by PARSE_JSON to a primitive")
+                        .onFieldsWithData("unused")
+                        .andDataTypes(STRING())
+                        // An integer converts to any integer target while the value stays in
+                        // range, and to FLOAT or DOUBLE which are approximate by definition.
+                        .testResult(
+                                call("PARSE_JSON", "42").cast(TINYINT()),
+                                "CAST(PARSE_JSON('42') AS TINYINT)",
+                                (byte) 42,
+                                TINYINT().notNull())
+                        .testResult(
+                                call("PARSE_JSON", "42").cast(SMALLINT()),
+                                "CAST(PARSE_JSON('42') AS SMALLINT)",
+                                (short) 42,
+                                SMALLINT().notNull())
+                        .testResult(
+                                call("PARSE_JSON", "42").cast(INT()),
+                                "CAST(PARSE_JSON('42') AS INT)",
+                                42,
+                                INT().notNull())
+                        .testResult(
+                                call("PARSE_JSON", "42").cast(BIGINT()),
+                                "CAST(PARSE_JSON('42') AS BIGINT)",
+                                42L,
+                                BIGINT().notNull())
+                        .testResult(
+                                call("PARSE_JSON", "42").cast(FLOAT()),
+                                "CAST(PARSE_JSON('42') AS FLOAT)",
+                                42.0f,
+                                FLOAT().notNull())
+                        .testResult(
+                                call("PARSE_JSON", "42").cast(DOUBLE()),
+                                "CAST(PARSE_JSON('42') AS DOUBLE)",
+                                42.0d,
+                                DOUBLE().notNull())
+                        // An out-of-range value is rejected rather than wrapped.
+                        .testResult(
+                                call("PARSE_JSON", "1000").cast(SMALLINT()),
+                                "CAST(PARSE_JSON('1000') AS SMALLINT)",
+                                (short) 1000,
+                                SMALLINT().notNull())
+                        .testTableApiRuntimeError(
+                                call("PARSE_JSON", "1000").cast(TINYINT()), "overflowed")
+                        .testSqlRuntimeError("CAST(PARSE_JSON('1000') AS TINYINT)", "overflowed")
+                        .testResult(
+                                call("PARSE_JSON", "1000").tryCast(TINYINT()),
+                                "TRY_CAST(PARSE_JSON('1000') AS TINYINT)",
+                                null,
+                                TINYINT())
+                        // A decimal reaches an integer target when it is already integral.
+                        .testResult(
+                                call("PARSE_JSON", "7.0").cast(INT()),
+                                "CAST(PARSE_JSON('7.0') AS INT)",
+                                7,
+                                INT().notNull())
+                        // A fractional value is rejected, since converting would drop digits.
+                        .testTableApiRuntimeError(
+                                call("PARSE_JSON", "123.456").cast(INT()), "lose precision")
+                        .testResult(
+                                call("PARSE_JSON", "123.456").tryCast(INT()),
+                                "TRY_CAST(PARSE_JSON('123.456') AS INT)",
+                                null,
+                                INT())
+                        // A DECIMAL target has to hold the value exactly.
+                        .testResult(
+                                call("PARSE_JSON", "123.456").cast(DECIMAL(6, 3)),
+                                "CAST(PARSE_JSON('123.456') AS DECIMAL(6, 3))",
+                                new BigDecimal("123.456"),
+                                DECIMAL(6, 3).notNull())
+                        .testTableApiRuntimeError(
+                                call("PARSE_JSON", "123.456").cast(DECIMAL(6, 2)), "lose precision")
+                        .testResult(
+                                call("PARSE_JSON", "123.456").tryCast(DECIMAL(6, 2)),
+                                "TRY_CAST(PARSE_JSON('123.456') AS DECIMAL(6, 2))",
+                                null,
+                                DECIMAL(6, 2))
+                        .testTableApiRuntimeError(
+                                call("PARSE_JSON", "123.456").cast(DECIMAL(5, 3)), "overflowed")
+                        .testResult(
+                                call("PARSE_JSON", "123.456").tryCast(DECIMAL(5, 3)),
+                                "TRY_CAST(PARSE_JSON('123.456') AS DECIMAL(5, 3))",
+                                null,
+                                DECIMAL(5, 3))
+                        // An integer is exact, so it reaches a DECIMAL that has room for it.
+                        .testResult(
+                                call("PARSE_JSON", "42").cast(DECIMAL(5, 2)),
+                                "CAST(PARSE_JSON('42') AS DECIMAL(5, 2))",
+                                new BigDecimal("42.00"),
+                                DECIMAL(5, 2).notNull())
+                        // A decimal reaches an approximate target, where losing digits is expected.
+                        .testResult(
+                                call("PARSE_JSON", "123.456").cast(FLOAT()),
+                                "CAST(PARSE_JSON('123.456') AS FLOAT)",
+                                123.456f,
+                                FLOAT().notNull())
+                        .testResult(
+                                call("PARSE_JSON", "123.456").cast(DOUBLE()),
+                                "CAST(PARSE_JSON('123.456') AS DOUBLE)",
+                                123.456d,
+                                DOUBLE().notNull())
+                        // A magnitude the target cannot represent is still rejected.
+                        .testTableApiRuntimeError(
+                                call("PARSE_JSON", "1e40").cast(FLOAT()), "overflowed")
+                        .testResult(
+                                call("PARSE_JSON", "1e40").tryCast(FLOAT()),
+                                "TRY_CAST(PARSE_JSON('1e40') AS FLOAT)",
+                                null,
+                                FLOAT())
+                        .testResult(
+                                call("PARSE_JSON", "1e20").cast(DOUBLE()),
+                                "CAST(PARSE_JSON('1e20') AS DOUBLE)",
+                                1e20,
+                                DOUBLE().notNull())
+                        .testResult(
+                                call("PARSE_JSON", "true").cast(BOOLEAN()),
+                                "CAST(PARSE_JSON('true') AS BOOLEAN)",
+                                true,
+                                BOOLEAN().notNull())
+                        // CAST returns the raw scalar value (string unquoted)
+                        .testResult(
+                                call("PARSE_JSON", "\"foo\"").cast(STRING()),
+                                "CAST(PARSE_JSON('\"foo\"') AS STRING)",
+                                "foo",
+                                STRING().notNull())
+                        .testResult(
+                                call("PARSE_JSON", "123.456").cast(STRING()),
+                                "CAST(PARSE_JSON('123.456') AS STRING)",
+                                "123.456",
+                                STRING().notNull())
+                        // The rendering matches a regular cast of the stored kind, so a boolean
+                        // becomes TRUE rather than the JSON true.
+                        .testResult(
+                                call("PARSE_JSON", "true").cast(STRING()),
+                                "CAST(PARSE_JSON('true') AS STRING)",
+                                "TRUE",
+                                STRING().notNull())
+                        // An object or array has no scalar value, so the error points to
+                        // JSON_STRING.
+                        .testTableApiRuntimeError(
+                                call("PARSE_JSON", "[\"a\", \"b\"]").cast(STRING()), "JSON_STRING")
+                        .testResult(
+                                call("PARSE_JSON", "[\"a\", \"b\"]").tryCast(STRING()),
+                                "TRY_CAST(PARSE_JSON('[\"a\", \"b\"]') AS STRING)",
+                                null,
+                                STRING())
+                        .testTableApiRuntimeError(
+                                call("PARSE_JSON", "{\"a\": 1}").cast(STRING()), "JSON_STRING")
+                        .testResult(
+                                call("PARSE_JSON", "{\"a\": 1}").tryCast(STRING()),
+                                "TRY_CAST(PARSE_JSON('{\"a\": 1}') AS STRING)",
+                                null,
+                                STRING())
+                        // A bounded CHAR/VARCHAR target trims a longer value, and CHAR pads a
+                        // shorter one to its fixed width, the same as a regular cast into it.
+                        .testResult(
+                                call("PARSE_JSON", "\"ab\"").cast(VARCHAR(3)),
+                                "CAST(PARSE_JSON('\"ab\"') AS VARCHAR(3))",
+                                "ab",
+                                VARCHAR(3).notNull())
+                        .testResult(
+                                call("PARSE_JSON", "\"foobar\"").cast(VARCHAR(3)),
+                                "CAST(PARSE_JSON('\"foobar\"') AS VARCHAR(3))",
+                                "foo",
+                                VARCHAR(3).notNull())
+                        .testResult(
+                                call("PARSE_JSON", "\"foobar\"").tryCast(VARCHAR(3)),
+                                "TRY_CAST(PARSE_JSON('\"foobar\"') AS VARCHAR(3))",
+                                "foo",
+                                VARCHAR(3))
+                        .testResult(
+                                call("PARSE_JSON", "\"abc\"").cast(CHAR(3)),
+                                "CAST(PARSE_JSON('\"abc\"') AS CHAR(3))",
+                                "abc",
+                                CHAR(3).notNull())
+                        .testResult(
+                                call("PARSE_JSON", "\"abcdef\"").cast(CHAR(3)),
+                                "CAST(PARSE_JSON('\"abcdef\"') AS CHAR(3))",
+                                "abc",
+                                CHAR(3).notNull())
+                        .testResult(
+                                call("PARSE_JSON", "\"ab\"").cast(CHAR(5)),
+                                "CAST(PARSE_JSON('\"ab\"') AS CHAR(5))",
+                                "ab   ",
+                                CHAR(5).notNull())
+                        .testResult(
+                                call("PARSE_JSON", "\"ab\"").tryCast(CHAR(5)),
+                                "TRY_CAST(PARSE_JSON('\"ab\"') AS CHAR(5))",
+                                "ab   ",
+                                CHAR(5))
+                        // A variant holding a JSON null casts to SQL NULL, not to the text 'null'.
+                        // The length of that text must not be checked against the target either.
+                        .testResult(
+                                call("TRY_PARSE_JSON", "null").cast(STRING()),
+                                "CAST(TRY_PARSE_JSON('null') AS STRING)",
+                                null,
+                                STRING())
+                        .testResult(
+                                call("PARSE_JSON", "null").tryCast(STRING()),
+                                "TRY_CAST(PARSE_JSON('null') AS STRING)",
+                                null,
+                                STRING())
+                        .testResult(
+                                call("TRY_PARSE_JSON", "null").cast(CHAR(2)),
+                                "CAST(TRY_PARSE_JSON('null') AS CHAR(2))",
+                                null,
+                                CHAR(2))
+                        .testResult(
+                                call("PARSE_JSON", "null").tryCast(VARCHAR(2)),
+                                "TRY_CAST(PARSE_JSON('null') AS VARCHAR(2))",
+                                null,
+                                VARCHAR(2))
+                        // TRY_CAST of a value whose kind does not match the target returns NULL
+                        .testResult(
+                                call("PARSE_JSON", "\"foo\"").tryCast(INT()),
+                                "TRY_CAST(PARSE_JSON('\"foo\"') AS INT)",
+                                null,
+                                INT())
+                        // A variant that stores a JSON null casts to SQL NULL when the target is
+                        // nullable: a nullable variant source, or TRY_CAST which forces nullable.
+                        .testResult(
+                                call("TRY_PARSE_JSON", "null").cast(INT()),
+                                "CAST(TRY_PARSE_JSON('null') AS INT)",
+                                null,
+                                INT())
+                        .testResult(
+                                call("PARSE_JSON", "null").tryCast(BOOLEAN()),
+                                "TRY_CAST(PARSE_JSON('null') AS BOOLEAN)",
+                                null,
+                                BOOLEAN())
+                        // A nullable variant with a concrete value still casts normally.
+                        .testResult(
+                                call("TRY_PARSE_JSON", "42").cast(TINYINT()),
+                                "CAST(TRY_PARSE_JSON('42') AS TINYINT)",
+                                (byte) 42,
+                                TINYINT()));
     }
 
     private static List<TestSetSpec> allTypesBasic() {
@@ -1269,7 +1513,7 @@ public class CastFunctionITCase extends BuiltInFunctionTestBase {
     }
 
     private static List<TestSetSpec> decimalCasts() {
-        return Collections.singletonList(
+        return List.of(
                 CastTestSpecBuilder.testCastTo(DECIMAL(8, 4))
                         .fromCase(STRING(), null, null)
                         // rounding
@@ -1312,6 +1556,14 @@ public class CastFunctionITCase extends BuiltInFunctionTestBase {
                         .build(),
                 CastTestSpecBuilder.testCastTo(FLOAT())
                         .fromCase(DOUBLE(), -1.7976931348623157E308d, Float.NEGATIVE_INFINITY)
+                        .fromCase(STRING(), "NaN", Float.NaN)
+                        .fromCase(STRING(), "Infinity", Float.POSITIVE_INFINITY)
+                        .fromCase(STRING(), "-Infinity", Float.NEGATIVE_INFINITY)
+                        .build(),
+                CastTestSpecBuilder.testCastTo(DOUBLE())
+                        .fromCase(STRING(), "NaN", Double.NaN)
+                        .fromCase(STRING(), "Infinity", Double.POSITIVE_INFINITY)
+                        .fromCase(STRING(), "-Infinity", Double.NEGATIVE_INFINITY)
                         .build(),
                 CastTestSpecBuilder.testCastTo(DECIMAL(38, 0))
                         .fromCase(
