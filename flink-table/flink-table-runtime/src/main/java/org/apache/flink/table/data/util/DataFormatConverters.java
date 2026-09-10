@@ -35,6 +35,7 @@ import org.apache.flink.table.data.DecimalDataUtils;
 import org.apache.flink.table.data.GenericArrayData;
 import org.apache.flink.table.data.GenericMapData;
 import org.apache.flink.table.data.GenericRowData;
+import org.apache.flink.table.data.GeographyData;
 import org.apache.flink.table.data.MapData;
 import org.apache.flink.table.data.RawValueData;
 import org.apache.flink.table.data.RowData;
@@ -68,7 +69,6 @@ import org.apache.flink.table.types.utils.TypeConversions;
 import org.apache.flink.table.utils.DateTimeUtils;
 import org.apache.flink.types.Row;
 import org.apache.flink.types.bitmap.Bitmap;
-import org.apache.flink.types.bitmap.RoaringBitmapData;
 import org.apache.flink.types.variant.Variant;
 
 import org.apache.commons.lang3.ArrayUtils;
@@ -158,8 +158,7 @@ public class DataFormatConverters {
                 DataTypes.INTERVAL(DataTypes.SECOND(3)).bridgedTo(long.class),
                 LongConverter.INSTANCE);
 
-        t2C.put(DataTypes.BITMAP().bridgedTo(Bitmap.class), BitmapConverter.INSTANCE);
-        t2C.put(DataTypes.BITMAP().bridgedTo(RoaringBitmapData.class), BitmapConverter.INSTANCE);
+        t2C.put(DataTypes.BITMAP(), BitmapConverter.INSTANCE);
 
         TYPE_TO_CONVERTER = Collections.unmodifiableMap(t2C);
     }
@@ -590,6 +589,21 @@ public class DataFormatConverters {
         }
     }
 
+    /** Converter for GeographyData. */
+    public static final class GeographyConverter extends IdentityConverter<GeographyData> {
+
+        private static final long serialVersionUID = -2785143344060029173L;
+
+        public static final GeographyConverter INSTANCE = new GeographyConverter();
+
+        private GeographyConverter() {}
+
+        @Override
+        GeographyData toExternalImpl(RowData row, int column) {
+            return row.getGeography(column);
+        }
+    }
+
     /** Converter for ArrayData. */
     public static final class ArrayDataConverter extends IdentityConverter<ArrayData> {
 
@@ -757,15 +771,6 @@ public class DataFormatConverters {
         public static final BitmapConverter INSTANCE = new BitmapConverter();
 
         private BitmapConverter() {}
-
-        @Override
-        Bitmap toInternalImpl(Bitmap value) {
-            if (!(value instanceof RoaringBitmapData)) {
-                throw new UnsupportedOperationException(
-                        "Unsupported bitmap type: " + value.getClass().getSimpleName() + ".");
-            }
-            return value;
-        }
 
         @Override
         Bitmap toExternalImpl(RowData row, int column) {
