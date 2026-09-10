@@ -69,6 +69,44 @@ The scalar functions take zero, one or more values as the input and return a sin
 
 {{< sql_functions "collection" >}}
 
+### Geography Functions
+
+The v1 geography surface is intentionally small and focuses on schema declaration plus portable WKT
+and WKB boundaries.
+
+| Function | Description |
+|:---------|:------------|
+| `ST_GEOGFROMTEXT(wkt)` | Parses 2D WKT text into a `GEOGRAPHY` value. Returns `NULL` for `NULL` input. |
+| `ST_GEOGFROMWKB(wkb)` | Parses ISO/OGC WKB bytes into a `GEOGRAPHY` value. Returns `NULL` for `NULL` input. |
+| `ST_ASTEXT(geography)` | Serializes a `GEOGRAPHY` value to WKT text. Returns `NULL` for `NULL` input. |
+| `ST_ASWKB(geography)` | Returns the raw WKB bytes stored in a `GEOGRAPHY` value. Returns `NULL` for `NULL` input. |
+
+Example:
+
+```sql
+SELECT
+  ST_ASTEXT(ST_GEOGFROMTEXT('POINT (1 2)')),
+  ST_ASWKB(ST_GEOGFROMTEXT('POINT (1 2)')),
+  ST_ASTEXT(
+    ST_GEOGFROMWKB(
+      ST_ASWKB(ST_GEOGFROMTEXT('LINESTRING (0 0, 1 1)'))));
+```
+
+Notes:
+
+- `GEOGRAPHY` coordinates are validated as 2D CRS84 longitude/latitude values. Longitudes must be in `[-180, 180]`; latitudes must be in `[-90, 90]`.
+- `ST_ASWKB` returns the raw WKB bytes stored in the value. `ST_GEOGFROMWKB` followed by `ST_ASWKB` therefore preserves user-provided bytes after validation.
+- Values created from `ST_GEOGFROMTEXT` are stored as 2D WKB without SRID metadata.
+- PyFlink uses `bytes` for WKB boundaries, so no extra Python geospatial dependency is required for round-trip handling.
+
+#### Current Limitations And Follow-up Work
+
+- Spatial predicates and measurements such as `ST_INTERSECTS`, `ST_WITHIN`, `ST_LENGTH`, and `ST_DISTANCE` are not part of v1 yet.
+- `GEOMETRY`, typed geography literals, and a broader geography function set remain follow-up work.
+- Unsupported connector mappings fail explicitly instead of silently degrading `GEOGRAPHY` to `VARBINARY`; broader mappings for Iceberg, Avro, JDBC, Debezium, and additional external systems remain follow-up work.
+- Spatial pruning, spatial joins, and related optimizer/runtime work are intentionally deferred.
+- Published-version savepoint restore tests remain a follow-up because `GEOGRAPHY` does not yet have a released serializer baseline. Current coverage is limited to local SQL/runtime validation plus serializer versioning tests.
+
 ### JSON Functions
 
 JSON functions make use of JSON path expressions as described in ISO/IEC TR 19075-6 of the SQL
@@ -134,6 +172,24 @@ The aggregate functions take an expression across all the rows as the input and 
 - For cardinality-only scenarios where the intermediate bitmap is not needed, prefer `BITMAP_XX_CARDINALITY_AGG()` over `BITMAP_CARDINALITY(BITMAP_XX_AGG())`. They are functionally equivalent, but the former avoids materializing the intermediate bitmap and performs better.
 
 {{< sql_functions "bitmapagg" >}}
+
+Table Functions
+---------------
+
+Table functions take zero, one, or more values as input and return multiple rows (a table) as the result. Most built-in table functions take a table as an input argument.
+Table functions can be used in two ways: as stand-alone inputs, where they are invoked just once, or in a `LATERAL` context, where they are invoked for each row of an outer table.
+
+| Function                                   | Description                                                                                                                                                                                                                                                                                                     |
+|--------------------------------------------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `TUMBLE(data => TABLE t, ...)`             | Assigns each row of the `data` table to a tumbling window specified by additional window columns (`window_start`, `window_end`, `window_time`). See [Window TVF]({{< ref "docs/sql/reference/queries/window-tvf" >}}#tumble) for the full list of arguments, semantics, and usage.                              |
+| `HOP(data => TABLE t, ...)`                | Assigns each row of the `data` table to a hopping window specified by additional window columns (`window_start`, `window_end`, `window_time`). See [Window TVF]({{< ref "docs/sql/reference/queries/window-tvf" >}}#hop) for the full list of arguments, semantics, and usage.                                  |
+| `CUMULATE(data => TABLE t, ...)`           | Assigns each row of the `data` table to a cumulating window specified by additional window columns (`window_start`, `window_end`, `window_time`). See [Window TVF]({{< ref "docs/sql/reference/queries/window-tvf" >}}#cumulate) for the full list of arguments, semantics, and usage.                          |
+| `SESSION(data => TABLE t, ...)`            | Assigns each row of the `data` table to a session window specified by additional window columns (`window_start`, `window_end`, `window_time`). See [Window TVF]({{< ref "docs/sql/reference/queries/window-tvf" >}}#session) for the full list of arguments, semantics, and usage.                              |
+| `FROM_CHANGELOG(input => TABLE t [, ...])` | Converts an append-only table with an explicit operation column into a dynamic table. See [Changelog Conversion]({{< ref "docs/sql/reference/queries/changelog" >}}#from_changelog) for the full list of arguments, semantics, and usage.                                                                       |
+| `TO_CHANGELOG(input => TABLE t [, ...])`   | Converts a dynamic table into an append-only table with an explicit operation column. See [Changelog Conversion]({{< ref "docs/sql/reference/queries/changelog" >}}#to_changelog) for the full list of arguments, semantics, and usage.                                                                         |
+| `SNAPSHOT(input => TABLE t [, ...])`       | Returns the current state of a dynamic table `t`. `SNAPSHOT` can only be used in a `LATERAL` context and not as a stand-alone table function. See [LATERAL SNAPSHOT join]({{< ref "docs/sql/reference/queries/joins" >}}#lateral-snapshot-join) for the full list of arguments, the join semantics, and usage. |
+
+To implement your own table functions, see [user-defined table functions]({{< ref "docs/dev/table/functions/udfs" >}}#table-functions).
 
 Time Interval and Point Unit Specifiers
 ---------------------------------------
@@ -294,3 +350,8 @@ table.select(
 {{< /tabs >}}
 
 {{< top >}}
+
+
+
+
+

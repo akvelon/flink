@@ -31,9 +31,13 @@ import org.apache.flink.table.types.logical.DateType;
 import org.apache.flink.table.types.logical.DecimalType;
 import org.apache.flink.table.types.logical.DoubleType;
 import org.apache.flink.table.types.logical.FloatType;
+import org.apache.flink.table.types.logical.GeographyType;
+import org.apache.flink.table.types.logical.GeographyType;
 import org.apache.flink.table.types.logical.IntType;
 import org.apache.flink.table.types.logical.LocalZonedTimestampType;
 import org.apache.flink.table.types.logical.LogicalType;
+import org.apache.flink.table.types.logical.MapType;
+import org.apache.flink.table.types.logical.MultisetType;
 import org.apache.flink.table.types.logical.NullType;
 import org.apache.flink.table.types.logical.RawType;
 import org.apache.flink.table.types.logical.RowType;
@@ -44,8 +48,10 @@ import org.apache.flink.table.types.logical.StructuredType.StructuredAttribute;
 import org.apache.flink.table.types.logical.TimeType;
 import org.apache.flink.table.types.logical.TimestampType;
 import org.apache.flink.table.types.logical.TinyIntType;
+import org.apache.flink.table.types.logical.UuidType;
 import org.apache.flink.table.types.logical.VarBinaryType;
 import org.apache.flink.table.types.logical.VarCharType;
+import org.apache.flink.table.types.logical.VariantType;
 import org.apache.flink.table.types.logical.YearMonthIntervalType;
 import org.apache.flink.table.types.logical.ZonedTimestampType;
 import org.apache.flink.table.types.logical.utils.LogicalTypeCasts;
@@ -57,6 +63,7 @@ import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
 
 import java.util.Arrays;
+import java.util.List;
 import java.util.stream.Stream;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -262,7 +269,136 @@ class LogicalTypeCastsTest {
                         new RawType<>(Integer.class, IntSerializer.INSTANCE),
                         VarCharType.STRING_TYPE,
                         false,
-                        true));
+                        true),
+
+                // variant to scalar is explicit only
+                Arguments.of(new VariantType(), new BooleanType(), false, true),
+                Arguments.of(new VariantType(), new TinyIntType(), false, true),
+                Arguments.of(new VariantType(), new SmallIntType(), false, true),
+                Arguments.of(new VariantType(), new IntType(), false, true),
+                Arguments.of(new VariantType(), new BigIntType(), false, true),
+                Arguments.of(new VariantType(), new DoubleType(), false, true),
+                Arguments.of(new VariantType(), new DecimalType(10, 2), false, true),
+                Arguments.of(new VariantType(), new DateType(), false, true),
+                Arguments.of(new VariantType(), new TimestampType(), false, true),
+                Arguments.of(new VariantType(), new TimestampType(3), false, true),
+                Arguments.of(new VariantType(), new LocalZonedTimestampType(), false, true),
+                Arguments.of(new VariantType(), new LocalZonedTimestampType(9), false, true),
+                Arguments.of(
+                        new VariantType(),
+                        new VarBinaryType(VarBinaryType.MAX_LENGTH),
+                        false,
+                        true),
+                Arguments.of(new VariantType(), new CharType(), false, true),
+                Arguments.of(new VariantType(), VarCharType.STRING_TYPE, false, true),
+                // variant identity cast is implicit
+                Arguments.of(new VariantType(), new VariantType(), true, true),
+                // TIME has no variant counterpart, so it is not castable from variant
+                Arguments.of(new VariantType(), new TimeType(), false, false),
+                // A variant imposes a schema on a constructed target, explicit only, recursing on
+                // every leaf, which is itself a VARIANT cast
+                Arguments.of(new VariantType(), new ArrayType(new IntType()), false, true),
+                Arguments.of(new VariantType(), new ArrayType(new VariantType()), false, true),
+                Arguments.of(
+                        new VariantType(),
+                        new ArrayType(new ArrayType(new IntType())),
+                        false,
+                        true),
+                // A leaf with no variant counterpart makes the whole constructed cast unsupported
+                Arguments.of(
+                        new VariantType(),
+                        new ArrayType(
+                                new YearMonthIntervalType(
+                                        YearMonthIntervalType.YearMonthResolution.MONTH)),
+                        false,
+                        false),
+                // A variant object casts to ROW or STRUCTURED when every field is castable; an
+                // empty
+                // row is vacuously castable and matching is by name
+                Arguments.of(new VariantType(), new RowType(List.of()), false, true),
+                Arguments.of(
+                        new VariantType(),
+                        new RowType(
+                                List.of(
+                                        new RowField("f0", new IntType()),
+                                        new RowField("f1", VarCharType.STRING_TYPE))),
+                        false,
+                        true),
+                Arguments.of(
+                        new VariantType(),
+                        new RowType(
+                                List.of(
+                                        new RowField(
+                                                "f0",
+                                                new YearMonthIntervalType(
+                                                        YearMonthIntervalType.YearMonthResolution
+                                                                .MONTH)))),
+                        false,
+                        false),
+                // A variant object casts to MAP<STRING, V> when the key is a character string and
+                // the value is castable; a non-string key is rejected
+                Arguments.of(
+                        new VariantType(),
+                        new MapType(VarCharType.STRING_TYPE, new IntType()),
+                        false,
+                        true),
+                Arguments.of(
+                        new VariantType(),
+                        new MapType(VarCharType.STRING_TYPE, new VariantType()),
+                        false,
+                        true),
+                Arguments.of(
+                        new VariantType(),
+                        new MapType(new IntType(), new CharType()),
+                        false,
+                        false),
+                Arguments.of(
+                        new VariantType(),
+                        new MapType(
+                                VarCharType.STRING_TYPE,
+                                new YearMonthIntervalType(
+                                        YearMonthIntervalType.YearMonthResolution.MONTH)),
+                        false,
+                        false),
+                // MULTISET has no variant counterpart and stays unsupported
+                Arguments.of(
+                        new VariantType(), new MultisetType(VarCharType.STRING_TYPE), false, false),
+                // UUID casts are explicit only, in both directions
+                Arguments.of(new UuidType(), VarCharType.STRING_TYPE, false, true),
+                Arguments.of(new UuidType(), new CharType(), false, true),
+                Arguments.of(VarCharType.STRING_TYPE, new UuidType(), false, true),
+                Arguments.of(new CharType(), new UuidType(), false, true),
+                // UUID maps to its 16-byte encoding. BINARY is fixed width, so only BINARY(16)
+                // fits. VARBINARY is variable width, so any VARBINARY(n >= 16), up to BYTES, fits.
+                Arguments.of(new UuidType(), new BinaryType(16), false, true),
+                Arguments.of(new UuidType(), new BinaryType(10), false, false),
+                Arguments.of(new UuidType(), new BinaryType(20), false, false),
+                Arguments.of(
+                        new UuidType(), new VarBinaryType(VarBinaryType.MAX_LENGTH), false, true),
+                Arguments.of(new UuidType(), new VarBinaryType(16), false, true),
+                Arguments.of(new UuidType(), new VarBinaryType(20), false, true),
+                Arguments.of(new UuidType(), new VarBinaryType(8), false, false),
+                // A binary source maps back from the 16-byte encoding. BINARY is fixed width, so
+                // only BINARY(16) fits; a VARBINARY(n >= 16) may hold it, with the exact length
+                // checked at runtime.
+                Arguments.of(
+                        new VarBinaryType(VarBinaryType.MAX_LENGTH), new UuidType(), false, true),
+                Arguments.of(new VarBinaryType(16), new UuidType(), false, true),
+                Arguments.of(new VarBinaryType(8), new UuidType(), false, false),
+                Arguments.of(new BinaryType(16), new UuidType(), false, true),
+                Arguments.of(new BinaryType(10), new UuidType(), false, false),
+                // UUID identity cast is implicit
+                Arguments.of(new UuidType(), new UuidType(), true, true),
+                // numeric and VARIANT are not castable to or from UUID
+                Arguments.of(new UuidType(), new IntType(), false, false),
+                Arguments.of(new IntType(), new UuidType(), false, false),
+                Arguments.of(new UuidType(), new VariantType(), false, false),
+                Arguments.of(new VariantType(), new UuidType(), false, false),
+                // GEOGRAPHY construction and serialization require explicit functions.
+                Arguments.of(new GeographyType(), VarCharType.STRING_TYPE, false, false),
+                Arguments.of(VarCharType.STRING_TYPE, new GeographyType(), false, false),
+                Arguments.of(new GeographyType(), new VarBinaryType(), false, false),
+                Arguments.of(new VarBinaryType(), new GeographyType(), false, false));
     }
 
     @ParameterizedTest(name = "{index}: [From: {0}, To: {1}, Implicit: {2}, Explicit: {3}]")

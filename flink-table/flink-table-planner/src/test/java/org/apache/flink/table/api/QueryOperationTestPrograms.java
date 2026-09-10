@@ -281,8 +281,115 @@ public class QueryOperationTestPrograms {
                                     + "        TUMBLE((\n"
                                     + "            SELECT `$$T_SOURCE`.`a`, `$$T_SOURCE`.`b`, "
                                     + "`$$T_SOURCE`.`ts` FROM `default_catalog`.`default_database`.`s` $$T_SOURCE\n"
-                                    + "        ), DESCRIPTOR(`ts`), INTERVAL '0 00:00:05.0' DAY TO SECOND(3))\n"
+                                    + "        ), DESCRIPTOR(`ts`), INTERVAL '0 00:00:05.000' DAY(2) TO SECOND(3))\n"
                                     + "    ) $$T_WIN_AGG GROUP BY window_start, window_end, `$$T_WIN_AGG`.`b`\n"
+                                    + ") $$T_PROJECT")
+                    .build();
+
+    static final TableTestProgram WINDOW_AGGREGATE_ROWTIME_QUERY_OPERATION =
+            TableTestProgram.of(
+                            "window-aggregate-rowtime-query-operation",
+                            "verifies sql serialization of the window rowtime property")
+                    .setupTableSource(
+                            SourceTestStep.newBuilder("s")
+                                    .addSchema(
+                                            "a bigint",
+                                            "b string",
+                                            "ts TIMESTAMP_LTZ(3)",
+                                            "WATERMARK FOR ts AS ts - INTERVAL '1' SECOND")
+                                    .producedValues(
+                                            Row.of(2L, "apple", dayOfSeconds(0)),
+                                            Row.of(3L, "apple", dayOfSeconds(4)),
+                                            Row.of(1L, "apple", dayOfSeconds(7)))
+                                    .build())
+                    .setupTableSink(
+                            SinkTestStep.newBuilder("sink")
+                                    .addSchema(
+                                            "b string",
+                                            "w_start TIMESTAMP_LTZ(3)",
+                                            "w_end TIMESTAMP_LTZ(3)",
+                                            "w_rowtime TIMESTAMP_LTZ(3)",
+                                            "a_sum bigint")
+                                    .consumedValues(
+                                            Row.of(
+                                                    "apple",
+                                                    dayOfSeconds(0),
+                                                    dayOfSeconds(5),
+                                                    dayOfSeconds(5).minusMillis(1),
+                                                    5L),
+                                            Row.of(
+                                                    "apple",
+                                                    dayOfSeconds(5),
+                                                    dayOfSeconds(10),
+                                                    dayOfSeconds(10).minusMillis(1),
+                                                    1L))
+                                    .build())
+                    .runTableApi(
+                            t ->
+                                    t.from("s")
+                                            .window(
+                                                    Tumble.over(lit(5).seconds())
+                                                            .on($("ts"))
+                                                            .as("w"))
+                                            .groupBy($("w"), $("b"))
+                                            .select(
+                                                    $("b"),
+                                                    $("w").start(),
+                                                    $("w").end(),
+                                                    $("w").rowtime(),
+                                                    $("a").sum()),
+                            "sink")
+                    .runSql(
+                            "SELECT `$$T_PROJECT`.`b`, `$$T_PROJECT`.`EXPR$0`, `$$T_PROJECT`.`EXPR$1`, "
+                                    + "`$$T_PROJECT`.`EXPR$2`, `$$T_PROJECT`.`EXPR$3` FROM (\n"
+                                    + "    SELECT `$$T_WIN_AGG`.`b`, (SUM(`$$T_WIN_AGG`.`a`)) AS `EXPR$3`, "
+                                    + "(window_start) AS `EXPR$0`, (window_end) AS `EXPR$1`, "
+                                    + "(window_time) AS `EXPR$2` FROM TABLE(\n"
+                                    + "        TUMBLE((\n"
+                                    + "            SELECT `$$T_SOURCE`.`a`, `$$T_SOURCE`.`b`, "
+                                    + "`$$T_SOURCE`.`ts` FROM `default_catalog`.`default_database`.`s` $$T_SOURCE\n"
+                                    + "        ), DESCRIPTOR(`ts`), INTERVAL '0 00:00:05.000' DAY(2) TO SECOND(3))\n"
+                                    + "    ) $$T_WIN_AGG GROUP BY window_start, window_end, window_time, "
+                                    + "`$$T_WIN_AGG`.`b`\n"
+                                    + ") $$T_PROJECT")
+                    .build();
+
+    /**
+     * Can not be tested with {@link
+     * org.apache.flink.table.planner.plan.nodes.exec.testutils.SemanticTestBase} as a base class,
+     * because a processing-time window only emits from a processing-time timer, and a bounded test
+     * source terminates the job before the timer fires, so the query produces no rows to assert on.
+     */
+    static final TableTestProgram WINDOW_AGGREGATE_PROCTIME_QUERY_OPERATION =
+            TableTestProgram.of(
+                            "window-aggregate-proctime-query-operation",
+                            "verifies sql serialization of the window proctime property")
+                    .setupTableSource(
+                            SourceTestStep.newBuilder("s")
+                                    .addSchema("a bigint", "b string", "proctime AS PROCTIME()")
+                                    .producedValues(Row.of(2L, "apple"), Row.of(3L, "apple"))
+                                    .build())
+                    .runTableApi(
+                            t ->
+                                    t.from("s")
+                                            .window(
+                                                    Tumble.over(lit(5).seconds())
+                                                            .on($("proctime"))
+                                                            .as("w"))
+                                            .groupBy($("w"), $("b"))
+                                            .select($("b"), $("w").proctime(), $("a").sum()),
+                            "sink")
+                    .runSql(
+                            "SELECT `$$T_PROJECT`.`b`, `$$T_PROJECT`.`EXPR$0`, "
+                                    + "`$$T_PROJECT`.`EXPR$1` FROM (\n"
+                                    + "    SELECT `$$T_WIN_AGG`.`b`, (SUM(`$$T_WIN_AGG`.`a`)) AS `EXPR$1`, "
+                                    + "(window_time) AS `EXPR$0` FROM TABLE(\n"
+                                    + "        TUMBLE((\n"
+                                    + "            SELECT `$$T_SOURCE`.`a`, `$$T_SOURCE`.`b`, "
+                                    + "`$$T_SOURCE`.`proctime` FROM `default_catalog`.`default_database`.`s` $$T_SOURCE\n"
+                                    + "        ), DESCRIPTOR(`proctime`), INTERVAL '0 00:00:05.000' DAY(2) TO SECOND(3))\n"
+                                    + "    ) $$T_WIN_AGG GROUP BY window_start, window_end, window_time, "
+                                    + "`$$T_WIN_AGG`.`b`\n"
                                     + ") $$T_PROJECT")
                     .build();
 
@@ -425,6 +532,102 @@ public class QueryOperationTestPrograms {
                                     + ".`default_database`.`s` $$T_SOURCE\n"
                                     + ") $$T_SORT ORDER BY `$$T_SORT`.`a` ASC, `$$T_SORT`.`b` DESC"
                                     + " OFFSET 1 ROWS FETCH NEXT 2 ROWS ONLY")
+                    .build();
+
+    static final TableTestProgram ORDER_BY_AGGREGATE_QUERY_OPERATION =
+            TableTestProgram.of("order-by-aggregate-query-operation", "verifies sql serialization")
+                    .setupTableSource(
+                            SourceTestStep.newBuilder("s")
+                                    .addSchema("a bigint", "b string")
+                                    .producedValues(
+                                            Row.of(1L, "a"), Row.of(2L, "b"), Row.of(3L, "c"))
+                                    .build())
+                    .setupTableSink(
+                            SinkTestStep.newBuilder("sink")
+                                    .addSchema("a bigint")
+                                    .consumedValues(
+                                            Row.ofKind(RowKind.INSERT, 1L),
+                                            Row.ofKind(RowKind.UPDATE_BEFORE, 1L),
+                                            Row.ofKind(RowKind.UPDATE_AFTER, 2L))
+                                    .build())
+                    .runTableApi(
+                            t -> t.from("s").orderBy($("b")).fetch(2).select($("a").max()), "sink")
+                    .runSql(
+                            "SELECT `$$T_PROJECT`.`EXPR$0` FROM (\n"
+                                    + "    SELECT (MAX(`$$T_AGG`.`a`)) AS `EXPR$0` FROM (\n"
+                                    + "        SELECT `$$T_SORT`.`a`, `$$T_SORT`.`b` FROM (\n"
+                                    + "            SELECT `$$T_SOURCE`.`a`, `$$T_SOURCE`.`b` FROM "
+                                    + "`default_catalog`.`default_database`.`s` $$T_SOURCE\n"
+                                    + "        ) $$T_SORT ORDER BY `$$T_SORT`.`b` ASC OFFSET 0 ROWS"
+                                    + " FETCH NEXT 2 ROWS ONLY\n"
+                                    + "    ) $$T_AGG\n"
+                                    + "    GROUP BY 1\n"
+                                    + ") $$T_PROJECT")
+                    .build();
+
+    static final TableTestProgram ORDER_BY_NO_FETCH_AGGREGATE_QUERY_OPERATION =
+            TableTestProgram.of(
+                            "order-by-no-fetch-aggregate-query-operation",
+                            "verifies sql serialization")
+                    .setupTableSource(
+                            SourceTestStep.newBuilder("s")
+                                    .addSchema("a bigint", "b string")
+                                    .producedValues(
+                                            Row.of(1L, "a"), Row.of(2L, "b"), Row.of(3L, "c"))
+                                    .build())
+                    .setupTableSink(
+                            SinkTestStep.newBuilder("sink")
+                                    .addSchema("a bigint")
+                                    .consumedValues(
+                                            Row.ofKind(RowKind.INSERT, 1L),
+                                            Row.ofKind(RowKind.UPDATE_BEFORE, 1L),
+                                            Row.ofKind(RowKind.UPDATE_AFTER, 2L),
+                                            Row.ofKind(RowKind.UPDATE_BEFORE, 2L),
+                                            Row.ofKind(RowKind.UPDATE_AFTER, 3L))
+                                    .build())
+                    .runTableApi(t -> t.from("s").orderBy($("b")).select($("a").max()), "sink")
+                    .runSql(
+                            "SELECT `$$T_PROJECT`.`EXPR$0` FROM (\n"
+                                    + "    SELECT (MAX(`$$T_AGG`.`a`)) AS `EXPR$0` FROM (\n"
+                                    + "        SELECT `$$T_SORT`.`a`, `$$T_SORT`.`b` FROM (\n"
+                                    + "            SELECT `$$T_SOURCE`.`a`, `$$T_SOURCE`.`b` FROM "
+                                    + "`default_catalog`.`default_database`.`s` $$T_SOURCE\n"
+                                    + "        ) $$T_SORT ORDER BY `$$T_SORT`.`b` ASC\n"
+                                    + "    ) $$T_AGG\n"
+                                    + "    GROUP BY 1\n"
+                                    + ") $$T_PROJECT")
+                    .build();
+
+    static final TableTestProgram AGGREGATE_HAVING_QUERY_OPERATION =
+            TableTestProgram.of("aggregate-having-query-operation", "verifies sql serialization")
+                    .setupTableSource(
+                            SourceTestStep.newBuilder("s")
+                                    .addSchema("a bigint", "b string")
+                                    .producedValues(
+                                            Row.of(1L, "a"), Row.of(2L, "b"), Row.of(3L, "b"))
+                                    .build())
+                    .setupTableSink(
+                            SinkTestStep.newBuilder("sink")
+                                    .addSchema("b string", "s bigint")
+                                    .consumedValues(Row.ofKind(RowKind.UPDATE_AFTER, "b", 5L))
+                                    .build())
+                    .runTableApi(
+                            t ->
+                                    t.from("s")
+                                            .groupBy($("b"))
+                                            .select($("b"), $("a").sum().as("s"))
+                                            .where($("s").isGreater(3L)),
+                            "sink")
+                    .runSql(
+                            "SELECT `$$T_FILTER`.`b`, `$$T_FILTER`.`s` FROM (\n"
+                                    + "    SELECT `$$T_PROJECT`.`b`, `$$T_PROJECT`.`EXPR$0` AS `s` FROM (\n"
+                                    + "        SELECT `$$T_AGG`.`b`, (SUM(`$$T_AGG`.`a`)) AS `EXPR$0` FROM (\n"
+                                    + "            SELECT `$$T_SOURCE`.`a`, `$$T_SOURCE`.`b` FROM "
+                                    + "`default_catalog`.`default_database`.`s` $$T_SOURCE\n"
+                                    + "        ) $$T_AGG\n"
+                                    + "        GROUP BY `$$T_AGG`.`b`\n"
+                                    + "    ) $$T_PROJECT\n"
+                                    + ") $$T_FILTER WHERE `$$T_FILTER`.`s` > CAST(3 AS BIGINT)")
                     .build();
 
     static final TableTestProgram LIMIT_QUERY_OPERATION =
@@ -865,8 +1068,8 @@ public class QueryOperationTestPrograms {
                     .runSql(
                             "SELECT `$$T_PROJECT`.`k`, (LAST_VALUE(`$$T_PROJECT`.`v`) "
                                     + "OVER(PARTITION BY `$$T_PROJECT`.`k` "
-                                    + "ORDER BY `$$T_PROJECT`.`ts` RANGE BETWEEN INTERVAL '0 "
-                                    + "00:00:02.0' DAY TO SECOND(3) PRECEDING AND CURRENT ROW)) AS `_c1`, `$$T_PROJECT`.`ts` FROM (\n"
+                                    + "ORDER BY `$$T_PROJECT`.`ts` RANGE BETWEEN INTERVAL "
+                                    + "'0 00:00:02.000' DAY(2) TO SECOND(3) PRECEDING AND CURRENT ROW)) AS `_c1`, `$$T_PROJECT`.`ts` FROM (\n"
                                     + "    SELECT `$$T_SOURCE`.`k`, `$$T_SOURCE`.`v`, "
                                     + "`$$T_SOURCE`.`ts` FROM `default_catalog`.`default_database`.`data` $$T_SOURCE\n"
                                     + ") $$T_PROJECT")

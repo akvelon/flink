@@ -114,6 +114,7 @@ class NativeS3FileSystem extends FileSystem
     private final boolean useAsyncOperations;
     private final int readBufferSize;
     private final Duration fsCloseTimeout;
+    private final boolean deleteBatchEnabled;
     private final AtomicBoolean closed = new AtomicBoolean(false);
 
     public NativeS3FileSystem(
@@ -127,7 +128,8 @@ class NativeS3FileSystem extends FileSystem
             @Nullable NativeS3BulkCopyHelper bulkCopyHelper,
             boolean useAsyncOperations,
             int readBufferSize,
-            Duration fsCloseTimeout) {
+            Duration fsCloseTimeout,
+            boolean deleteBatchEnabled) {
         this.clientProvider =
                 Preconditions.checkNotNull(clientProvider, "clientProvider must not be null");
         this.uri = uri;
@@ -140,6 +142,7 @@ class NativeS3FileSystem extends FileSystem
         this.useAsyncOperations = useAsyncOperations;
         this.readBufferSize = readBufferSize;
         this.fsCloseTimeout = fsCloseTimeout;
+        this.deleteBatchEnabled = deleteBatchEnabled;
         this.s3AccessHelper =
                 new NativeS3ObjectOperations(
                         clientProvider.getS3Client(),
@@ -155,16 +158,22 @@ class NativeS3FileSystem extends FileSystem
         }
 
         LOG.info(
-                "Created Native S3 FileSystem for bucket: {}, entropy injection: {}, bulk copy: {}, read buffer: {} KB",
+                "Created Native S3 FileSystem for bucket: {}, entropy injection: {}, bulk copy: {}, read buffer: {} KB, delete batching: {}",
                 bucketName,
                 entropyInjectionKey != null,
                 bulkCopyHelper != null,
-                readBufferSize / 1024);
+                readBufferSize / 1024,
+                deleteBatchEnabled);
     }
 
     @VisibleForTesting
     Duration getFsCloseTimeout() {
         return fsCloseTimeout;
+    }
+
+    @VisibleForTesting
+    boolean isDeleteBatchEnabled() {
+        return deleteBatchEnabled;
     }
 
     @VisibleForTesting
@@ -392,11 +401,8 @@ class NativeS3FileSystem extends FileSystem
                     throw new IOException("Directory not empty and recursive = false");
                 }
 
-                final FileStatus[] contents = listStatus(path);
-                for (FileStatus file : contents) {
-                    delete(file.getPath(), true);
-                }
-
+                new NativeS3RecursiveDelete(s3Client, bucketName, key, deleteBatchEnabled)
+                        .execute();
                 return true;
             }
         } catch (FileNotFoundException e) {
@@ -512,7 +518,9 @@ class NativeS3FileSystem extends FileSystem
 
     @Override
     public boolean canCopyPaths(Path source, Path destination) {
-        return bulkCopyHelper != null;
+        return bulkCopyHelper != null
+                && NativeS3BulkCopyHelper.isSupportedS3Scheme(source)
+                && NativeS3BulkCopyHelper.isSupportedLocalScheme(destination);
     }
 
     @Override
@@ -566,12 +574,12 @@ class NativeS3FileSystem extends FileSystem
                                                                         "S3 client provider closed");
                                                             }
                                                         }))
-                        .orTimeout(fsCloseTimeout.toSeconds(), TimeUnit.SECONDS)
+                        .orTimeout(fsCloseTimeout.toMillis(), TimeUnit.MILLISECONDS)
                         .whenComplete(
                                 (result, error) -> {
                                     if (error != null) {
                                         LOG.error(
-                                                "FileSystem close timed out after {} for bucket: {}",
+                                                "FileSystem close did not complete cleanly within {} for bucket: {}",
                                                 fsCloseTimeout,
                                                 bucketName,
                                                 error);

@@ -26,6 +26,8 @@ import org.apache.flink.api.java.typeutils.runtime.kryo.KryoSerializer;
 import org.apache.flink.table.api.ValidationException;
 import org.apache.flink.table.catalog.ObjectIdentifier;
 import org.apache.flink.table.catalog.UnresolvedIdentifier;
+import org.apache.flink.table.data.GeographyData;
+import org.apache.flink.table.data.binary.BinaryGeographyData;
 import org.apache.flink.table.expressions.TimeIntervalUnit;
 import org.apache.flink.table.legacy.types.logical.TypeInformationRawType;
 import org.apache.flink.table.types.logical.ArrayType;
@@ -40,6 +42,7 @@ import org.apache.flink.table.types.logical.DecimalType;
 import org.apache.flink.table.types.logical.DistinctType;
 import org.apache.flink.table.types.logical.DoubleType;
 import org.apache.flink.table.types.logical.FloatType;
+import org.apache.flink.table.types.logical.GeographyType;
 import org.apache.flink.table.types.logical.IntType;
 import org.apache.flink.table.types.logical.LocalZonedTimestampType;
 import org.apache.flink.table.types.logical.LogicalType;
@@ -57,6 +60,7 @@ import org.apache.flink.table.types.logical.TimestampKind;
 import org.apache.flink.table.types.logical.TimestampType;
 import org.apache.flink.table.types.logical.TinyIntType;
 import org.apache.flink.table.types.logical.UnresolvedUserDefinedType;
+import org.apache.flink.table.types.logical.UuidType;
 import org.apache.flink.table.types.logical.VarBinaryType;
 import org.apache.flink.table.types.logical.VarCharType;
 import org.apache.flink.table.types.logical.VariantType;
@@ -65,7 +69,6 @@ import org.apache.flink.table.types.logical.ZonedTimestampType;
 import org.apache.flink.types.Row;
 import org.apache.flink.types.bitmap.Bitmap;
 import org.apache.flink.types.bitmap.RoaringBitmapData;
-import org.apache.flink.types.variant.BinaryVariant;
 import org.apache.flink.types.variant.Variant;
 
 import org.assertj.core.api.ThrowingConsumer;
@@ -80,6 +83,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.TreeMap;
+import java.util.UUID;
 
 import static org.apache.flink.table.test.TableAssertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThat;
@@ -610,9 +614,7 @@ public class LogicalTypesTest {
                 .hasSerializableString("VARIANT")
                 .hasSummaryString("VARIANT")
                 .supportsOutputConversion(Variant.class)
-                .supportsOutputConversion(BinaryVariant.class)
-                .supportsInputConversion(Variant.class)
-                .supportsInputConversion(BinaryVariant.class);
+                .supportsInputConversion(Variant.class);
     }
 
     @Test
@@ -627,6 +629,34 @@ public class LogicalTypesTest {
                                 new Class[] {Bitmap.class, RoaringBitmapData.class},
                                 new LogicalType[] {},
                                 new BitmapType(false)));
+    }
+
+    @Test
+    void testUuidType() {
+        assertThat(new UuidType())
+                .isJavaSerializable()
+                .satisfies(
+                        baseAssertions(
+                                "UUID",
+                                "UUID",
+                                new Class[] {UUID.class, byte[].class},
+                                new Class[] {UUID.class, byte[].class},
+                                new LogicalType[] {},
+                                new UuidType(false)));
+    }
+
+    @Test
+    void testGeographyType() {
+        assertThat(new GeographyType())
+                .isJavaSerializable()
+                .satisfies(
+                        baseAssertions(
+                                "GEOGRAPHY",
+                                "GEOGRAPHY",
+                                new Class[] {GeographyData.class, BinaryGeographyData.class},
+                                new Class[] {GeographyData.class, BinaryGeographyData.class},
+                                new LogicalType[] {},
+                                new GeographyType(false)));
     }
 
     @Test
