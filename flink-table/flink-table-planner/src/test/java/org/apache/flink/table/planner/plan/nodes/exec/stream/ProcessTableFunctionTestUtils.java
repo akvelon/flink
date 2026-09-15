@@ -29,6 +29,7 @@ import org.apache.flink.table.api.dataview.ListView;
 import org.apache.flink.table.api.dataview.MapView;
 import org.apache.flink.table.catalog.DataTypeFactory;
 import org.apache.flink.table.connector.ChangelogMode;
+import org.apache.flink.table.data.RowData;
 import org.apache.flink.table.functions.ChangelogFunction;
 import org.apache.flink.table.functions.ProcessTableFunction;
 import org.apache.flink.table.functions.ScalarFunction;
@@ -41,6 +42,7 @@ import org.apache.flink.table.types.inference.TypeInference;
 import org.apache.flink.types.ColumnList;
 import org.apache.flink.types.Row;
 import org.apache.flink.types.RowKind;
+import org.apache.flink.types.variant.Variant;
 
 import java.time.Duration;
 import java.time.Instant;
@@ -546,6 +548,31 @@ public class ProcessTableFunctionTestUtils {
                 @ArgumentHint(isOptional = true) ColumnList columnList2,
                 @DataTypeHint("DESCRIPTOR NOT NULL") ColumnList columnList3) {
             collectObjects(columnList1, columnList2, columnList3);
+        }
+    }
+
+    /** Testing function. */
+    public static class VariantFunction extends AppendProcessTableFunctionBase {
+        public void eval(
+                Variant variant1,
+                @ArgumentHint(isOptional = true) Variant variant2,
+                @DataTypeHint("VARIANT NOT NULL") Variant variant3) {
+            collectObjects(variant1, variant2, variant3);
+        }
+    }
+
+    /** Testing function. */
+    public static class VariantStateFunction extends AppendProcessTableFunctionBase {
+        public void eval(@StateHint VariantScore s, @ArgumentHint(SET_SEMANTIC_TABLE) Row r) {
+            collectObjects(s, r);
+            s.v = Variant.newBuilder().of(r.<Integer>getFieldAs("score"));
+        }
+    }
+
+    /** Testing function. */
+    public static class VariantTableArgFunction extends AppendProcessTableFunctionBase {
+        public void eval(@ArgumentHint(SET_SEMANTIC_TABLE) Row r) {
+            collectObjects(r);
         }
     }
 
@@ -1188,6 +1215,13 @@ public class ProcessTableFunctionTestUtils {
         }
     }
 
+    /** Testing function with non default conversion class. */
+    public static class RowDataRowSemanticTableFunction extends AppendProcessTableFunctionBase {
+        public void eval(@ArgumentHint(ROW_SEMANTIC_TABLE) RowData input) {
+            collectObjects("Hello " + input.getString(0) + "!");
+        }
+    }
+
     // --------------------------------------------------------------------------------------------
     // Helpers
     // --------------------------------------------------------------------------------------------
@@ -1233,6 +1267,16 @@ public class ProcessTableFunctionTestUtils {
         @Override
         public String toString() {
             return String.format("ScoreWithDefaults(s='%s', i=%s)", s, i);
+        }
+    }
+
+    /** POJO for state. */
+    public static class VariantScore {
+        public Variant v;
+
+        @Override
+        public String toString() {
+            return String.format("VariantScore(v=%s)", v);
         }
     }
 

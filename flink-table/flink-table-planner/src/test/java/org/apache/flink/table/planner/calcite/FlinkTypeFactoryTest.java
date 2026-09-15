@@ -22,15 +22,20 @@ import org.apache.flink.api.common.serialization.SerializerConfigImpl;
 import org.apache.flink.api.common.typeinfo.TypeInformation;
 import org.apache.flink.api.common.typeinfo.Types;
 import org.apache.flink.api.java.typeutils.runtime.kryo.KryoSerializer;
+import org.apache.flink.table.api.DataTypes;
+import org.apache.flink.table.api.TableException;
 import org.apache.flink.table.legacy.types.logical.TypeInformationRawType;
 import org.apache.flink.table.types.logical.ArrayType;
 import org.apache.flink.table.types.logical.BigIntType;
+import org.apache.flink.table.types.logical.BitmapType;
 import org.apache.flink.table.types.logical.BooleanType;
 import org.apache.flink.table.types.logical.CharType;
 import org.apache.flink.table.types.logical.DateType;
+import org.apache.flink.table.types.logical.DayTimeIntervalType;
 import org.apache.flink.table.types.logical.DecimalType;
 import org.apache.flink.table.types.logical.DoubleType;
 import org.apache.flink.table.types.logical.FloatType;
+import org.apache.flink.table.types.logical.GeographyType;
 import org.apache.flink.table.types.logical.IntType;
 import org.apache.flink.table.types.logical.LocalZonedTimestampType;
 import org.apache.flink.table.types.logical.LogicalType;
@@ -43,11 +48,15 @@ import org.apache.flink.table.types.logical.SmallIntType;
 import org.apache.flink.table.types.logical.TimeType;
 import org.apache.flink.table.types.logical.TimestampType;
 import org.apache.flink.table.types.logical.TinyIntType;
+import org.apache.flink.table.types.logical.UuidType;
 import org.apache.flink.table.types.logical.VarBinaryType;
 import org.apache.flink.table.types.logical.VarCharType;
 import org.apache.flink.table.types.logical.utils.LogicalTypeMerging;
 
+import org.apache.calcite.avatica.util.TimeUnit;
 import org.apache.calcite.rel.type.RelDataType;
+import org.apache.calcite.sql.SqlIntervalQualifier;
+import org.apache.calcite.sql.parser.SqlParserPos;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.parallel.Execution;
 import org.junit.jupiter.api.parallel.ExecutionMode;
@@ -56,12 +65,14 @@ import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
 
 import java.time.DayOfWeek;
+import java.time.Month;
 import java.util.Arrays;
 import java.util.List;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /** Tests for {@link FlinkTypeFactory}. */
 @Execution(ExecutionMode.CONCURRENT)
@@ -82,20 +93,17 @@ class FlinkTypeFactoryTest {
                 new TimeType(),
                 new TimestampType(3),
                 new LocalZonedTimestampType(3),
+                new UuidType(),
                 new ArrayType(new DoubleType()),
                 new MapType(new DoubleType(), VarCharType.STRING_TYPE),
                 RowType.of(new DoubleType(), VarCharType.STRING_TYPE),
-                new RawType<>(
-                        DayOfWeek.class,
-                        new KryoSerializer<>(DayOfWeek.class, new SerializerConfigImpl())));
+                rawType(DayOfWeek.class, true));
     }
 
     @MethodSource("testInternalToRelType")
     @ParameterizedTest
     void testInternalToRelType(LogicalType logicalType) {
-        FlinkTypeFactory typeFactory =
-                new FlinkTypeFactory(
-                        Thread.currentThread().getContextClassLoader(), FlinkTypeSystem.INSTANCE);
+        FlinkTypeFactory typeFactory = createTypeFactory();
 
         assertThat(
                         FlinkTypeFactory.toLogicalType(
@@ -120,9 +128,7 @@ class FlinkTypeFactoryTest {
 
     @Test
     void testInternalToRelTypeNull() {
-        FlinkTypeFactory typeFactory =
-                new FlinkTypeFactory(
-                        Thread.currentThread().getContextClassLoader(), FlinkTypeSystem.INSTANCE);
+        FlinkTypeFactory typeFactory = createTypeFactory();
 
         LogicalType logicalType = new NullType();
 
@@ -138,6 +144,43 @@ class FlinkTypeFactoryTest {
     }
 
     @Test
+    void testDayTimeIntervalLeadingPrecisionUpToMaxIsSupported() {
+        FlinkTypeFactory typeFactory = createTypeFactory();
+
+        RelDataType intervalType =
+                typeFactory.createSqlIntervalType(
+                        new SqlIntervalQualifier(
+                                TimeUnit.DAY,
+                                DayTimeIntervalType.MAX_DAY_PRECISION,
+                                TimeUnit.SECOND,
+                                RelDataType.PRECISION_NOT_SPECIFIED,
+                                SqlParserPos.ZERO));
+
+        assertThat(FlinkTypeFactory.toLogicalType(intervalType))
+                .isEqualTo(DataTypes.INTERVAL(DataTypes.SECOND(3)).notNull().getLogicalType());
+    }
+
+    @Test
+    void testDayTimeIntervalLeadingPrecisionAboveMaxIsRejected() {
+        FlinkTypeFactory typeFactory = createTypeFactory();
+
+        RelDataType intervalType =
+                typeFactory.createSqlIntervalType(
+                        new SqlIntervalQualifier(
+                                TimeUnit.DAY,
+                                DayTimeIntervalType.MAX_DAY_PRECISION + 1,
+                                TimeUnit.SECOND,
+                                RelDataType.PRECISION_NOT_SPECIFIED,
+                                SqlParserPos.ZERO));
+
+        assertThatThrownBy(() -> FlinkTypeFactory.toLogicalType(intervalType))
+                .isInstanceOf(TableException.class)
+                .hasMessageContaining(
+                        "DAY_INTERVAL_TYPES precision is not supported: "
+                                + (DayTimeIntervalType.MAX_DAY_PRECISION + 1));
+    }
+
+    @Test
     void testDecimalInferType() {
         assertThat(LogicalTypeMerging.findSumAggType(new DecimalType(10, 5)))
                 .isEqualTo(new DecimalType(38, 5));
@@ -147,9 +190,7 @@ class FlinkTypeFactoryTest {
 
     @Test
     void testCanonizeType() {
-        FlinkTypeFactory typeFactory =
-                new FlinkTypeFactory(
-                        Thread.currentThread().getContextClassLoader(), FlinkTypeSystem.INSTANCE);
+        FlinkTypeFactory typeFactory = createTypeFactory();
 
         TypeInformation<?> genericTypeInfo = Types.GENERIC(TestClass.class);
         TypeInformation<?> genericTypeInfo2 = Types.GENERIC(TestClass2.class);
@@ -177,7 +218,7 @@ class FlinkTypeFactoryTest {
                 // Since the problem is actual for collection
                 // then tests are for array, map, multiset
                 // Also as https://issues.apache.org/jira/browse/CALCITE-4603 says
-                // before Calcite 1.27.0  it derived the type of nested collection based on the last
+                // before Calcite 1.27.0 it derived the type of nested collection based on the last
                 // element, for that reason the type of the last element is narrower
                 // than the type of element in the middle
                 Arguments.of(
@@ -209,9 +250,90 @@ class FlinkTypeFactoryTest {
     @MethodSource("testLeastRestrictive")
     @ParameterizedTest
     void testLeastRestrictive(List<LogicalType> input, LogicalType expected) {
-        FlinkTypeFactory typeFactory =
-                new FlinkTypeFactory(
-                        Thread.currentThread().getContextClassLoader(), FlinkTypeSystem.INSTANCE);
+        assertLeastRestrictive(input, expected);
+    }
+
+    static Stream<Arguments> testLeastRestrictiveGeographyCases() {
+        return Stream.of(
+                Arguments.of(
+                        Arrays.asList(new GeographyType(false), new GeographyType(false)),
+                        new GeographyType(false)),
+                Arguments.of(
+                        Arrays.asList(new GeographyType(false), new GeographyType(true)),
+                        new GeographyType(true)),
+                Arguments.of(
+                        Arrays.asList(new GeographyType(false), new NullType()),
+                        new GeographyType(true)),
+                Arguments.of(
+                        Arrays.asList(new NullType(), new GeographyType(false)),
+                        new GeographyType(true)));
+    }
+
+    @MethodSource("testLeastRestrictiveGeographyCases")
+    @ParameterizedTest
+    void testLeastRestrictiveGeographyCases(List<LogicalType> input, LogicalType expected) {
+        assertLeastRestrictive(input, expected);
+    }
+
+    static Stream<Arguments> testLeastRestrictiveIncompatibleGeographyCases() {
+        return Stream.of(
+                Arguments.of(Arrays.asList(new GeographyType(), new BitmapType())),
+                Arguments.of(Arrays.asList(new GeographyType(), new IntType())));
+    }
+
+    @MethodSource("testLeastRestrictiveIncompatibleGeographyCases")
+    @ParameterizedTest
+    void testLeastRestrictiveIncompatibleGeographyCases(List<LogicalType> input) {
+        assertLeastRestrictiveIsNull(input);
+    }
+
+    static Stream<Arguments> testLeastRestrictiveBitmapRegressionCases() {
+        return Stream.of(
+                Arguments.of(
+                        Arrays.asList(new BitmapType(false), new BitmapType(false)),
+                        new BitmapType(false)),
+                Arguments.of(Arrays.asList(new BitmapType(false), new BitmapType(true)), null),
+                Arguments.of(Arrays.asList(new BitmapType(false), new NullType()), null));
+    }
+
+    @MethodSource("testLeastRestrictiveBitmapRegressionCases")
+    @ParameterizedTest
+    void testLeastRestrictiveBitmapRegressionCases(List<LogicalType> input, LogicalType expected) {
+        if (expected == null) {
+            assertLeastRestrictiveIsNull(input);
+        } else {
+            assertLeastRestrictive(input, expected);
+        }
+    }
+
+    static Stream<Arguments> testLeastRestrictiveRawRegressionCases() {
+        return Stream.of(
+                Arguments.of(
+                        Arrays.asList(
+                                rawType(DayOfWeek.class, false), rawType(DayOfWeek.class, false)),
+                        rawType(DayOfWeek.class, false)),
+                Arguments.of(
+                        Arrays.asList(
+                                rawType(DayOfWeek.class, false), rawType(DayOfWeek.class, true)),
+                        null),
+                Arguments.of(Arrays.asList(rawType(DayOfWeek.class, false), new NullType()), null),
+                Arguments.of(
+                        Arrays.asList(rawType(DayOfWeek.class, false), rawType(Month.class, false)),
+                        null));
+    }
+
+    @MethodSource("testLeastRestrictiveRawRegressionCases")
+    @ParameterizedTest
+    void testLeastRestrictiveRawRegressionCases(List<LogicalType> input, LogicalType expected) {
+        if (expected == null) {
+            assertLeastRestrictiveIsNull(input);
+        } else {
+            assertLeastRestrictive(input, expected);
+        }
+    }
+
+    private static void assertLeastRestrictive(List<LogicalType> input, LogicalType expected) {
+        FlinkTypeFactory typeFactory = createTypeFactory();
 
         assertThat(
                         typeFactory.leastRestrictive(
@@ -219,6 +341,28 @@ class FlinkTypeFactoryTest {
                                         .map(typeFactory::createFieldTypeFromLogicalType)
                                         .collect(Collectors.toList())))
                 .isEqualTo(typeFactory.createFieldTypeFromLogicalType(expected));
+    }
+
+    private static void assertLeastRestrictiveIsNull(List<LogicalType> input) {
+        FlinkTypeFactory typeFactory = createTypeFactory();
+
+        assertThat(
+                        typeFactory.leastRestrictive(
+                                input.stream()
+                                        .map(typeFactory::createFieldTypeFromLogicalType)
+                                        .collect(Collectors.toList())))
+                .isNull();
+    }
+
+    private static FlinkTypeFactory createTypeFactory() {
+        return new FlinkTypeFactory(
+                Thread.currentThread().getContextClassLoader(), FlinkTypeSystem.INSTANCE);
+    }
+
+    private static <T> RawType<T> rawType(Class<T> clazz, boolean nullable) {
+        return (RawType<T>)
+                new RawType<>(clazz, new KryoSerializer<>(clazz, new SerializerConfigImpl()))
+                        .copy(nullable);
     }
 
     public static class TestClass {
