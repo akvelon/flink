@@ -654,9 +654,10 @@ object ScalarOperatorGens {
           case _ => throw new CodeGenException(s"Unsupported boolean comparison '$operator'.")
         }
       }
-      // both sides are binary type
+      // both sides are binary type or UUID (both are backed by a byte[] and order by the same
+      // unsigned byte-wise comparison)
       else if (
-        isBinaryString(left.resultType) &&
+        (isBinaryString(left.resultType) || isUuid(left.resultType)) &&
         isInteroperable(left.resultType, right.resultType)
       ) {
         val utilName = classOf[SqlFunctionUtils].getCanonicalName
@@ -2097,6 +2098,8 @@ object ScalarOperatorGens {
         ctx.addReusableLocalVariable(ty, variablePrefix)
       override def declareTypeSerializer(ty: LogicalType): String =
         ctx.addReusableTypeSerializer(ty)
+      override def declareReusableObject(obj: AnyRef, fieldPrefix: String): String =
+        ctx.addReusableObject(obj, fieldPrefix)
       override def declareClassField(ty: String, field: String, init: String): String = {
         ctx.addReusableMember(s"private $ty $field = $init;")
         field

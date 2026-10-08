@@ -41,6 +41,7 @@ under the License.
 		<suppress files="NFAITCase.java" checks="FileLength"/>
 		<suppress files="HyperLogLogPlusPlus.java" checks="FileLength"/>
 		<suppress files="BuiltInFunctionDefinitions.java" checks="FileLength"/>
+		<suppress files="ProcessTableFunctionTestHarnessTest.java" checks="FileLength"/>
 
 		<!-- Legacy mockito usages -->
 		<!-- Updated this suppress files section due to FLINK-36063, which migrated many classes from flink-streaming-java to flink-runtime. This allows runtime access to stream graph. -->
@@ -57,7 +58,7 @@ under the License.
 
 	    <!-- Have to use guava directly -->
 	    <suppress
-			files="OverConvertRule.java|InConverter.java|SymbolUtil.java|RexNodeJsonDeserializer.java|RexNodeJsonSerializer.java|RexNodeJsonSerdeTest.java|FlinkAggregateProjectMergeRule.java|BatchPhysicalConstantTableFunctionScanRule.java|StreamPhysicalConstantTableFunctionScanRule.java|AggregateReduceGroupingRule.java|SplitAggregateRule.java"
+			files="OverConvertRule.java|InConverter.java|SymbolUtil.java|RexNodeJsonDeserializer.java|RexNodeJsonSerializer.java|RexNodeJsonSerdeTest.java|FlinkAggregateProjectMergeRule.java|BatchPhysicalConstantTableFunctionScanRule.java|StreamPhysicalConstantTableFunctionScanRule.java|AggregateReduceGroupingRule.java|SplitAggregateRule.java|CorrelVariableNormalizerShuttle.java"
 			checks="IllegalImport"/>
 		<!-- Classes copied from AWS -->
 		<suppress

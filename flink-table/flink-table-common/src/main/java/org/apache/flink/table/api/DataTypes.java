@@ -44,6 +44,7 @@ import org.apache.flink.table.types.logical.DecimalType;
 import org.apache.flink.table.types.logical.DescriptorType;
 import org.apache.flink.table.types.logical.DoubleType;
 import org.apache.flink.table.types.logical.FloatType;
+import org.apache.flink.table.types.logical.GeographyType;
 import org.apache.flink.table.types.logical.IntType;
 import org.apache.flink.table.types.logical.LocalZonedTimestampType;
 import org.apache.flink.table.types.logical.LogicalType;
@@ -59,6 +60,7 @@ import org.apache.flink.table.types.logical.StructuredType.StructuredAttribute;
 import org.apache.flink.table.types.logical.TimeType;
 import org.apache.flink.table.types.logical.TimestampType;
 import org.apache.flink.table.types.logical.TinyIntType;
+import org.apache.flink.table.types.logical.UuidType;
 import org.apache.flink.table.types.logical.VarBinaryType;
 import org.apache.flink.table.types.logical.VarCharType;
 import org.apache.flink.table.types.logical.VariantType;
@@ -1073,6 +1075,26 @@ public final class DataTypes {
      */
     public static DataType BITMAP() {
         return new AtomicDataType(new BitmapType());
+    }
+
+    /**
+     * Data type of a universally unique identifier (UUID).
+     *
+     * <p>The type represents a 128-bit value stored as a fixed 16-byte big-endian sequence.
+     *
+     * @see UuidType
+     */
+    public static DataType UUID() {
+        return new AtomicDataType(new UuidType());
+    }
+
+    /**
+     * Data type of geography data.
+     *
+     * @see GeographyType
+     */
+    public static DataType GEOGRAPHY() {
+        return new AtomicDataType(new GeographyType());
     }
 
     // --------------------------------------------------------------------------------------------

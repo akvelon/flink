@@ -57,7 +57,7 @@ public class AlterMaterializedTableChangeOperation extends AlterMaterializedTabl
         implements ModifyOperation {
 
     private final Function<ResolvedCatalogMaterializedTable, List<TableChange>> tableChangeForTable;
-    private final QueryOperation sinkModifyQuery;
+    private final QueryOperation asQueryOperation;
     private ResolvedCatalogMaterializedTable oldTable;
     private MaterializedTableChangeHandler handler;
     private CatalogMaterializedTable newTable;
@@ -75,15 +75,15 @@ public class AlterMaterializedTableChangeOperation extends AlterMaterializedTabl
             ObjectIdentifier tableIdentifier,
             Function<ResolvedCatalogMaterializedTable, List<TableChange>> tableChangeForTable,
             ResolvedCatalogMaterializedTable oldTable,
-            QueryOperation sinkModifyQuery) {
+            QueryOperation asQueryOperation) {
         super(tableIdentifier);
         this.tableChangeForTable = tableChangeForTable;
         this.oldTable = oldTable;
-        this.sinkModifyQuery = sinkModifyQuery;
+        this.asQueryOperation = asQueryOperation;
     }
 
-    public QueryOperation getSinkModifyQuery() {
-        return sinkModifyQuery;
+    public QueryOperation getAsQueryOperation() {
+        return asQueryOperation;
     }
 
     public List<TableChange> getTableChanges() {
@@ -95,7 +95,7 @@ public class AlterMaterializedTableChangeOperation extends AlterMaterializedTabl
 
     public AlterMaterializedTableChangeOperation copyAsTableChangeOperation() {
         return new AlterMaterializedTableChangeOperation(
-                tableIdentifier, tableChangeForTable, oldTable, sinkModifyQuery);
+                tableIdentifier, tableChangeForTable, oldTable, asQueryOperation);
     }
 
     public CatalogMaterializedTable getNewTable() {
@@ -120,8 +120,11 @@ public class AlterMaterializedTableChangeOperation extends AlterMaterializedTabl
     @VisibleForTesting
     public void validateChanges() {
         final List<TableChange> changes = getTableChanges();
+        // CoA and ALTER ... AS carry the defining query, so the append-only column rules apply even
+        // when the query text is unchanged; metadata-only DDL alters carry no query.
         final boolean isQueryChange =
-                changes.stream().anyMatch(ModifyDefinitionQuery.class::isInstance);
+                asQueryOperation != null
+                        || changes.stream().anyMatch(ModifyDefinitionQuery.class::isInstance);
         final List<Column> oldColumns = oldTable.getResolvedSchema().getColumns();
         final Map<String, Integer> columnIndex =
                 IntStream.range(0, oldColumns.size())
@@ -165,7 +168,7 @@ public class AlterMaterializedTableChangeOperation extends AlterMaterializedTabl
 
     @Override
     public QueryOperation getChild() {
-        return this.sinkModifyQuery;
+        return this.asQueryOperation;
     }
 
     @Override
