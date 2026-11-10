@@ -19,21 +19,30 @@
 package org.apache.flink.table.planner.plan.stream.sql;
 
 import org.apache.flink.table.annotation.ArgumentHint;
+import org.apache.flink.table.annotation.StateHint;
+import org.apache.flink.table.annotation.StateKind;
 import org.apache.flink.table.api.DataTypes;
 import org.apache.flink.table.api.ExplainDetail;
 import org.apache.flink.table.api.Table;
 import org.apache.flink.table.api.TableConfig;
 import org.apache.flink.table.api.TableEnvironment;
+import org.apache.flink.table.api.dataview.MapView;
 import org.apache.flink.table.catalog.DataTypeFactory;
 import org.apache.flink.table.functions.ProcessTableFunction;
 import org.apache.flink.table.functions.TableFunction;
 import org.apache.flink.table.functions.UserDefinedFunction;
 import org.apache.flink.table.planner.plan.nodes.exec.stream.ProcessTableFunctionTestUtils.AppendProcessTableFunctionBase;
+import org.apache.flink.table.planner.plan.nodes.exec.stream.ProcessTableFunctionTestUtils.BroadcastFilterFunction;
+import org.apache.flink.table.planner.plan.nodes.exec.stream.ProcessTableFunctionTestUtils.BroadcastLookupFunction;
+import org.apache.flink.table.planner.plan.nodes.exec.stream.ProcessTableFunctionTestUtils.BroadcastTimersFunction;
 import org.apache.flink.table.planner.plan.nodes.exec.stream.ProcessTableFunctionTestUtils.DescriptorFunction;
 import org.apache.flink.table.planner.plan.nodes.exec.stream.ProcessTableFunctionTestUtils.EmptyArgFunction;
+import org.apache.flink.table.planner.plan.nodes.exec.stream.ProcessTableFunctionTestUtils.EmptyOutputFunction;
+import org.apache.flink.table.planner.plan.nodes.exec.stream.ProcessTableFunctionTestUtils.EmptyOutputRowSemanticFunction;
 import org.apache.flink.table.planner.plan.nodes.exec.stream.ProcessTableFunctionTestUtils.IntervalDayArgFunction;
 import org.apache.flink.table.planner.plan.nodes.exec.stream.ProcessTableFunctionTestUtils.IntervalYearArgFunction;
 import org.apache.flink.table.planner.plan.nodes.exec.stream.ProcessTableFunctionTestUtils.InvalidUpdatingSemanticsFunction;
+import org.apache.flink.table.planner.plan.nodes.exec.stream.ProcessTableFunctionTestUtils.MultiBroadcastFunction;
 import org.apache.flink.table.planner.plan.nodes.exec.stream.ProcessTableFunctionTestUtils.MultiInputFunction;
 import org.apache.flink.table.planner.plan.nodes.exec.stream.ProcessTableFunctionTestUtils.NoSystemArgsScalarFunction;
 import org.apache.flink.table.planner.plan.nodes.exec.stream.ProcessTableFunctionTestUtils.NoSystemArgsTableFunction;
@@ -70,13 +79,17 @@ import java.util.stream.Stream;
 
 import static java.util.Collections.singletonList;
 import static org.apache.flink.core.testutils.FlinkAssertions.anyCauseMatches;
+import static org.apache.flink.table.annotation.ArgumentTrait.BROADCAST_SEMANTIC_TABLE;
+import static org.apache.flink.table.annotation.ArgumentTrait.NOTIFY_STATEFUL_SETS;
 import static org.apache.flink.table.annotation.ArgumentTrait.OPTIONAL_PARTITION_BY;
 import static org.apache.flink.table.annotation.ArgumentTrait.PASS_COLUMNS_THROUGH;
 import static org.apache.flink.table.annotation.ArgumentTrait.ROW_SEMANTIC_TABLE;
 import static org.apache.flink.table.annotation.ArgumentTrait.SET_SEMANTIC_TABLE;
 import static org.apache.flink.table.annotation.ArgumentTrait.SUPPORT_UPDATES;
 import static org.apache.flink.table.api.Expressions.$;
+import static org.apache.flink.table.api.Expressions.lit;
 import static org.apache.flink.table.api.Expressions.row;
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /** Tests for the type inference and planning part of {@link ProcessTableFunction}. */
@@ -104,6 +117,13 @@ class ProcessTableFunctionTest extends TableTestBase {
         util.tableEnv()
                 .executeSql(
                         "CREATE TABLE t_watermarked (name STRING, score INT, ts TIMESTAMP_LTZ(3), WATERMARK FOR ts AS ts) "
+                                + "WITH ('connector' = 'datagen')");
+        util.tableEnv()
+                .executeSql(
+                        "CREATE VIEW t_rules AS SELECT * FROM (VALUES ('Bob', 1)) AS T(name, weight)");
+        util.tableEnv()
+                .executeSql(
+                        "CREATE TABLE t_watermarked_rules (name STRING, weight INT, ts TIMESTAMP_LTZ(3), WATERMARK FOR ts AS ts) "
                                 + "WITH ('connector' = 'datagen')");
         util.tableEnv()
                 .executeSql("CREATE TABLE t_sink (`out` STRING) WITH ('connector' = 'blackhole')");
@@ -199,6 +219,28 @@ class ProcessTableFunctionTest extends TableTestBase {
     }
 
     @Test
+    void testPartitionOnlyColumnOutput() {
+        util.addTemporarySystemFunction("f", EmptyOutputFunction.class);
+        assertThat(
+                        util.tableEnv()
+                                .sqlQuery("SELECT * FROM f(r => TABLE t PARTITION BY name)")
+                                .getResolvedSchema()
+                                .getColumnNames())
+                .containsExactly("name");
+    }
+
+    @Test
+    void testZeroColumnOutput() {
+        util.addTemporarySystemFunction("f", EmptyOutputRowSemanticFunction.class);
+        assertThat(
+                        util.tableEnv()
+                                .sqlQuery("SELECT * FROM f(r => TABLE t)")
+                                .getResolvedSchema()
+                                .getColumnNames())
+                .isEmpty();
+    }
+
+    @Test
     void testIntervalDayArgs() {
         util.addTemporarySystemFunction("f", IntervalDayArgFunction.class);
         util.verifyRelPlan("SELECT * FROM f(d => INTERVAL '1' SECOND)");
@@ -284,6 +326,63 @@ class ProcessTableFunctionTest extends TableTestBase {
     }
 
     @Test
+    void testOnTimeArgRejectedForDisabledPtf() {
+        util.addTemporarySystemFunction("f", NoSystemArgsTableFunction.class);
+        assertThatThrownBy(
+                        () ->
+                                util.verifyRelPlan(
+                                        "SELECT * FROM f(r => TABLE t_watermarked, i => 1, "
+                                                + "on_time => DESCRIPTOR(ts));"))
+                .satisfies(
+                        anyCauseMatches(
+                                "The 'on_time' argument is not supported because function "
+                                        + "'f' does not use system arguments."));
+    }
+
+    @Test
+    void testUidArgRejectedForDisabledPtf() {
+        util.addTemporarySystemFunction("f", NoSystemArgsScalarFunction.class);
+        assertThatThrownBy(() -> util.verifyRelPlan("SELECT * FROM f(i => 1, uid => 'my-uid');"))
+                .satisfies(
+                        anyCauseMatches(
+                                "The 'uid' argument is not supported because function "
+                                        + "'f' does not use system arguments."));
+    }
+
+    @Test
+    void testSystemArgRejectedByNameBeforeTypeCheck() {
+        // System arguments are rejected by name, rather than a type mismatch.
+        util.addTemporarySystemFunction("f", NoSystemArgsTableFunction.class);
+        assertThatThrownBy(
+                        () ->
+                                util.verifyRelPlan(
+                                        "SELECT * FROM f(r => TABLE t, i => 1, on_time => 1);"))
+                .satisfies(
+                        anyCauseMatches(
+                                "The 'on_time' argument is not supported because function "
+                                        + "'f' does not use system arguments."));
+    }
+
+    @Test
+    void testSystemArgRejectedForDisabledPtfViaTableApi() {
+        // The same enforcement applies to the Table API path, which resolves calls via
+        // ResolveCallByArgumentsRule instead of the SQL validator.
+        util.addTemporarySystemFunction("f", NoSystemArgsTableFunction.class);
+        assertThatThrownBy(
+                        () ->
+                                util.tableEnv()
+                                        .fromCall(
+                                                "f",
+                                                util.tableEnv().from("t").asArgument("r"),
+                                                lit(1).asArgument("i"),
+                                                lit("my-uid").asArgument("uid")))
+                .satisfies(
+                        anyCauseMatches(
+                                "The 'uid' argument is not supported because function "
+                                        + "'f' does not use system arguments."));
+    }
+
+    @Test
     void testUidPipelineSplitIntoTwoFunctions() {
         util.addTemporarySystemFunction("f", SetSemanticTableFunction.class);
         util.verifyExecPlan(
@@ -334,6 +433,48 @@ class ProcessTableFunctionTest extends TableTestBase {
         util.addTemporarySystemFunction("f", UpdatingRetractRowSemanticFunction.class);
         util.verifyRelPlan(
                 "SELECT * FROM f(r => TABLE t)", singletonList(ExplainDetail.CHANGELOG_MODE));
+    }
+
+    @Test
+    void testBroadcastTableWithSetSemanticTable() {
+        util.addTemporarySystemFunction("f", BroadcastLookupFunction.class);
+        util.verifyExecPlan(
+                "SELECT * FROM f(input => TABLE t PARTITION BY name, rules => TABLE t_rules)");
+    }
+
+    @Test
+    void testBroadcastTableWithRowSemanticTable() {
+        util.addTemporarySystemFunction("f", BroadcastFilterFunction.class);
+        util.verifyExecPlan("SELECT * FROM f(input => TABLE t, rule => TABLE t_rules)");
+    }
+
+    @Test
+    void testBroadcastTableWithMultipleTables() {
+        util.addTemporarySystemFunction("f", MultiBroadcastFunction.class);
+        util.verifyExecPlan(
+                "SELECT * FROM f("
+                        + "in1 => TABLE t PARTITION BY name, "
+                        + "rules1 => TABLE t_rules, "
+                        + "in2 => TABLE t PARTITION BY name, "
+                        + "rules2 => TABLE t_rules)");
+    }
+
+    @Test
+    void testBroadcastTableWithOnTime() {
+        util.addTemporarySystemFunction("f", BroadcastTimersFunction.class);
+        util.verifyExecPlan(
+                "SELECT * FROM f("
+                        + "input => TABLE t_watermarked PARTITION BY name, "
+                        + "rule => TABLE t_watermarked_rules, "
+                        + "on_time => DESCRIPTOR(ts))");
+    }
+
+    @Test
+    void testBroadcastTableWithUpdates() {
+        util.addTemporarySystemFunction("f", UpdatingBroadcastFunction.class);
+        util.verifyRelPlan(
+                "SELECT * FROM f(input => TABLE t PARTITION BY name, rule => TABLE t_updating)",
+                singletonList(ExplainDetail.CHANGELOG_MODE));
     }
 
     @ParameterizedTest
@@ -405,7 +546,51 @@ class ProcessTableFunctionTest extends TableTestBase {
                         "multiple table args",
                         InvalidMultiTableWithRowFunction.class,
                         "SELECT * FROM f(r1 => TABLE t, r2 => TABLE t)",
-                        "All table arguments must use set semantics if multiple table arguments are declared."),
+                        "All main table arguments must use set semantics if multiple table arguments are declared."),
+                ErrorSpec.ofSelect(
+                        "only broadcast table args",
+                        InvalidBroadcastOnlyFunction.class,
+                        "SELECT * FROM f(rule => TABLE t)",
+                        "Table arguments with broadcast semantics require at least one table "
+                                + "argument with row or set semantics."),
+                ErrorSpec.ofSelect(
+                        "partition by on broadcast table",
+                        BroadcastLookupFunction.class,
+                        "SELECT * FROM f(input => TABLE t PARTITION BY name, rules => TABLE t_rules PARTITION BY name)",
+                        "PARTITION BY or ORDER BY are not supported for table arguments with broadcast semantics."),
+                ErrorSpec.ofSelect(
+                        "broadcast state without broadcast table",
+                        InvalidBroadcastStateFunction.class,
+                        "SELECT * FROM f(input => TABLE t PARTITION BY name)",
+                        "Broadcast state entry 's' requires at least one table argument with broadcast semantics."),
+                ErrorSpec.ofSelect(
+                        "notify stateful sets without set semantic table",
+                        InvalidNotifyStatefulSetsWithRowFunction.class,
+                        "SELECT * FROM f(input => TABLE t, rule => TABLE t_rules)",
+                        "Table argument 'rule' notifies stateful sets which requires at least one "
+                                + "table argument with set semantics."),
+                ErrorSpec.ofSelect(
+                        "missing on_time for broadcast table",
+                        BroadcastTimersFunction.class,
+                        "SELECT * FROM f(input => TABLE t_watermarked PARTITION BY name, rule => TABLE t_rules, on_time => DESCRIPTOR(ts))",
+                        "Invalid time attribute declaration. If multiple tables are declared, the `on_time` argument "
+                                + "must reference a time column for each table argument or none. "
+                                + "Missing time attributes for: [rule]"),
+                ErrorSpec.ofSelect(
+                        "order by on broadcast table",
+                        BroadcastTimersFunction.class,
+                        "SELECT * FROM f(input => TABLE t_watermarked PARTITION BY name, rule => TABLE t_watermarked_rules ORDER BY ts, on_time => DESCRIPTOR(ts))",
+                        "PARTITION BY or ORDER BY are not supported for table arguments with broadcast semantics."),
+                ErrorSpec.ofSelect(
+                        "pass-through columns next to broadcast table",
+                        InvalidPassThroughBroadcastFunction.class,
+                        "SELECT * FROM f(input => TABLE t, rule => TABLE t_rules)",
+                        "Pass-through columns are not supported if multiple table arguments are declared."),
+                ErrorSpec.ofSelect(
+                        "updates into insert-only broadcast table arg",
+                        BroadcastLookupFunction.class,
+                        "SELECT * FROM f(input => TABLE t PARTITION BY name, rules => TABLE t_updating)",
+                        "StreamPhysicalProcessTableFunction doesn't support consuming update changes"),
                 ErrorSpec.ofSelect(
                         "row instead of table",
                         RowSemanticTableFunction.class,
@@ -544,14 +729,16 @@ class ProcessTableFunctionTest extends TableTestBase {
                         UpdatingUpsertFunction.class,
                         "SELECT name, SUM(`count`) OVER (PARTITION BY name ORDER BY name) "
                                 + "FROM f(r => TABLE t_updating PARTITION BY name)",
-                        "Can't generate a valid execution plan for the given query:\n"),
+                        "Can't generate a valid execution plan for the given query because of a "
+                                + "changelog mismatch"),
                 ErrorSpec.ofSelect(
                         // t_upsert produces an upsert changelog.
                         // the table argument for f requires a retract changelog
                         "retract requirement on an upsert table arg",
                         SetSemanticTableRetractArgFunction.class,
                         "SELECT * FROM f(r => TABLE t_upsert PARTITION BY name)",
-                        "Can't generate a valid execution plan for the given query:\n"),
+                        "Can't generate a valid execution plan for the given query because of a "
+                                + "changelog mismatch"),
                 ErrorSpec.ofInsertInto(
                         "upsert conflict buried below a calc",
                         UpdatingUpsertFunction.class,
@@ -636,6 +823,46 @@ class ProcessTableFunctionTest extends TableTestBase {
     }
 
     /** Testing function. */
+    public static class InvalidBroadcastOnlyFunction extends ProcessTableFunction<String> {
+        @SuppressWarnings("unused")
+        public void eval(@ArgumentHint(BROADCAST_SEMANTIC_TABLE) Row rule) {}
+    }
+
+    /** Testing function. */
+    public static class InvalidPassThroughBroadcastFunction extends ProcessTableFunction<String> {
+        @SuppressWarnings("unused")
+        public void eval(
+                @ArgumentHint({ROW_SEMANTIC_TABLE, PASS_COLUMNS_THROUGH}) Row input,
+                @ArgumentHint(BROADCAST_SEMANTIC_TABLE) Row rule) {}
+    }
+
+    /** Testing function. */
+    public static class InvalidBroadcastStateFunction extends ProcessTableFunction<String> {
+        @SuppressWarnings("unused")
+        public void eval(
+                @StateHint(StateKind.BROADCAST) MapView<String, Integer> s,
+                @ArgumentHint(SET_SEMANTIC_TABLE) Row input) {}
+    }
+
+    /** Testing function. */
+    public static class InvalidNotifyStatefulSetsWithRowFunction
+            extends ProcessTableFunction<String> {
+        @SuppressWarnings("unused")
+        public void eval(
+                @StateHint MapView<String, Integer> s,
+                @ArgumentHint(ROW_SEMANTIC_TABLE) Row input,
+                @ArgumentHint({BROADCAST_SEMANTIC_TABLE, NOTIFY_STATEFUL_SETS}) Row rule) {}
+    }
+
+    /** Testing function. */
+    public static class UpdatingBroadcastFunction extends ProcessTableFunction<String> {
+        @SuppressWarnings("unused")
+        public void eval(
+                @StateHint(StateKind.BROADCAST) MapView<String, Long> s,
+                @ArgumentHint(SET_SEMANTIC_TABLE) Row input,
+                @ArgumentHint({BROADCAST_SEMANTIC_TABLE, SUPPORT_UPDATES}) Row rule) {}
+    }
+
     public static class InvalidMultiTableWithRowFunction extends ProcessTableFunction<String> {
         @SuppressWarnings("unused")
         public void eval(

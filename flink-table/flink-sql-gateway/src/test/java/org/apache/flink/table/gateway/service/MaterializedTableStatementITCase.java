@@ -33,6 +33,7 @@ import org.apache.flink.runtime.rest.messages.checkpoints.CheckpointingStatistic
 import org.apache.flink.runtime.rest.messages.checkpoints.CheckpointingStatisticsHeaders;
 import org.apache.flink.runtime.rest.util.RestMapperUtils;
 import org.apache.flink.table.api.DataTypes;
+import org.apache.flink.table.api.TableException;
 import org.apache.flink.table.api.ValidationException;
 import org.apache.flink.table.catalog.CatalogMaterializedTable.LogicalRefreshMode;
 import org.apache.flink.table.catalog.CatalogMaterializedTable.RefreshMode;
@@ -61,6 +62,8 @@ import org.apache.flink.types.Row;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.quartz.JobDetail;
 import org.quartz.JobKey;
 import org.quartz.Trigger;
@@ -167,6 +170,31 @@ class MaterializedTableStatementITCase extends AbstractMaterializedTableStatemen
         long checkpointInterval =
                 getCheckpointIntervalConfig(restClusterClient, activeRefreshHandler.getJobId());
         assertThat(checkpointInterval).isEqualTo(30 * 1000);
+    }
+
+    @Test
+    void testConfigureSessionCreatesMaterializedTableWithoutRefreshJob() throws Exception {
+        String materializedTableDDL =
+                "CREATE MATERIALIZED TABLE users_shops"
+                        + " WITH('format' = 'debezium-json')\n"
+                        + " FRESHNESS = INTERVAL '30' SECOND\n"
+                        + " REFRESH_MODE = CONTINUOUS\n"
+                        + " AS SELECT user_id, shop_id, payment_amount_cents FROM datagenSource";
+        service.configureSession(sessionHandle, materializedTableDDL, -1);
+
+        ObjectIdentifier userShopsIdentifier = getObjectIdentifier("users_shops");
+        String refreshJobName =
+                String.format(
+                        "Materialized_table_%s_continuous_refresh_job",
+                        userShopsIdentifier.asSerializableString());
+        ResolvedCatalogMaterializedTable actualMaterializedTable = getTable(userShopsIdentifier);
+        service.configureSession(sessionHandle, "DROP MATERIALIZED TABLE users_shops", -1);
+
+        assertThat(actualMaterializedTable.getRefreshMode()).isSameAs(RefreshMode.CONTINUOUS);
+        assertThat(actualMaterializedTable.getRefreshStatus()).isSameAs(RefreshStatus.INITIALIZING);
+        assertThat(actualMaterializedTable.getSerializedRefreshHandler()).isNullOrEmpty();
+        assertThat(restClusterClient.listJobs().get(10, TimeUnit.SECONDS))
+                .noneMatch(job -> job.getJobName().equals(refreshJobName));
     }
 
     @Test
@@ -817,7 +845,7 @@ class MaterializedTableStatementITCase extends AbstractMaterializedTableStatemen
                                         sessionHandle,
                                         repeatedAlterMaterializedTableSuspendHandle))
                 .rootCause()
-                .isInstanceOf(SqlExecutionException.class)
+                .isInstanceOf(TableException.class)
                 .hasMessageContaining(
                         String.format(
                                 "Materialized table %s continuous refresh job has been suspended",
@@ -839,7 +867,7 @@ class MaterializedTableStatementITCase extends AbstractMaterializedTableStatemen
                                         sessionHandle,
                                         repeatedAlterMaterializedTableResumeHandle))
                 .rootCause()
-                .isInstanceOf(SqlExecutionException.class)
+                .isInstanceOf(TableException.class)
                 .hasMessageContaining(
                         String.format(
                                 "Materialized table %s continuous refresh job has been resumed",
@@ -948,7 +976,7 @@ class MaterializedTableStatementITCase extends AbstractMaterializedTableStatemen
                                         sessionHandle,
                                         repeatedAlterMaterializedTableSuspendHandle))
                 .rootCause()
-                .isInstanceOf(SqlExecutionException.class)
+                .isInstanceOf(TableException.class)
                 .hasMessageContaining(
                         String.format(
                                 "Materialized table %s refresh workflow has been suspended.",
@@ -971,7 +999,7 @@ class MaterializedTableStatementITCase extends AbstractMaterializedTableStatemen
                                         sessionHandle,
                                         repeatedAlterMaterializedTableResumeHandle))
                 .rootCause()
-                .isInstanceOf(SqlExecutionException.class)
+                .isInstanceOf(TableException.class)
                 .hasMessageContaining(
                         String.format(
                                 "Materialized table %s refresh workflow has been resumed.",
@@ -1082,19 +1110,27 @@ class MaterializedTableStatementITCase extends AbstractMaterializedTableStatemen
                 .containsExactly("shop_id", "user_id", "oca", "order_id");
     }
 
-    @Test
-    void testCreateOrAlterMaterializedTableColumnListIgnoredOnAlterPath() throws Exception {
-        createAndVerifyCreateMaterializedTableWithData(
-                "users_shops", List.of(), Map.of(), RefreshMode.FULL);
+    // Swaps the first two projections so existing columns are reordered rather than appended.
+    private static final String REORDERED_QUERY =
+            " AS SELECT \n"
+                    + "  shop_id,\n"
+                    + "  user_id,\n"
+                    + "  ds,\n"
+                    + "  COUNT(order_id) AS order_cnt\n"
+                    + " FROM (\n"
+                    + "    SELECT user_id, shop_id, order_created_at AS ds, order_id FROM my_source"
+                    + " ) AS tmp\n"
+                    + " GROUP BY (user_id, shop_id, ds)";
 
-        ObjectIdentifier userShopsIdentifier = getObjectIdentifier("users_shops");
-        ResolvedSchema oldSchema = getTable(userShopsIdentifier).getResolvedSchema();
-        assertThat(oldSchema.getColumnNames())
-                .containsExactly("user_id", "shop_id", "ds", "order_cnt");
-
-        // users_shops already exists as a materialized table, so CREATE OR ALTER takes the alter
-        // path. The DDL column list is treated as names only: it does NOT reorder the schema.
-        String materializedTableDDL =
+    /**
+     * Reordering existing columns of a materialized table is rejected on every query-carrying alter
+     * path, and the rejected statement leaves the stored schema untouched.
+     */
+    @ParameterizedTest(name = "[{index}]")
+    @ValueSource(
+            strings = {
+                // A bare column list orders columns on CREATE, so CREATE OR ALTER honors it on the
+                // alter path: listing the existing columns in a different order is a reorder.
                 "CREATE OR ALTER MATERIALIZED TABLE users_shops (shop_id, user_id, ds, order_cnt)"
                         + " PARTITIONED BY (ds)\n"
                         + " WITH(\n"
@@ -1108,47 +1144,28 @@ class MaterializedTableStatementITCase extends AbstractMaterializedTableStatemen
                         + " FROM (\n"
                         + "    SELECT user_id, shop_id, order_created_at AS ds, order_id FROM my_source"
                         + " ) AS tmp\n"
-                        + " GROUP BY (user_id, shop_id, ds)";
-        OperationHandle handle = executeStatement(materializedTableDDL);
-        awaitOperationTermination(service, sessionHandle, handle);
-
-        ResolvedSchema newSchema = getTable(userShopsIdentifier).getResolvedSchema();
-        assertThat(newSchema.getColumnNames())
-                .containsExactly("user_id", "shop_id", "ds", "order_cnt");
-        assertThat(newSchema).isEqualTo(oldSchema);
-    }
-
-    @Test
-    void testAlterMaterializedTableAsQueryRejectsReorder() throws Exception {
+                        + " GROUP BY (user_id, shop_id, ds)",
+                // ALTER ... AS reorders existing columns through the query projection.
+                "ALTER MATERIALIZED TABLE users_shops" + REORDERED_QUERY,
+                // CREATE OR ALTER ... AS reorders existing columns through the query projection.
+                "CREATE OR ALTER MATERIALIZED TABLE users_shops" + REORDERED_QUERY
+            })
+    void rejectsReorderingExistingColumns(String statement) throws Exception {
         createAndVerifyCreateMaterializedTableWithData(
                 "users_shops", List.of(), Map.of(), RefreshMode.FULL);
 
         ObjectIdentifier userShopsIdentifier = getObjectIdentifier("users_shops");
-        assertThat(getTable(userShopsIdentifier).getResolvedSchema().getColumnNames())
+        ResolvedSchema oldSchema = getTable(userShopsIdentifier).getResolvedSchema();
+        assertThat(oldSchema.getColumnNames())
                 .containsExactly("user_id", "shop_id", "ds", "order_cnt");
 
-        // ALTER ... AS re-derives the schema from the new query. Swapping the first two
-        // projections asks to reorder existing columns. The query-evolution rules reject this: an
-        // existing materialized table may only append columns at the end, not reorder them.
-        String alterMaterializedTableAsQueryDDL =
-                "ALTER MATERIALIZED TABLE users_shops"
-                        + " AS SELECT \n"
-                        + "  shop_id,\n"
-                        + "  user_id,\n"
-                        + "  ds,\n"
-                        + "  COUNT(order_id) AS order_cnt\n"
-                        + " FROM (\n"
-                        + "    SELECT user_id, shop_id, order_created_at AS ds, order_id FROM my_source"
-                        + " ) AS tmp\n"
-                        + " GROUP BY (user_id, shop_id, ds)";
-        OperationHandle handle = executeStatement(alterMaterializedTableAsQueryDDL);
+        OperationHandle handle = executeStatement(statement);
 
         assertThatThrownBy(() -> awaitOperationTermination(service, sessionHandle, handle))
                 .hasStackTraceContaining("reordering columns are not supported");
 
-        // The rejected alter leaves the original schema untouched.
-        assertThat(getTable(userShopsIdentifier).getResolvedSchema().getColumnNames())
-                .containsExactly("user_id", "shop_id", "ds", "order_cnt");
+        // The rejected statement leaves the original schema untouched.
+        assertThat(getTable(userShopsIdentifier).getResolvedSchema()).isEqualTo(oldSchema);
     }
 
     @Test
@@ -1879,7 +1896,7 @@ class MaterializedTableStatementITCase extends AbstractMaterializedTableStatemen
                                 awaitOperationTermination(
                                         service, sessionHandle, invalidRefreshTableHandle2))
                 .rootCause()
-                .isInstanceOf(SqlExecutionException.class)
+                .isInstanceOf(TableException.class)
                 .hasMessage(
                         String.format(
                                 "Failed to parse a valid partition value for the field 'ds' in materialized table %s using the scheduler time '20240103 00:00:00.000' based on the date format 'yyyy-MM-dd HH:mm:ss'.",

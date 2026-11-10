@@ -20,7 +20,6 @@ package org.apache.flink.table.planner.codegen.calls
 import org.apache.flink.table.api.{TableRuntimeException, ValidationException}
 import org.apache.flink.table.api.config.ExecutionConfigOptions
 import org.apache.flink.table.data.binary.BinaryArrayData
-import org.apache.flink.table.data.util.MapDataUtil
 import org.apache.flink.table.data.utils.CastExecutor
 import org.apache.flink.table.data.writer.{BinaryArrayWriter, BinaryRowWriter}
 import org.apache.flink.table.planner.codegen.{CodeGeneratorContext, CodeGenException, EqualiserCodeGenerator, GeneratedExpression}
@@ -41,8 +40,8 @@ import org.apache.flink.table.types.logical.utils.LogicalTypeChecks
 import org.apache.flink.table.types.logical.utils.LogicalTypeChecks.{getFieldTypes, getPrecision, getScale}
 import org.apache.flink.table.types.logical.utils.LogicalTypeMerging.findCommonType
 import org.apache.flink.table.utils.DateTimeUtils.MILLIS_PER_DAY
-import org.apache.flink.table.utils.EncodingUtils
 import org.apache.flink.types.ColumnList
+import org.apache.flink.types.variant.{BinaryVariant, VariantFieldGetter}
 import org.apache.flink.util.Preconditions.checkArgument
 
 import java.time.ZoneId
@@ -654,9 +653,10 @@ object ScalarOperatorGens {
           case _ => throw new CodeGenException(s"Unsupported boolean comparison '$operator'.")
         }
       }
-      // both sides are binary type
+      // both sides are binary type or UUID (both are backed by a byte[] and order by the same
+      // unsigned byte-wise comparison)
       else if (
-        isBinaryString(left.resultType) &&
+        (isBinaryString(left.resultType) || isUuid(left.resultType)) &&
         isInteroperable(left.resultType, right.resultType)
       ) {
         val utilName = classOf[SqlFunctionUtils].getCanonicalName
@@ -1078,47 +1078,67 @@ object ScalarOperatorGens {
   def generateIfElse(
       ctx: CodeGeneratorContext,
       operands: Seq[GeneratedExpression],
-      resultType: LogicalType,
-      i: Int = 0): GeneratedExpression = {
-    // else part
-    if (i == operands.size - 1) {
-      generateCast(ctx, operands(i), resultType, nullOnFailure = true)
-    } else {
-      // check that the condition is boolean
-      // we do not check for null instead we use the default value
-      // thus null is false
-      requireBoolean(operands(i))
-      val condition = operands(i)
-      val trueAction = generateCast(ctx, operands(i + 1), resultType, nullOnFailure = true)
-      val falseAction = generateIfElse(ctx, operands, resultType, i + 2)
-
-      val Seq(resultTerm, nullTerm) = newNames(ctx, "result", "isNull")
-      val resultTypeTerm = primitiveTypeTermForType(resultType)
-      val defaultValue = primitiveDefaultValue(resultType)
-
-      val operatorCode =
-        s"""
-           |${condition.code}
-           |$resultTypeTerm $resultTerm = $defaultValue;
-           |boolean $nullTerm;
-           |if (${condition.resultTerm}) {
-           |  ${trueAction.code}
-           |  $nullTerm = ${trueAction.nullTerm};
-           |  if (!$nullTerm) {
-           |    $resultTerm = ${trueAction.resultTerm};
-           |  }
-           |}
-           |else {
-           |  ${falseAction.code}
-           |  $nullTerm = ${falseAction.nullTerm};
-           |  if (!$nullTerm) {
-           |    $resultTerm = ${falseAction.resultTerm};
-           |  }
-           |}
-           |""".stripMargin.trim
-
-      GeneratedExpression(resultTerm, nullTerm, operatorCode, resultType)
+      resultType: LogicalType): GeneratedExpression = {
+    require(operands.size % 2 == 1, "CASE expects WHEN/THEN pairs and an ELSE operand.")
+    if (operands.size == 1) {
+      return generateCast(ctx, operands.head, resultType, nullOnFailure = true)
     }
+    val Seq(resultTerm, nullTerm) = newNames(ctx, "result", "isNull")
+    val resultTypeTerm = primitiveTypeTermForType(resultType)
+    val defaultValue = primitiveDefaultValue(resultType)
+
+    def assign(action: GeneratedExpression): String =
+      s"""
+         |${action.code}
+         |$nullTerm = ${action.nullTerm};
+         |if (!$nullTerm) {
+         |  $resultTerm = ${action.resultTerm};
+         |}
+         |""".stripMargin
+
+    // a null condition is false via its default value
+    val whens = (0 until operands.size - 1 by 2).map {
+      j =>
+        requireBoolean(operands(j))
+        (operands(j), generateCast(ctx, operands(j + 1), resultType, nullOnFailure = true))
+    }
+    val elseAction = generateCast(ctx, operands.last, resultType, nullOnFailure = true)
+
+    // flat guarded blocks instead of nested else keep the splitter output flat
+    val doneTerm = newName(ctx, "done")
+    // A fixed size keeps a CASE with up to 10 WHENs in one chunk, without any chunk guard. Sizing
+    // chunks dynamically would need the code size of the branches, which is unknown here for now.
+    val chunkSize = 10
+    // blocks after the first are skipped once a WHEN matched
+    def guardAllButFirst(blocks: Seq[String]): String =
+      (blocks.head +: blocks.tail.map(b => s"if (!$doneTerm) {\n$b\n}")).mkString("\n")
+    val chunks = whens
+      .grouped(chunkSize)
+      .map {
+        chunk =>
+          guardAllButFirst(chunk.map {
+            case (condition, trueAction) =>
+              s"""
+                 |${condition.code}
+                 |if (${condition.resultTerm}) {
+                 |  ${assign(trueAction)}
+                 |  $doneTerm = true;
+                 |}
+                 |""".stripMargin
+          })
+      }
+      .toSeq
+    val code =
+      s"""
+         |$resultTypeTerm $resultTerm = $defaultValue;
+         |boolean $nullTerm = true;
+         |boolean $doneTerm = false;
+         |${guardAllButFirst(chunks)}
+         |if (!$doneTerm) {
+         |  ${assign(elseAction)}
+         |}
+         |""".stripMargin.trim
+    GeneratedExpression(resultTerm, nullTerm, code, resultType)
   }
 
   def generateDot(
@@ -1421,6 +1441,15 @@ object ScalarOperatorGens {
     GeneratedExpression(arrayTerm, GeneratedExpression.NEVER_NULL, code, arrayType)
   }
 
+  // A literal index below 1 can never address an element. A computed one returns NULL instead.
+  private def validateLiteralArrayIndex(index: GeneratedExpression): Unit =
+    index.literalValue match {
+      case Some(v: Number) if v.longValue() < 1 =>
+        throw new ValidationException(
+          s"Array element access needs an index starting at 1 but was $v.")
+      case _ => // nothing
+    }
+
   /**
    * Return null when array index out of bounds which follows Calcite's behaviour.
    * @see
@@ -1435,12 +1464,7 @@ object ScalarOperatorGens {
     val resultTypeTerm = primitiveTypeTermForType(componentInfo)
     val defaultTerm = primitiveDefaultValue(componentInfo)
 
-    index.literalValue match {
-      case Some(v: Int) if v < 1 =>
-        throw new ValidationException(
-          s"Array element access needs an index starting at 1 but was $v.")
-      case _ => // nothing
-    }
+    validateLiteralArrayIndex(index)
     val idxStr = s"${index.resultTerm} - 1"
     val arrayIsNull = s"${array.resultTerm}.isNullAt($idxStr)"
     val arrayGet =
@@ -1738,20 +1762,38 @@ object ScalarOperatorGens {
     val keyType = key.resultType
 
     val accessCode = if (isIntegerNumeric(keyType)) {
+      validateLiteralArrayIndex(key)
+      val elementAccess = if (keyType.is(BIGINT)) {
+        // Narrowing a BIGINT key to int before the range check would wrap an out-of-range key
+        // onto an existing element. A smaller key cannot wrap onto a valid index.
+        s"$keyTerm >= 1L && $keyTerm - 1L <= Integer.MAX_VALUE " +
+          s"? $variantTerm.getElement((int) ($keyTerm - 1L)) : null"
+      } else {
+        s"$variantTerm.getElement((int) $keyTerm - 1)"
+      }
       generateIntegerKeyAccess(
         variantTerm,
         variantTypeTerm,
-        keyTerm,
+        elementAccess,
         resultTerm,
         nullTerm,
         tmpValue
       )
     } else if (isCharacterString(keyType)) {
-      val fieldName = key.literalValue.get.toString
+      val fieldAccess = key.literalValue match {
+        case Some(fieldName) if fieldName != null =>
+          val getterTerm =
+            ctx.addReusableObject(new VariantFieldGetter(fieldName.toString), "variantFieldGetter")
+          s"$getterTerm.getField($variantTerm)"
+        // A key that is not a literal, or a NULL literal, whose access code never runs. The
+        // lookup compares the UTF-8 bytes of the StringData key without decoding them.
+        case _ =>
+          s"((${className[BinaryVariant]}) $variantTerm).getFieldByUtf8Key($keyTerm.toBytes())"
+      }
       generateCharacterStringKeyAccess(
         variantTerm,
         variantTypeTerm,
-        fieldName,
+        fieldAccess,
         resultTerm,
         nullTerm,
         tmpValue
@@ -1777,14 +1819,13 @@ object ScalarOperatorGens {
   private def generateCharacterStringKeyAccess(
       variantTerm: String,
       variantTypeTerm: String,
-      fieldName: String,
+      fieldAccess: String,
       resultTerm: String,
       nullTerm: String,
       tmpValue: String): String = {
-    val escapedFieldName = EncodingUtils.escapeJava(fieldName)
     s"""
        |  if ($variantTerm.isObject()){
-       |    $variantTypeTerm $tmpValue = $variantTerm.getField("$escapedFieldName");
+       |    $variantTypeTerm $tmpValue = $fieldAccess;
        |    if ($tmpValue == null) {
        |      $nullTerm = true;
        |    } else {
@@ -1799,13 +1840,13 @@ object ScalarOperatorGens {
   private def generateIntegerKeyAccess(
       variantTerm: String,
       variantTypeTerm: String,
-      keyTerm: String,
+      elementAccess: String,
       resultTerm: String,
       nullTerm: String,
       tmpValue: String): String = {
     s"""
        |  if ($variantTerm.isArray()){
-       |    $variantTypeTerm $tmpValue = $variantTerm.getElement((int) $keyTerm - 1);
+       |    $variantTypeTerm $tmpValue = $elementAccess;
        |    if ($tmpValue == null) {
        |      $nullTerm = true;
        |    } else {
@@ -1947,64 +1988,118 @@ object ScalarOperatorGens {
         val rightTerm = args(1)
 
         val resultTerm = newName(ctx, "compareResult")
+        val sizeTerm = newName(ctx, "size")
 
-        val mapCls = className[java.util.Map[_, _]]
-        val keyCls = boxedTypeTermForType(keyType)
-        val valueCls = boxedTypeTermForType(valueType)
+        val leftKeysTerm = newName(ctx, "leftKeys")
+        val leftValuesTerm = newName(ctx, "leftValues")
+        val rightKeysTerm = newName(ctx, "rightKeys")
+        val rightValuesTerm = newName(ctx, "rightValues")
+        val rightMatchedTerm = newName(ctx, "rightMatched")
 
-        val leftMapTerm = newName(ctx, "leftMap")
-        val leftKeyTerm = newName(ctx, "leftKey")
-        val leftValueTerm = newName(ctx, "leftValue")
-        val leftValueNullTerm = newName(ctx, "leftValueIsNull")
-        val leftValueExpr =
-          GeneratedExpression(leftValueTerm, leftValueNullTerm, "", valueType)
+        val leftIndexTerm = newName(ctx, "leftIndex")
+        val rightIndexTerm = newName(ctx, "rightIndex")
+        val unmatchedIndexTerm = newName(ctx, "unmatchedIndex")
+        val laterIndexTerm = newName(ctx, "laterIndex")
 
-        val rightMapTerm = newName(ctx, "rightMap")
-        val rightValueTerm = newName(ctx, "rightValue")
-        val rightValueNullTerm = newName(ctx, "rightValueIsNull")
-        val rightValueExpr =
-          GeneratedExpression(rightValueTerm, rightValueNullTerm, "", valueType)
+        // Reads an element into a typed local. A boxed element would make generateEquals compare
+        // references.
+        def readElement(
+            arrayTerm: String,
+            indexTerm: String,
+            elementType: LogicalType,
+            name: String): (String, GeneratedExpression) = {
+          val elementTerm = newName(ctx, name)
+          val elementNullTerm = newName(ctx, s"${name}IsNull")
+          val code =
+            s"""
+               |${primitiveTypeTermForType(elementType)} $elementTerm =
+               |  ${primitiveDefaultValue(elementType)};
+               |boolean $elementNullTerm = $arrayTerm.isNullAt($indexTerm);
+               |if (!$elementNullTerm) {
+               |  $elementTerm = ${rowFieldReadAccess(indexTerm, arrayTerm, elementType)};
+               |}
+               |""".stripMargin
+          (code, GeneratedExpression(elementTerm, elementNullTerm, "", elementType))
+        }
 
-        val entryTerm = newName(ctx, "entry")
-        val entryCls = classOf[java.util.Map.Entry[AnyRef, AnyRef]].getCanonicalName
+        // Two keys match when they are equal or both NULL.
+        def generateKeysMatch(
+            key: GeneratedExpression,
+            otherKey: GeneratedExpression): (String, String) = {
+          val keysEqual = generateEquals(ctx, key, otherKey, new BooleanType(keyType.isNullable))
+          (keysEqual.code, s"${keysEqual.resultTerm} || (${key.nullTerm} && ${otherKey.nullTerm})")
+        }
+
+        val (leftKeyCode, leftKey) = readElement(leftKeysTerm, leftIndexTerm, keyType, "leftKey")
+        val (rightKeyCode, rightKey) =
+          readElement(rightKeysTerm, rightIndexTerm, keyType, "rightKey")
+        val (keysMatchCode, keysMatch) = generateKeysMatch(leftKey, rightKey)
+
+        val (leftValueCode, leftValue) =
+          readElement(leftValuesTerm, leftIndexTerm, valueType, "leftValue")
+        val (rightValueCode, rightValue) =
+          readElement(rightValuesTerm, rightIndexTerm, valueType, "rightValue")
         val valueEqualsExpr =
-          generateEquals(ctx, leftValueExpr, rightValueExpr, new BooleanType(valueType.isNullable))
+          generateEquals(ctx, leftValue, rightValue, new BooleanType(valueType.isNullable))
 
-        val internalTypeCls = classOf[LogicalType].getCanonicalName
-        val keyTypeTerm = ctx.addReusableObject(keyType, "keyType", internalTypeCls)
-        val valueTypeTerm = ctx.addReusableObject(valueType, "valueType", internalTypeCls)
-        val mapDataUtil = className[MapDataUtil]
+        val (unmatchedKeyCode, unmatchedKey) =
+          readElement(rightKeysTerm, unmatchedIndexTerm, keyType, "unmatchedKey")
+        val (laterKeyCode, laterKey) =
+          readElement(rightKeysTerm, laterIndexTerm, keyType, "laterKey")
+        val (laterKeysMatchCode, laterKeysMatch) = generateKeysMatch(unmatchedKey, laterKey)
 
+        // Keys are compared with SQL '=' like the values, so each left key scans the right keys.
+        // A map can hold a key more than once, and then its last entry counts. Both scans run from
+        // the end, so a key first finds its last entry, and later visits find it already matched.
+        // An unmatched right entry must be an earlier entry of a key that comes later.
         val stmt =
           s"""
-             |boolean $resultTerm;
-             |if ($leftTerm.size() == $rightTerm.size()) {
-             |  $resultTerm = true;
-             |  $mapCls $leftMapTerm = $mapDataUtil
-             |      .convertToJavaMap($leftTerm, $keyTypeTerm, $valueTypeTerm);
-             |  $mapCls $rightMapTerm = $mapDataUtil
-             |      .convertToJavaMap($rightTerm, $keyTypeTerm, $valueTypeTerm);
+             |int $sizeTerm = $leftTerm.size();
+             |boolean $resultTerm = $sizeTerm == $rightTerm.size();
+             |$ARRAY_DATA $leftKeysTerm = $leftTerm.keyArray();
+             |$ARRAY_DATA $leftValuesTerm = $leftTerm.valueArray();
+             |$ARRAY_DATA $rightKeysTerm = $rightTerm.keyArray();
+             |$ARRAY_DATA $rightValuesTerm = $rightTerm.valueArray();
+             |boolean[] $rightMatchedTerm = new boolean[$sizeTerm];
              |
-             |  for ($entryCls $entryTerm : $leftMapTerm.entrySet()) {
-             |    $keyCls $leftKeyTerm = ($keyCls) $entryTerm.getKey();
-             |    if ($rightMapTerm.containsKey($leftKeyTerm)) {
-             |      $valueCls $leftValueTerm = ($valueCls) $entryTerm.getValue();
-             |      $valueCls $rightValueTerm = ($valueCls) $rightMapTerm.get($leftKeyTerm);
-             |      boolean $leftValueNullTerm = ($leftValueTerm == null);
-             |      boolean $rightValueNullTerm = ($rightValueTerm == null);
-             |
-             |      ${valueEqualsExpr.code}
-             |      if (!${valueEqualsExpr.resultTerm}) {
-             |        $resultTerm = false;
-             |        break;
-             |      }
-             |    } else {
-             |      $resultTerm = false;
+             |for (int $leftIndexTerm = $sizeTerm - 1; $resultTerm && $leftIndexTerm >= 0;
+             |    $leftIndexTerm--) {
+             |  $leftKeyCode
+             |  int $rightIndexTerm = $sizeTerm - 1;
+             |  for (; $rightIndexTerm >= 0; $rightIndexTerm--) {
+             |    $rightKeyCode
+             |    $keysMatchCode
+             |    if ($keysMatch) {
              |      break;
              |    }
              |  }
-             |} else {
-             |  $resultTerm = false;
+             |  if ($rightIndexTerm < 0) {
+             |    $resultTerm = false;
+             |  } else if (!$rightMatchedTerm[$rightIndexTerm]) {
+             |    $rightMatchedTerm[$rightIndexTerm] = true;
+             |
+             |    $leftValueCode
+             |    $rightValueCode
+             |    ${valueEqualsExpr.code}
+             |    $resultTerm = ${valueEqualsExpr.resultTerm};
+             |  }
+             |}
+             |
+             |for (int $unmatchedIndexTerm = 0; $resultTerm && $unmatchedIndexTerm < $sizeTerm;
+             |    $unmatchedIndexTerm++) {
+             |  if ($rightMatchedTerm[$unmatchedIndexTerm]) {
+             |    continue;
+             |  }
+             |  $unmatchedKeyCode
+             |  int $laterIndexTerm = $unmatchedIndexTerm + 1;
+             |  for (; $laterIndexTerm < $sizeTerm; $laterIndexTerm++) {
+             |    $laterKeyCode
+             |    $laterKeysMatchCode
+             |    if ($laterKeysMatch) {
+             |      break;
+             |    }
+             |  }
+             |  $resultTerm = $laterIndexTerm < $sizeTerm;
              |}
              """.stripMargin
         (stmt, resultTerm)
@@ -2093,10 +2188,13 @@ object ScalarOperatorGens {
       override def isPrinting(): Boolean = false
       override def legacyBehaviour(): Boolean = isLegacyCastBehaviourEnabled(ctx)
       override def getSessionTimeZoneTerm: String = ctx.addReusableSessionTimeZone()
+      override def getSessionZoneId: ZoneId = TableConfigUtils.getLocalTimeZone(ctx.tableConfig)
       override def declareVariable(ty: String, variablePrefix: String): String =
         ctx.addReusableLocalVariable(ty, variablePrefix)
       override def declareTypeSerializer(ty: LogicalType): String =
         ctx.addReusableTypeSerializer(ty)
+      override def declareReusableObject(obj: AnyRef, fieldPrefix: String): String =
+        ctx.addReusableObject(obj, fieldPrefix)
       override def declareClassField(ty: String, field: String, init: String): String = {
         ctx.addReusableMember(s"private $ty $field = $init;")
         field

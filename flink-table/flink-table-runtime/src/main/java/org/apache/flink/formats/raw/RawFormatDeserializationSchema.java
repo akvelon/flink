@@ -23,12 +23,17 @@ import org.apache.flink.api.common.serialization.DeserializationSchema;
 import org.apache.flink.api.common.typeinfo.TypeInformation;
 import org.apache.flink.core.memory.MemorySegment;
 import org.apache.flink.core.memory.MemorySegmentFactory;
+import org.apache.flink.formats.raw.RawFormatOptions.VariantEncoding;
 import org.apache.flink.table.data.GenericRowData;
 import org.apache.flink.table.data.RawValueData;
 import org.apache.flink.table.data.RowData;
 import org.apache.flink.table.data.StringData;
 import org.apache.flink.table.types.logical.LogicalType;
 import org.apache.flink.types.DeserializationException;
+import org.apache.flink.types.variant.BinaryVariant;
+import org.apache.flink.types.variant.BinaryVariantInternalBuilder;
+import org.apache.flink.types.variant.BinaryVariantUtil;
+import org.apache.flink.types.variant.Variant;
 import org.apache.flink.util.Collector;
 
 import javax.annotation.Nullable;
@@ -37,7 +42,9 @@ import java.io.IOException;
 import java.io.Serializable;
 import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
+import java.util.Arrays;
 import java.util.Objects;
+import java.util.function.Consumer;
 import java.util.regex.Pattern;
 
 import static org.apache.flink.util.Preconditions.checkNotNull;
@@ -61,11 +68,7 @@ public class RawFormatDeserializationSchema implements DeserializationSchema<Row
 
     @Nullable private final String lineDelimiter;
 
-    /**
-     * Pre-compiled pattern for splitting by {@link #lineDelimiter}, or {@code null} if no
-     * delimiter. Note: this field and {@link #lineDelimiter} are either both null or both non-null.
-     */
-    @Nullable private final Pattern lineDelimiterPattern;
+    private final VariantEncoding variantEncoding;
 
     private final DeserializationRuntimeConverter converter;
 
@@ -75,25 +78,19 @@ public class RawFormatDeserializationSchema implements DeserializationSchema<Row
             LogicalType deserializedType,
             TypeInformation<RowData> producedTypeInfo,
             String charsetName,
-            boolean isBigEndian) {
-        this(deserializedType, producedTypeInfo, charsetName, isBigEndian, null);
-    }
-
-    public RawFormatDeserializationSchema(
-            LogicalType deserializedType,
-            TypeInformation<RowData> producedTypeInfo,
-            String charsetName,
             boolean isBigEndian,
-            @Nullable String lineDelimiter) {
+            @Nullable String lineDelimiter,
+            VariantEncoding variantEncoding) {
         this.deserializedType = checkNotNull(deserializedType);
         this.producedTypeInfo = checkNotNull(producedTypeInfo);
-        this.converter = createConverter(deserializedType, charsetName, isBigEndian);
+        this.variantEncoding = checkNotNull(variantEncoding);
+        this.converter =
+                createConverter(
+                        deserializedType, charsetName, isBigEndian, lineDelimiter, variantEncoding);
         this.validator = createDataLengthValidator(deserializedType);
         this.charsetName = charsetName;
         this.isBigEndian = isBigEndian;
         this.lineDelimiter = lineDelimiter;
-        this.lineDelimiterPattern =
-                lineDelimiter != null ? Pattern.compile(Pattern.quote(lineDelimiter)) : null;
     }
 
     @Override
@@ -131,24 +128,13 @@ public class RawFormatDeserializationSchema implements DeserializationSchema<Row
             return;
         }
 
-        Charset charset = Charset.forName(charsetName);
-        String decoded = new String(message, charset);
-        // Use pre-compiled pattern. Split with -1 to keep intentional empty middle segments,
-        // but strip the single trailing empty string produced when the message ends with the
-        // delimiter (e.g. a serializer that appends one delimiter per row).
-        String[] parts = lineDelimiterPattern.split(decoded, -1);
-        int count = parts.length;
-        if (count > 0 && parts[count - 1].isEmpty()) {
-            count--;
-        }
-        for (int i = 0; i < count; i++) {
-            byte[] partBytes = parts[i].getBytes(charset);
-            validator.validate(partBytes);
-            Object field = converter.convert(partBytes);
-            GenericRowData rowData = new GenericRowData(1);
-            rowData.setField(0, field);
-            out.collect(rowData);
-        }
+        converter.convertLines(
+                message,
+                field -> {
+                    final GenericRowData rowData = new GenericRowData(1);
+                    rowData.setField(0, field);
+                    out.collect(rowData);
+                });
     }
 
     @Override
@@ -174,13 +160,19 @@ public class RawFormatDeserializationSchema implements DeserializationSchema<Row
                 && deserializedType.equals(that.deserializedType)
                 && charsetName.equals(that.charsetName)
                 && isBigEndian == that.isBigEndian
-                && Objects.equals(lineDelimiter, that.lineDelimiter);
+                && Objects.equals(lineDelimiter, that.lineDelimiter)
+                && variantEncoding == that.variantEncoding;
     }
 
     @Override
     public int hashCode() {
         return Objects.hash(
-                producedTypeInfo, deserializedType, charsetName, isBigEndian, lineDelimiter);
+                producedTypeInfo,
+                deserializedType,
+                charsetName,
+                isBigEndian,
+                lineDelimiter,
+                variantEncoding);
     }
 
     // ------------------------------------------------------------------------
@@ -192,16 +184,30 @@ public class RawFormatDeserializationSchema implements DeserializationSchema<Row
         default void open() {}
 
         Object convert(byte[] data) throws IOException;
+
+        /**
+         * Converts a message that holds one value per line. Only a string column takes a line
+         * delimiter, so only the string converter splits the message.
+         */
+        default void convertLines(byte[] message, Consumer<Object> out) throws IOException {
+            out.accept(convert(message));
+        }
     }
 
     /** Creates a runtime converter. */
     private static DeserializationRuntimeConverter createConverter(
-            LogicalType type, String charsetName, boolean isBigEndian) {
+            LogicalType type,
+            String charsetName,
+            boolean isBigEndian,
+            @Nullable String lineDelimiter,
+            VariantEncoding variantEncoding) {
 
         switch (type.getTypeRoot()) {
             case CHAR:
             case VARCHAR:
-                return createStringConverter(charsetName);
+                return lineDelimiter == null
+                        ? createStringConverter(charsetName)
+                        : createDelimitedStringConverter(charsetName, lineDelimiter);
 
             case VARBINARY:
             case BINARY:
@@ -209,6 +215,11 @@ public class RawFormatDeserializationSchema implements DeserializationSchema<Row
 
             case RAW:
                 return RawValueData::fromBytes;
+
+            case VARIANT:
+                return variantEncoding == VariantEncoding.BINARY
+                        ? createBinaryVariantConverter()
+                        : createJsonVariantConverter();
 
             case BOOLEAN:
                 return data -> data[0] != 0;
@@ -278,6 +289,128 @@ public class RawFormatDeserializationSchema implements DeserializationSchema<Row
         };
     }
 
+    /**
+     * Creates a converter for a string column with a line delimiter, which turns a message into one
+     * string per line. In UTF-8 the bytes of a delimiter can only match at a character boundary, so
+     * the message is split without decoding it. In other charsets they can match inside a
+     * character, and an empty delimiter splits between characters, so both decode the message
+     * first.
+     */
+    private static DeserializationRuntimeConverter createDelimitedStringConverter(
+            final String charsetName, final String lineDelimiter) {
+        final DeserializationRuntimeConverter stringConverter = createStringConverter(charsetName);
+        final boolean splitBytes =
+                !lineDelimiter.isEmpty()
+                        && StandardCharsets.UTF_8.equals(Charset.forName(charsetName));
+        final byte[] delimiter = lineDelimiter.getBytes(StandardCharsets.UTF_8);
+        final Pattern pattern = Pattern.compile(Pattern.quote(lineDelimiter));
+        return new DeserializationRuntimeConverter() {
+            private static final long serialVersionUID = 1L;
+            private transient Charset charset;
+
+            @Override
+            public void open() {
+                stringConverter.open();
+                charset = Charset.forName(charsetName);
+            }
+
+            @Override
+            public Object convert(byte[] data) throws IOException {
+                return stringConverter.convert(data);
+            }
+
+            @Override
+            public void convertLines(byte[] message, Consumer<Object> out) throws IOException {
+                if (splitBytes) {
+                    int start = 0;
+                    int end;
+                    while ((end = indexOf(message, start)) >= 0) {
+                        out.accept(convert(Arrays.copyOfRange(message, start, end)));
+                        start = end + delimiter.length;
+                    }
+                    // Like the decoded split below, drop the empty part after a trailing delimiter.
+                    if (start < message.length) {
+                        out.accept(convert(Arrays.copyOfRange(message, start, message.length)));
+                    }
+                    return;
+                }
+                // Split with -1 to keep intentional empty middle segments, but strip the single
+                // trailing empty string produced when the message ends with the delimiter (e.g. a
+                // serializer that appends one delimiter per row).
+                final String[] parts = pattern.split(new String(message, charset), -1);
+                int count = parts.length;
+                if (count > 0 && parts[count - 1].isEmpty()) {
+                    count--;
+                }
+                for (int i = 0; i < count; i++) {
+                    out.accept(convert(parts[i].getBytes(charset)));
+                }
+            }
+
+            /** Returns the position of the next delimiter at or after {@code from}, or -1. */
+            private int indexOf(byte[] message, int from) {
+                for (int i = from; i <= message.length - delimiter.length; i++) {
+                    int j = 0;
+                    while (j < delimiter.length && message[i + j] == delimiter[j]) {
+                        j++;
+                    }
+                    if (j == delimiter.length) {
+                        return i;
+                    }
+                }
+                return -1;
+            }
+        };
+    }
+
+    /**
+     * Creates a converter that parses UTF-8 JSON bytes into a {@link Variant} like {@code
+     * PARSE_JSON}, so invalid UTF-8 and duplicate object keys are rejected.
+     */
+    private static DeserializationRuntimeConverter createJsonVariantConverter() {
+        return new DeserializationRuntimeConverter() {
+            private static final long serialVersionUID = 1L;
+
+            @Override
+            public Object convert(byte[] data) {
+                try {
+                    return BinaryVariantInternalBuilder.parseJson(data, false);
+                } catch (Exception e) {
+                    throw new DeserializationException(
+                            "Failed to deserialize VARIANT type. "
+                                    + "The received data is not a valid JSON document.",
+                            e);
+                }
+            }
+        };
+    }
+
+    /**
+     * Creates a converter that reads the Variant binary encoding, the metadata followed by the
+     * value. The bytes are only checked as far as needed to split them. A malformed value fails
+     * when it is read.
+     */
+    private static DeserializationRuntimeConverter createBinaryVariantConverter() {
+        return new DeserializationRuntimeConverter() {
+            private static final long serialVersionUID = 1L;
+
+            @Override
+            public Object convert(byte[] data) {
+                try {
+                    final int metadataSize = BinaryVariantUtil.metadataSize(data);
+                    return new BinaryVariant(
+                            Arrays.copyOfRange(data, metadataSize, data.length),
+                            Arrays.copyOf(data, metadataSize));
+                } catch (Exception e) {
+                    throw new DeserializationException(
+                            "Failed to deserialize VARIANT type. "
+                                    + "The received data is not a valid VARIANT binary encoding.",
+                            e);
+                }
+            }
+        };
+    }
+
     private static DeserializationRuntimeConverter createEndiannessAwareConverter(
             final boolean isBigEndian,
             final MemorySegmentConverter bigEndianConverter,
@@ -302,6 +435,7 @@ public class RawFormatDeserializationSchema implements DeserializationSchema<Row
             case VARBINARY:
             case BINARY:
             case RAW:
+            case VARIANT:
                 return data -> {};
             case BOOLEAN:
                 return createDataLengthValidator(1, "BOOLEAN");

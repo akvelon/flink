@@ -101,5 +101,13 @@ public interface LogicalTypeVisitor<R> {
         return visit((LogicalType) bitmapType);
     }
 
+    default R visit(UuidType uuidType) {
+        return visit((LogicalType) uuidType);
+    }
+
+    default R visit(GeographyType geographyType) {
+        return visit((LogicalType) geographyType);
+    }
+
     R visit(LogicalType other);
 }

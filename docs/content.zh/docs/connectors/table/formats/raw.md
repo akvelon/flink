@@ -110,11 +110,28 @@ Format 参数
       <td>可选</td>
       <td style="word-wrap: break-word;">(无)</td>
       <td>String</td>
-      <td>指定行分隔符，用于在反序列化时将一条消息拆分为多行。设置后，每条消息将使用
-      'raw.charset' 解码，并按此分隔符切分，每段输出一条数据行。在序列化时，分隔符字节会被
+      <td>指定行分隔符，用于在反序列化时将一条消息拆分为多行。Only supported for a <code>STRING</code>,
+      <code>VARCHAR</code> or <code>CHAR</code> column. When set, each incoming message is split by
+      this delimiter; one row is emitted per segment. If 'raw.charset' is UTF-8, the message is split on
+      the UTF-8 bytes of the delimiter without being decoded, so each segment keeps its original bytes.
+      Otherwise the message is decoded using 'raw.charset' before it is split. 在序列化时，分隔符字节会被
       追加到每条序列化值的末尾。常用值为 '\n'（换行符）或 '||'。
       <br><strong>注意：</strong>当序列化与反序列化使用相同的分隔符配置时，两者具有
       round-trip 兼容性：序列化器追加的末尾分隔符会在反序列化时自动被去除。</td>
+    </tr>
+    <tr>
+      <td><h5>raw.variant-encoding</h5></td>
+      <td>可选</td>
+      <td style="word-wrap: break-word;">json</td>
+      <td>Enum</td>
+      <td>Specify how a <code>VARIANT</code> column is encoded. Valid values are 'json' and 'binary'.
+      'json' reads and writes a UTF-8 JSON document. For convenience, and also because JSON is a very
+      popular and human readable format, the stored VARIANT value is assumed to be JSON. However, JSON
+      values are lossy: JSON has no type for dates, times, timestamps, bytes or
+      UUIDs, and it does not keep the width of a number. 'binary' reads and writes the Variant binary
+      encoding, the metadata followed by the value. It keeps every Variant type and skips JSON parsing
+      and rendering, so use it for correctness and performance. 'raw.charset' does not apply to
+      'binary'.</td>
     </tr>
     </tbody>
 </table>
@@ -178,6 +195,28 @@ Format 参数
       <td><code>RAW</code></td>
       <td>通过 RAW 类型的底层 TypeSerializer 序列化的字节序列。</td>
     </tr>
+    <tr>
+      <td><code>VARIANT</code></td>
+      <td>Depends on 'raw.variant-encoding'.<br>
+       <strong>json</strong> (default): a UTF-8 encoded JSON document.
+       'raw.charset' must be UTF-8. To read or write JSON in another charset, declare the column as
+       <code>STRING</code> and convert it with <code>PARSE_JSON</code> when reading and <code>JSON_STRING</code>
+       when writing.
+       On read, the bytes are parsed like <code>PARSE_JSON</code> with the same checks, so an invalid UTF-8 byte such as
+       <code>0xFF</code>, a duplicate object key or malformed JSON fails the job. On write, the value is rendered by
+       <code>Variant#toJson</code>.
+       The round trip is lossy, because JSON has fewer types than VARIANT: a <code>DATE</code>, <code>TIME</code>,
+       <code>TIMESTAMP</code>, <code>BYTES</code> or <code>UUID</code> value comes back as a string, a <code>FLOAT</code>
+       or <code>DOUBLE</code> can come back as a <code>DECIMAL</code>, and an integer comes back as the smallest integer
+       type that holds it.
+       Insignificant whitespace is dropped and object keys are ordered.<br>
+       <strong>binary</strong>: the Variant binary encoding, the metadata followed by the value. The round trip keeps
+       every Variant type. The bytes are only checked as far as needed to split them, so a malformed value fails when
+       it is read.</td>
+    </tr>
     </tbody>
 </table>
+
+Note: a `VARIANT` column holds one JSON document per message. If a message holds more, only the first is read. To read
+newline-delimited JSON, declare the column as `STRING` with `raw.line-delimiter` and convert each row with `PARSE_JSON`.
 

@@ -32,7 +32,7 @@ import java.util.function.Function;
  * Operation to describe an ALTER MATERIALIZED TABLE AS query operation. The operation is not
  * executable and only serves as a wrapper.
  *
- * <p>As an example see {@link MaterializedTableManager} where it is transformed to {@link
+ * <p>As an example see {@code DefaultMaterializedTableExecutor} where it is transformed to {@link
  * AlterMaterializedTableChangeOperation} before execution.
  */
 @Internal
@@ -42,8 +42,8 @@ public class AlterMaterializedTableAsQueryOperation extends AlterMaterializedTab
             ObjectIdentifier tableIdentifier,
             Function<ResolvedCatalogMaterializedTable, List<TableChange>> tableChangesForTable,
             ResolvedCatalogMaterializedTable oldTable,
-            QueryOperation sinkModifyQuery) {
-        super(tableIdentifier, tableChangesForTable, oldTable, sinkModifyQuery);
+            QueryOperation asQueryOperation) {
+        super(tableIdentifier, tableChangesForTable, oldTable, asQueryOperation);
     }
 
     @Override

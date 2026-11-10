@@ -66,6 +66,9 @@ public final class SpecificInputTypeStrategies {
     /** See {@link ObjectOfInputTypeStrategy}. */
     public static final InputTypeStrategy OBJECT_OF = new ObjectOfInputTypeStrategy();
 
+    /** See {@link VariantGetInputTypeStrategy}. */
+    public static final InputTypeStrategy VARIANT_GET = new VariantGetInputTypeStrategy();
+
     /** See {@link ObjectUpdateInputTypeStrategy}. */
     public static final InputTypeStrategy OBJECT_UPDATE = new ObjectUpdateInputTypeStrategy();
 
@@ -96,6 +99,11 @@ public final class SpecificInputTypeStrategies {
     public static final ArgumentTypeStrategy JSON_QUERY_ON_EMPTY_ERROR_BEHAVIOUR =
             new JsonQueryOnErrorEmptyArgumentTypeStrategy();
 
+    /** See {@link JsonPathInputTypeStrategy}. */
+    public static InputTypeStrategy plainJsonPath(final InputTypeStrategy signatures) {
+        return new JsonPathInputTypeStrategy(signatures);
+    }
+
     /** Argument type derived from the array element type. */
     public static final ArgumentTypeStrategy ARRAY_ELEMENT_ARG =
             new ArrayElementArgumentTypeStrategy();
@@ -103,6 +111,13 @@ public final class SpecificInputTypeStrategies {
     /** Argument type representing the array is comparable. */
     public static final ArgumentTypeStrategy ARRAY_FULLY_COMPARABLE =
             new ArrayComparableElementArgumentTypeStrategy(StructuredComparison.FULL);
+
+    /** See {@link ArrayOfEntriesArgumentTypeStrategy}. */
+    public static final ArgumentTypeStrategy ARRAY_OF_ENTRIES_ARG =
+            new ArrayOfEntriesArgumentTypeStrategy();
+
+    /** Argument type derived from the map key type. */
+    public static final ArgumentTypeStrategy MAP_KEY_ARG = new MapKeyArgumentTypeStrategy();
 
     /**
      * Input strategy for {@link BuiltInFunctionDefinitions#JSON_OBJECT}.

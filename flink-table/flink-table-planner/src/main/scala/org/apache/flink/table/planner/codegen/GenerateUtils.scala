@@ -20,6 +20,7 @@ package org.apache.flink.table.planner.codegen
 import org.apache.flink.api.common.ExecutionConfig
 import org.apache.flink.api.common.serialization.SerializerConfigImpl
 import org.apache.flink.api.common.typeinfo.{AtomicType => AtomicTypeInfo}
+import org.apache.flink.table.api.ValidationException
 import org.apache.flink.table.data._
 import org.apache.flink.table.data.binary.{BinaryRowData, BinaryStringData}
 import org.apache.flink.table.data.utils.JoinedRowData
@@ -100,26 +101,56 @@ object GenerateUtils {
          |""".stripMargin
     }
 
-    val resultCode = if (operands.nonEmpty) {
-      s"""
-         |${operands.map(_.code).mkString("\n")}
-         |$nullTerm = ${operands.map(_.nullTerm).mkString(" || ")};
-         |$resultTerm = $defaultValue;
-         |if (!$nullTerm) {
-         |  $wrappedResultAssignment
-         |  $nullTermCode
-         |}
-         |""".stripMargin
-    } else {
-      s"""
-         |${operands.map(_.code).mkString("\n")}
-         |$nullTerm = false;
-         |$wrappedResultAssignment
-         |$nullTermCode
-         |""".stripMargin
+    // operands that are never null do not make the result null
+    val nullCheck = operands.map(_.nullTerm).filter(_ != NEVER_NULL) match {
+      case Seq() => NEVER_NULL
+      case nullTerms => nullTerms.mkString(" || ")
     }
 
+    val resultCode =
+      if (isSingleAssignment(operands, stmt, wrapTryCatch, isResultNullable, returnType)) {
+        // a primitive result in one assignment; the call still only runs if no operand is null
+        val assignment = if (returnType.is(LogicalTypeRoot.BOOLEAN)) {
+          s"!$nullTerm && ($result)"
+        } else {
+          s"$nullTerm ? $defaultValue : ($result)"
+        }
+        s"""
+           |${operands.map(_.code).mkString("\n")}
+           |$nullTerm = $nullCheck;
+           |$resultTerm = $assignment;
+           |""".stripMargin
+      } else if (operands.nonEmpty) {
+        s"""
+           |${operands.map(_.code).mkString("\n")}
+           |$nullTerm = $nullCheck;
+           |$resultTerm = $defaultValue;
+           |if (!$nullTerm) {
+           |  $wrappedResultAssignment
+           |  $nullTermCode
+           |}
+           |""".stripMargin
+      } else {
+        s"""
+           |${operands.map(_.code).mkString("\n")}
+           |$nullTerm = false;
+           |$wrappedResultAssignment
+           |$nullTermCode
+           |""".stripMargin
+      }
+
     GeneratedExpression(resultTerm, nullTerm, resultCode, returnType)
+  }
+
+  // Whether the result can be computed in one assignment instead of an if block.
+  private def isSingleAssignment(
+      operands: Seq[GeneratedExpression],
+      stmt: String,
+      wrapTryCatch: Boolean,
+      isResultNullable: Boolean,
+      returnType: LogicalType): Boolean = {
+    operands.nonEmpty && stmt.isEmpty && !wrapTryCatch &&
+    !isResultNullable && !isReference(returnType)
   }
 
   /**
@@ -313,7 +344,7 @@ object GenerateUtils {
         // so that the literalValue can be also used directly when needed
         generateNonNullLiteral(literalType, field, str)
 
-      case BINARY | VARBINARY =>
+      case BINARY | VARBINARY | UUID =>
         val bytesVal = literalValue.asInstanceOf[Array[Byte]]
         val fieldTerm =
           ctx.addReusableObject(bytesVal, "binary", bytesVal.getClass.getCanonicalName)
@@ -628,17 +659,21 @@ object GenerateUtils {
       s"$leftTerm.compareTo($rightTerm)"
     case BOOLEAN =>
       s"($leftTerm == $rightTerm ? 0 : ($leftTerm ? 1 : -1))"
-    case BINARY | VARBINARY =>
+    case BINARY | VARBINARY | UUID =>
+      // UUID is stored as its 16-byte big-endian encoding, so it orders by the same unsigned
+      // byte-wise comparison as binary strings.
       val sortUtil =
         classOf[org.apache.flink.table.runtime.operators.sort.SortUtil].getCanonicalName
       s"$sortUtil.compareBinary($leftTerm, $rightTerm)"
     case TINYINT | SMALLINT | INTEGER | BIGINT | FLOAT | DOUBLE | DATE | TIME_WITHOUT_TIME_ZONE |
         INTERVAL_YEAR_MONTH | INTERVAL_DAY_TIME =>
       s"($leftTerm > $rightTerm ? 1 : $leftTerm < $rightTerm ? -1 : 0)"
+    // keep in sync with BatchPhysicalJoinRuleBase#hasOrderableJoinKeys
     case TIMESTAMP_WITH_TIME_ZONE | MULTISET | MAP | VARIANT | BITMAP =>
-      throw new UnsupportedOperationException(
-        s"Type($t) is not an orderable data type, " +
-          s"it is not supported as a ORDER_BY/GROUP_BY/JOIN_EQUAL field.")
+      throw new ValidationException(
+        s"Type '$t' cannot be ordered, so it cannot be used as a key for sorting, grouping, " +
+          s"or joining (for example in ORDER BY, GROUP BY, DISTINCT, or a join condition). " +
+          s"Remove it from the key, or replace it with a value that can be ordered.")
     // TODO support MULTISET and MAP?
     case ARRAY =>
       val at = t.asInstanceOf[ArrayType]

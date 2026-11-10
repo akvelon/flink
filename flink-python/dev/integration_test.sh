@@ -20,7 +20,7 @@
 function test_module() {
     module="$FLINK_PYTHON_DIR/pyflink/$1"
     echo "test module $module"
-    pytest --durations=20 ${module} $2
+    pytest -n ${PYFLINK_TEST_WORKERS:-4} --dist loadfile --durations=20 ${module} $2
     if [[ $? -ne 0 ]]; then
         echo "test module $module failed"
         exit 1
@@ -34,11 +34,17 @@ function test_all_modules() {
     # test datastream module
     test_module "datastream"
 
+    # test dataframe module
+    test_module "dataframe"
+
     # test fn_execution module
     test_module "fn_execution"
 
     # test table module
     test_module "table"
+
+    # test util module
+    test_module "util"
 }
 
 # CURRENT_DIR is "flink/flink-python/dev/"

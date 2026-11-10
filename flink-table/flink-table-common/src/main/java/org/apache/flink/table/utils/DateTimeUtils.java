@@ -1585,7 +1585,7 @@ public class DateTimeUtils {
     }
 
     public static int timestampWithoutLocalZoneToTime(TimestampData ts, int precision) {
-        final int millisecond = (int) (ts.getMillisecond() % DateTimeUtils.MILLIS_PER_DAY);
+        final int millisecond = (int) Math.floorMod(ts.getMillisecond(), MILLIS_PER_DAY);
         return applyTimePrecisionTruncation(millisecond, precision);
     }
 
@@ -1725,20 +1725,18 @@ public class DateTimeUtils {
     }
 
     public static TimestampData truncate(TimestampData ts, int precision) {
-        String fraction = Integer.toString(ts.toLocalDateTime().getNano());
-        if (fraction.length() <= precision) {
+        // A timestamp holds at most nine fractional-second digits, so a higher precision keeps it
+        // unchanged. Otherwise, the digits beyond the precision are zeroed out.
+        if (precision >= 9) {
             return ts;
-        } else {
-            // need to truncate
-            if (precision <= 3) {
-                return TimestampData.fromEpochMillis(
-                        zeroLastDigits(ts.getMillisecond(), 3 - precision));
-            } else {
-                return TimestampData.fromEpochMillis(
-                        ts.getMillisecond(),
-                        (int) zeroLastDigits(ts.getNanoOfMillisecond(), 9 - precision));
-            }
         }
+        if (precision <= 3) {
+            return TimestampData.fromEpochMillis(
+                    zeroLastDigits(ts.getMillisecond(), 3 - precision));
+        }
+        return TimestampData.fromEpochMillis(
+                ts.getMillisecond(),
+                (int) zeroLastDigits(ts.getNanoOfMillisecond(), 9 - precision));
     }
 
     public static int truncate(int time, int precision) {
@@ -1747,7 +1745,7 @@ public class DateTimeUtils {
 
     private static long zeroLastDigits(long l, int n) {
         long tenToTheN = (long) Math.pow(10, n);
-        return (l / tenToTheN) * tenToTheN;
+        return Math.floorDiv(l, tenToTheN) * tenToTheN;
     }
 
     public static long unixDateCeil(TimeUnitRange range, long date) {

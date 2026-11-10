@@ -1123,8 +1123,8 @@ Table ratesHistory = tableEnv.from("RatesHistory");
 
 // register temporal table function with a time attribute and primary key
 TemporalTableFunction rates = ratesHistory.createTemporalTableFunction(
-    "r_proctime",
-    "r_currency");
+    $("r_proctime"),
+    $("r_currency"));
 tableEnv.createTemporarySystemFunction("rates", rates);
 
 // join with "Orders" based on the time attribute and key
@@ -1143,8 +1143,49 @@ val rates = ratesHistory.createTemporalTableFunction($"r_proctime", $"r_currency
 // join with "Orders" based on the time attribute and key
 val orders = tableEnv.from("Orders")
 val result = orders
-    .joinLateral(rates($"o_rowtime"), $"r_currency" === $"o_currency")
+    .joinLateral(rates($"o_proctime"), $"r_currency" === $"o_currency")
 ```
+{{< /tab >}}
+{{< tab "Python" >}}
+Currently not supported in Python Table API.
+{{< /tab >}}
+{{< /tabs >}}
+
+#### Lateral Snapshot Join
+
+{{< label "Batch" >}} {{< label "Streaming" >}}
+
+Enriches an append-only table with the current state of an updating table by calling the built-in `SNAPSHOT` [process table function]({{< ref "docs/sql/functions/built-in-functions" >}}) as the build (right) side of a `LATERAL` join. Each probe-side row is joined with the build-side state that is current when the row is processed. Both inner and left outer joins are supported. An equality predicate is recommended but not required.
+
+See [LATERAL SNAPSHOT join]({{< ref "docs/sql/reference/queries/joins" >}}#lateral-snapshot-join) for the full list of `SNAPSHOT` arguments and the join semantics.
+
+{{< tabs "snapshotjoin" >}}
+{{< tab "Java" >}}
+```java
+Table orders = tableEnv.from("Orders");
+Table currencyRates = tableEnv.from("CurrencyRates");
+
+// inner join: enrich every order with the current conversion rate
+Table result = orders
+    .joinLateral(
+        call(
+            "SNAPSHOT",
+            currencyRates.asArgument("input"),
+            descriptor("update_time").asArgument("on_time")),
+        $("currency").isEqual($("r_currency")));
+
+// left outer join: unmatched orders are preserved and padded with nulls
+Table leftResult = orders
+    .leftOuterJoinLateral(
+        call(
+            "SNAPSHOT",
+            currencyRates.asArgument("input"),
+            descriptor("update_time").asArgument("on_time")),
+        $("currency").isEqual($("r_currency")));
+```
+{{< /tab >}}
+{{< tab "Scala" >}}
+Currently not supported in Scala Table API.
 {{< /tab >}}
 {{< tab "Python" >}}
 Currently not supported in Python Table API.

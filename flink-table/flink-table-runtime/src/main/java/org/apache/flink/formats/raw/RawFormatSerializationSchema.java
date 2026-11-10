@@ -23,9 +23,13 @@ import org.apache.flink.api.common.serialization.SerializationSchema;
 import org.apache.flink.api.common.typeutils.TypeSerializer;
 import org.apache.flink.core.memory.MemorySegment;
 import org.apache.flink.core.memory.MemorySegmentFactory;
+import org.apache.flink.formats.raw.RawFormatOptions.VariantEncoding;
 import org.apache.flink.table.data.RowData;
 import org.apache.flink.table.types.logical.LogicalType;
 import org.apache.flink.table.types.logical.RawType;
+import org.apache.flink.types.variant.BinaryVariant;
+import org.apache.flink.types.variant.Variant;
+import org.apache.flink.types.variant.VariantTypeException;
 
 import javax.annotation.Nullable;
 
@@ -35,6 +39,8 @@ import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
 import java.util.Objects;
+
+import static org.apache.flink.util.Preconditions.checkNotNull;
 
 /** Serialization schema that serializes an {@link RowData} object into raw (byte based) value. */
 @Internal
@@ -55,17 +61,16 @@ public class RawFormatSerializationSchema implements SerializationSchema<RowData
     /** Pre-computed delimiter bytes, or {@code null} if no delimiter is set. */
     @Nullable private final byte[] delimiterBytes;
 
-    public RawFormatSerializationSchema(
-            LogicalType serializedType, String charsetName, boolean isBigEndian) {
-        this(serializedType, charsetName, isBigEndian, null);
-    }
+    private final VariantEncoding variantEncoding;
 
     public RawFormatSerializationSchema(
             LogicalType serializedType,
             String charsetName,
             boolean isBigEndian,
-            @Nullable String lineDelimiter) {
+            @Nullable String lineDelimiter,
+            VariantEncoding variantEncoding) {
         this.serializedType = serializedType;
+        this.variantEncoding = checkNotNull(variantEncoding);
         this.converter = createConverter(serializedType, charsetName, isBigEndian);
         this.charsetName = charsetName;
         this.isBigEndian = isBigEndian;
@@ -89,7 +94,7 @@ public class RawFormatSerializationSchema implements SerializationSchema<RowData
             byte[] result = Arrays.copyOf(valueBytes, valueBytes.length + delimiterBytes.length);
             System.arraycopy(delimiterBytes, 0, result, valueBytes.length, delimiterBytes.length);
             return result;
-        } catch (IOException e) {
+        } catch (IOException | VariantTypeException e) {
             throw new RuntimeException("Could not serialize row '" + row + "'. ", e);
         }
     }
@@ -106,12 +111,14 @@ public class RawFormatSerializationSchema implements SerializationSchema<RowData
         return serializedType.equals(that.serializedType)
                 && charsetName.equals(that.charsetName)
                 && isBigEndian == that.isBigEndian
-                && Objects.equals(lineDelimiter, that.lineDelimiter);
+                && Objects.equals(lineDelimiter, that.lineDelimiter)
+                && variantEncoding == that.variantEncoding;
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(serializedType, charsetName, isBigEndian, lineDelimiter);
+        return Objects.hash(
+                serializedType, charsetName, isBigEndian, lineDelimiter, variantEncoding);
     }
 
     // ------------------------------------------------------------------------
@@ -163,6 +170,11 @@ public class RawFormatSerializationSchema implements SerializationSchema<RowData
 
             case RAW:
                 return createRawValueConverter((RawType<?>) type);
+
+            case VARIANT:
+                return variantEncoding == VariantEncoding.BINARY
+                        ? createBinaryVariantConverter()
+                        : createJsonVariantConverter(charsetName);
 
             case BOOLEAN:
                 return row -> {
@@ -217,6 +229,44 @@ public class RawFormatSerializationSchema implements SerializationSchema<RowData
                 String str = row.getString(0).toString();
                 return str.getBytes(charset);
             }
+        };
+    }
+
+    /**
+     * Creates a converter that renders the {@link Variant} as a JSON document. JSON has fewer types
+     * than a Variant, so a date, timestamp, byte string or UUID is written as a string. Whitespace
+     * and object key order are normalized.
+     */
+    private static SerializationRuntimeConverter createJsonVariantConverter(
+            final String charsetName) {
+        return new SerializationRuntimeConverter() {
+            private static final long serialVersionUID = 1L;
+            private transient Charset charset;
+
+            @Override
+            public void open() {
+                charset = Charset.forName(charsetName);
+            }
+
+            @Override
+            public byte[] convert(RowData row) {
+                return row.getVariant(0).toJson().getBytes(charset);
+            }
+        };
+    }
+
+    /**
+     * Creates a converter that writes the Variant binary encoding, the metadata followed by the
+     * value. It keeps every Variant type, unlike the JSON document.
+     */
+    private static SerializationRuntimeConverter createBinaryVariantConverter() {
+        return row -> {
+            final BinaryVariant variant = (BinaryVariant) row.getVariant(0);
+            final byte[] metadata = variant.getMetadata();
+            final byte[] value = variant.getValue();
+            final byte[] result = Arrays.copyOf(metadata, metadata.length + value.length);
+            System.arraycopy(value, 0, result, metadata.length, value.length);
+            return result;
         };
     }
 

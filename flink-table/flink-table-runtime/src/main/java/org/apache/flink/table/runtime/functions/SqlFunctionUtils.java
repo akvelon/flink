@@ -42,6 +42,7 @@ import java.net.URL;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
+import java.util.Arrays;
 import java.util.Base64;
 import java.util.HashMap;
 import java.util.Map;
@@ -310,26 +311,25 @@ public class SqlFunctionUtils {
             return "";
         }
 
-        char[] data = new char[len];
-        char[] baseChars = base.toCharArray();
-        char[] padChars = pad.toCharArray();
-
-        // the length of the padding needed
-        int pos = Math.max(len - base.length(), 0);
-
-        // copy the padding
-        for (int i = 0; i < pos; i += pad.length()) {
-            for (int j = 0; j < pad.length() && j < pos - i; j++) {
-                data[i + j] = padChars[j];
-            }
+        final int length = base.length();
+        int baseEnd = 0;
+        int baseCodePoints = 0;
+        while (baseCodePoints < len && baseEnd < length) {
+            baseEnd += Character.charCount(base.codePointAt(baseEnd));
+            baseCodePoints++;
         }
 
-        // copy the base
-        int i = 0;
-        while (pos + i < len && i < base.length()) {
-            data[pos + i] = baseChars[i];
-            i += 1;
+        final int padCount = len - baseCodePoints;
+        if (padCount == 0) {
+            // The base already holds len code points, so it only needs truncating.
+            return base.substring(0, baseEnd);
         }
+
+        final int padChars = padLength(pad, padCount);
+        final char[] data = new char[Math.addExact(padChars, baseEnd)];
+
+        writePad(data, 0, pad, padChars);
+        base.getChars(0, baseEnd, data, padChars);
 
         return new String(data);
     }
@@ -345,29 +345,58 @@ public class SqlFunctionUtils {
             return "";
         }
 
-        char[] data = new char[len];
-        char[] baseChars = base.toCharArray();
-        char[] padChars = pad.toCharArray();
-
-        int pos = 0;
-
-        // copy the base
-        while (pos < base.length() && pos < len) {
-            data[pos] = baseChars[pos];
-            pos += 1;
+        final int length = base.length();
+        int baseEnd = 0;
+        int baseCodePoints = 0;
+        while (baseCodePoints < len && baseEnd < length) {
+            baseEnd += Character.charCount(base.codePointAt(baseEnd));
+            baseCodePoints++;
         }
 
-        // copy the padding
-        while (pos < len) {
-            int i = 0;
-            while (i < pad.length() && i < len - pos) {
-                data[pos + i] = padChars[i];
-                i += 1;
-            }
-            pos += pad.length();
+        final int padCount = len - baseCodePoints;
+        if (padCount == 0) {
+            // The base already holds len code points, so it only needs truncating.
+            return base.substring(0, baseEnd);
         }
+
+        final int padChars = padLength(pad, padCount);
+        final char[] data = new char[Math.addExact(baseEnd, padChars)];
+
+        base.getChars(0, baseEnd, data, 0);
+        writePad(data, baseEnd, pad, padChars);
 
         return new String(data);
+    }
+
+    /** Number of chars taken by count code points of pad repeated cyclically. */
+    private static int padLength(String pad, int count) {
+        final int padLen = pad.length();
+        final int cycle = pad.codePointCount(0, padLen);
+        return Math.addExact(
+                Math.multiplyExact(count / cycle, padLen),
+                pad.offsetByCodePoints(0, count % cycle));
+    }
+
+    /** Writes chars characters into data at pos, repeating pad cyclically. */
+    private static void writePad(char[] data, int pos, String pad, int chars) {
+        final int padLen = pad.length();
+        if (padLen == 1) {
+            // A single char fills directly, which is faster than the doubling copy below.
+            Arrays.fill(data, pos, pos + chars, pad.charAt(0));
+            return;
+        }
+
+        // Arrays.fill can only repeat a single char, so a longer pad is replicated by copying:
+        // each pass doubles the region written, taking log2(chars) copies not one per cycle.
+        final int first = Math.min(padLen, chars);
+        pad.getChars(0, first, data, pos);
+
+        int written = first;
+        while (written < chars) {
+            final int next = Math.min(written, chars - written);
+            System.arraycopy(data, pos, data, pos + written, next);
+            written += next;
+        }
     }
 
     /** Returns a string that repeats the base string n times. */
@@ -429,15 +458,20 @@ public class SqlFunctionUtils {
             return null;
         }
         try {
-            return REGEXP_PATTERN_CACHE
-                    .get(regex)
-                    .matcher(str)
-                    .replaceAll(Matcher.quoteReplacement(replacement));
+            return regexpReplace(str, REGEXP_PATTERN_CACHE.get(regex), replacement);
         } catch (PatternSyntaxException e) {
             // Literals are rejected at planning time; non-literal invalid regex
             // returns null to preserve the prior runtime contract.
             return null;
         }
+    }
+
+    /**
+     * {@link #regexpReplace(String, String, String)} with a compiled pattern, for non-null
+     * arguments.
+     */
+    public static String regexpReplace(String str, Pattern pattern, String replacement) {
+        return pattern.matcher(str).replaceAll(Matcher.quoteReplacement(replacement));
     }
 
     /**
@@ -449,17 +483,25 @@ public class SqlFunctionUtils {
             return null;
         }
         try {
-            final Matcher m = REGEXP_PATTERN_CACHE.get(regex).matcher(str);
-            if (m.groupCount() < extractIndex) {
-                return null;
-            }
-            if (m.find()) {
-                return m.group(extractIndex);
-            }
+            return regexpExtract(str, REGEXP_PATTERN_CACHE.get(regex), extractIndex);
         } catch (PatternSyntaxException e) {
             // non-literal invalid regex returns null.
         }
         return null;
+    }
+
+    /**
+     * {@link #regexpExtract(String, String, int)} with a compiled pattern, for non-null arguments.
+     */
+    public static String regexpExtract(String str, Pattern pattern, int extractIndex) {
+        if (extractIndex < 0) {
+            return null;
+        }
+        final Matcher m = pattern.matcher(str);
+        if (m.groupCount() < extractIndex) {
+            return null;
+        }
+        return m.find() ? m.group(extractIndex) : null;
     }
 
     public static String regexpExtract(String str, String regex, long extractIndex) {
@@ -595,8 +637,8 @@ public class SqlFunctionUtils {
             return null;
         }
 
-        Pattern p = Pattern.compile("(&|^)" + Pattern.quote(key) + "=([^&]*)");
-        Matcher m = p.matcher(query);
+        final String s = "(&|^)" + Pattern.quote(key) + "=([^&]*)";
+        Matcher m = REGEXP_PATTERN_CACHE.get(s).matcher(query);
         if (m.find()) {
             return m.group(2);
         }
@@ -960,12 +1002,21 @@ public class SqlFunctionUtils {
             return false;
         }
         try {
-            return REGEXP_PATTERN_CACHE.get(regex).matcher(s).find(0);
+            return regExp(s, REGEXP_PATTERN_CACHE.get(regex));
         } catch (PatternSyntaxException e) {
             // Literals are rejected at planning time; non-literal invalid regex
             // returns false to preserve the prior runtime contract.
             return false;
         }
+    }
+
+    /** {@link #regExp(String, String)} with a compiled pattern, for non-null arguments. */
+    public static boolean regExp(String s, Pattern pattern) {
+        // an empty pattern never matches
+        if (pattern.pattern().isEmpty()) {
+            return false;
+        }
+        return pattern.matcher(s).find(0);
     }
 
     public static Byte bitAnd(Byte a, Byte b) {

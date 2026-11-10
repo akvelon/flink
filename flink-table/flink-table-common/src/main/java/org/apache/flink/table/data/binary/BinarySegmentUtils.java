@@ -24,6 +24,7 @@ import org.apache.flink.core.memory.DataOutputView;
 import org.apache.flink.core.memory.MemorySegment;
 import org.apache.flink.table.data.ArrayData;
 import org.apache.flink.table.data.DecimalData;
+import org.apache.flink.table.data.DecimalDataInternalUtils;
 import org.apache.flink.table.data.MapData;
 import org.apache.flink.table.data.RawValueData;
 import org.apache.flink.table.data.RowData;
@@ -1005,9 +1006,30 @@ public final class BinarySegmentUtils {
             int scale) {
         final int size = ((int) offsetAndSize);
         int subOffset = (int) (offsetAndSize >> 32);
+        // up to 8 bytes fit a long; size 0 keeps the old path
+        if (size > 0 && size <= 8) {
+            final int pos = baseOffset + subOffset;
+            final long unscaled =
+                    inFirstSegment(segments, pos, 8)
+                            // value is in the high bytes, the rest is shifted out
+                            ? segments[0].getLongBigEndian(pos) >> (64 - 8 * size)
+                            : readUnscaledLongMultiSegments(segments, pos, size);
+            // at most 19 digits, so it fits any non-compact precision
+            return DecimalDataInternalUtils.fromUnscaledLong(unscaled, precision, scale);
+        }
         byte[] bytes = new byte[size];
         copyToBytes(segments, baseOffset + subOffset, bytes, 0, size);
         return DecimalData.fromUnscaledBytes(bytes, precision, scale);
+    }
+
+    private static long readUnscaledLongMultiSegments(
+            MemorySegment[] segments, int offset, int size) {
+        // signed first byte sign-extends
+        long unscaled = getByte(segments, offset);
+        for (int i = 1; i < size; i++) {
+            unscaled = (unscaled << 8) | (getByte(segments, offset + i) & 0xFF);
+        }
+        return unscaled;
     }
 
     /**
@@ -1052,6 +1074,34 @@ public final class BinarySegmentUtils {
             } else {
                 // fieldOffset + 1 to skip header.
                 return BinarySegmentUtils.copyToBytes(segments, fieldOffset + 1, len);
+            }
+        }
+    }
+
+    /**
+     * Get geography data, if len less than 8, it will be included in variablePartOffsetAndLen.
+     *
+     * @param baseOffset base offset of composite binary format.
+     * @param fieldOffset absolute start offset of 'variablePartOffsetAndLen'.
+     * @param variablePartOffsetAndLen a long value, real data or offset and len.
+     */
+    public static BinaryGeographyData readGeographyData(
+            MemorySegment[] segments,
+            int baseOffset,
+            int fieldOffset,
+            long variablePartOffsetAndLen) {
+        long mark = variablePartOffsetAndLen & HIGHEST_FIRST_BIT;
+        if (mark == 0) {
+            final int subOffset = (int) (variablePartOffsetAndLen >> 32);
+            final int len = (int) variablePartOffsetAndLen;
+            return BinaryGeographyData.fromAddress(segments, baseOffset + subOffset, len);
+        } else {
+            int len = (int) ((variablePartOffsetAndLen & HIGHEST_SECOND_TO_EIGHTH_BIT) >>> 56);
+            if (BinarySegmentUtils.LITTLE_ENDIAN) {
+                return BinaryGeographyData.fromAddress(segments, fieldOffset, len);
+            } else {
+                // fieldOffset + 1 to skip header.
+                return BinaryGeographyData.fromAddress(segments, fieldOffset + 1, len);
             }
         }
     }

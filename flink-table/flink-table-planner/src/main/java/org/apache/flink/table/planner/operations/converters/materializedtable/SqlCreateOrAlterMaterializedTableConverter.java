@@ -45,23 +45,17 @@ import org.apache.flink.table.operations.materializedtable.ConvertTableToMateria
 import org.apache.flink.table.operations.materializedtable.CreateMaterializedTableOperation;
 import org.apache.flink.table.operations.materializedtable.FullAlterMaterializedTableOperation;
 import org.apache.flink.table.operations.materializedtable.MaterializedTableChangeHandler;
-import org.apache.flink.table.planner.calcite.FlinkPlannerImpl;
 import org.apache.flink.table.planner.operations.PlannerQueryOperation;
 import org.apache.flink.table.planner.operations.converters.MergeTableAsUtil;
 import org.apache.flink.table.planner.utils.MaterializedTableUtils;
 
-import org.apache.calcite.sql.SqlNode;
 import org.apache.calcite.sql.SqlNodeList;
 
 import java.util.ArrayList;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
-import java.util.Set;
-
-import static org.apache.flink.table.planner.operations.converters.SqlNodeConvertUtils.toQueryOperation;
 
 /** A converter for {@link SqlCreateOrAlterMaterializedTable}. */
 public class SqlCreateOrAlterMaterializedTableConverter
@@ -125,10 +119,7 @@ public class SqlCreateOrAlterMaterializedTableConverter
             final ObjectIdentifier identifier) {
         final SchemaResolver schemaResolver = context.getCatalogManager().getSchemaResolver();
         final MergeContext mergeContext = getMergeContext(sqlCreateOrAlterTable, context);
-        final SqlNode asQuerySqlNode = sqlCreateOrAlterTable.getAsQuery();
-        final FlinkPlannerImpl flinkPlanner = context.getFlinkPlanner();
-        final SqlNode validatedAsQuery = flinkPlanner.validate(asQuerySqlNode);
-        final PlannerQueryOperation asQuery = toQueryOperation(validatedAsQuery, context);
+        final PlannerQueryOperation asQuery = mergeContext.getAsQueryOperation();
 
         return new FullAlterMaterializedTableOperation(
                 identifier,
@@ -172,17 +163,11 @@ public class SqlCreateOrAlterMaterializedTableConverter
         final ResolvedCatalogMaterializedTable resolvedNewMaterializedTable =
                 context.getCatalogManager().resolveCatalogMaterializedTable(newMaterializedTable);
 
-        final SqlNode asQuerySqlNode = sqlCreateOrAlterMaterializedTable.getAsQuery();
-        final FlinkPlannerImpl flinkPlanner = context.getFlinkPlanner();
-        final SqlNode validatedAsQuery = flinkPlanner.validate(asQuerySqlNode);
-        final PlannerQueryOperation asQuery = toQueryOperation(validatedAsQuery, context);
-        final PlannerQueryOperation sinkQuery =
+        final PlannerQueryOperation asQueryOperation =
                 new MergeTableAsUtil(context)
                         .maybeRewriteQuery(
-                                context.getCatalogManager(),
-                                flinkPlanner,
-                                asQuery,
-                                validatedAsQuery,
+                                baseMergeContext.getAsQueryOperation(),
+                                sqlCreateOrAlterMaterializedTable.getAsQuery(),
                                 resolvedNewMaterializedTable);
 
         return new ConvertTableToMaterializedTableOperation(
@@ -195,7 +180,7 @@ public class SqlCreateOrAlterMaterializedTableConverter
                                 resolvedCatalogMaterializedTable,
                                 baseMergeContext.hasSchemaDefinition(),
                                 baseMergeContext.hasConstraintDefinition()),
-                sinkQuery);
+                asQueryOperation);
     }
 
     private List<TableChange> buildConversionTableChanges(
@@ -259,22 +244,17 @@ public class SqlCreateOrAlterMaterializedTableConverter
             final SqlCreateOrAlterMaterializedTable sqlCreateOrAlterTable,
             final ConvertContext context,
             final ObjectIdentifier identifier) {
+        final MergeContext mergeContext = getMergeContext(sqlCreateOrAlterTable, context);
         final ResolvedCatalogMaterializedTable resolvedTable =
-                getResolvedCatalogMaterializedTable(sqlCreateOrAlterTable, context);
-        final SqlNode asQuerySqlNode = sqlCreateOrAlterTable.getAsQuery();
-        final FlinkPlannerImpl flinkPlanner = context.getFlinkPlanner();
-        final SqlNode validatedAsQuery = flinkPlanner.validate(asQuerySqlNode);
-        final PlannerQueryOperation asQuery = toQueryOperation(validatedAsQuery, context);
-        final PlannerQueryOperation sinkQuery =
+                getResolvedCatalogMaterializedTable(mergeContext, sqlCreateOrAlterTable, context);
+        final PlannerQueryOperation asQueryOperation =
                 new MergeTableAsUtil(context)
                         .maybeRewriteQuery(
-                                context.getCatalogManager(),
-                                flinkPlanner,
-                                asQuery,
-                                validatedAsQuery,
+                                mergeContext.getAsQueryOperation(),
+                                sqlCreateOrAlterTable.getAsQuery(),
                                 resolvedTable);
 
-        return new CreateMaterializedTableOperation(identifier, resolvedTable, sinkQuery);
+        return new CreateMaterializedTableOperation(identifier, resolvedTable, asQueryOperation);
     }
 
     private List<TableChange> buildTableChanges(
@@ -438,9 +418,11 @@ public class SqlCreateOrAlterMaterializedTableConverter
                     SqlCreateOrAlterMaterializedTableConverter.this.getDerivedOriginalQuery(
                             sqlCreateMaterializedTable, context);
 
-            private final ResolvedSchema querySchema =
-                    SqlCreateOrAlterMaterializedTableConverter.this.getQueryResolvedSchema(
+            private final PlannerQueryOperation asQueryOperation =
+                    SqlCreateOrAlterMaterializedTableConverter.this.getAsQueryOperation(
                             sqlCreateMaterializedTable, context);
+
+            private final ResolvedSchema querySchema = asQueryOperation.getResolvedSchema();
 
             @Override
             public boolean hasSchemaDefinition() {
@@ -458,12 +440,10 @@ public class SqlCreateOrAlterMaterializedTableConverter
             @Override
             public Schema getMergedSchema() {
                 final SqlNodeList sqlNodeList = sqlCreateMaterializedTable.getColumnList();
-                if (createOrAlterOperation(sqlCreateMaterializedTable)) {
-                    MaterializedTableUtils.validatePersistedColumnsUsedByQuery(
-                            sqlNodeList, querySchema);
-                } else {
-                    validatePhysicalColumnsUsedByQuery(sqlNodeList, querySchema);
-                }
+                MaterializedTableUtils.validatePersistedColumnsUsedByQuery(
+                        sqlNodeList,
+                        querySchema,
+                        sqlCreateMaterializedTable.getOperator().getName());
                 if (sqlCreateMaterializedTable.isSchemaWithColumnsIdentifiersOnly()) {
                     // If only column identifiers are provided, then these are used to
                     // order the columns in the schema.
@@ -506,7 +486,12 @@ public class SqlCreateOrAlterMaterializedTableConverter
 
             @Override
             public ResolvedSchema getMergedQuerySchema() {
-                return this.querySchema;
+                return asQueryOperation.getResolvedSchema();
+            }
+
+            @Override
+            public PlannerQueryOperation getAsQueryOperation() {
+                return asQueryOperation;
             }
 
             @Override
@@ -534,22 +519,5 @@ public class SqlCreateOrAlterMaterializedTableConverter
                 return getDerivedFreshness(sqlCreateMaterializedTable);
             }
         };
-    }
-
-    private static void validatePhysicalColumnsUsedByQuery(
-            SqlNodeList sqlNodeList, ResolvedSchema querySchema) {
-        final Set<String> querySchemaColumnNames = new HashSet<>(querySchema.getColumnNames());
-        for (SqlNode column : sqlNodeList) {
-            if (!(column instanceof SqlRegularColumn)) {
-                continue;
-            }
-            final SqlRegularColumn physicalColumn = (SqlRegularColumn) column;
-            if (!querySchemaColumnNames.contains(physicalColumn.getName().getSimple())) {
-                throw new ValidationException(
-                        String.format(
-                                "Invalid as physical column '%s' is defined in the DDL, but is not used in a query column.",
-                                physicalColumn.getName().getSimple()));
-            }
-        }
     }
 }

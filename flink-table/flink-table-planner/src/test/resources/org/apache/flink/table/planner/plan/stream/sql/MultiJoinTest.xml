@@ -77,9 +77,9 @@ Calc(select=[user_id, name, category_name, order_count, total_items, total_value
             :        :        :        :- Exchange(distribution=[hash[user_id]])
             :        :        :        :  +- ChangelogNormalize(key=[user_id])
             :        :        :        :     +- Exchange(distribution=[hash[user_id]])
-            :        :        :        :        +- TableSourceScan(table=[[default_catalog, default_database, Users, project=[user_id, name], metadata=[]]], fields=[user_id, name])
+            :        :        :        :        +- TableSourceScan(table=[[default_catalog, default_database, Users, project=[user_id, name]]], fields=[user_id, name])
             :        :        :        +- Exchange(distribution=[hash[user_id]])
-            :        :        :           +- TableSourceScan(table=[[default_catalog, default_database, Orders, project=[order_id, user_id], metadata=[]]], fields=[order_id, user_id])
+            :        :        :           +- TableSourceScan(table=[[default_catalog, default_database, Orders, project=[order_id, user_id]]], fields=[order_id, user_id])
             :        :        +- Exchange(distribution=[hash[order_id]])
             :        :           +- Calc(select=[order_id, product_name, quantity, unit_price])
             :        :              +- ChangelogNormalize(key=[item_id])
@@ -88,9 +88,9 @@ Calc(select=[user_id, name, category_name, order_count, total_items, total_value
             :        +- Exchange(distribution=[hash[category_id]])
             :           +- ChangelogNormalize(key=[category_id])
             :              +- Exchange(distribution=[hash[category_id]])
-            :                 +- TableSourceScan(table=[[default_catalog, default_database, ProductCategories, project=[category_id, category_name], metadata=[]]], fields=[category_id, category_name])
+            :                 +- TableSourceScan(table=[[default_catalog, default_database, ProductCategories, project=[category_id, category_name]]], fields=[category_id, category_name])
             +- Exchange(distribution=[hash[user_id]])
-               +- TableSourceScan(table=[[default_catalog, default_database, Payments, project=[price, user_id], metadata=[]]], fields=[price, user_id])
+               +- TableSourceScan(table=[[default_catalog, default_database, Payments, project=[price, user_id]]], fields=[price, user_id])
 ]]>
     </Resource>
   </TestCase>
@@ -138,17 +138,17 @@ Calc(select=[category_name, unique_users, total_sales, total_revenue, avg_sale_a
             :- Exchange(distribution=[hash[user_id]])
             :  +- ChangelogNormalize(key=[user_id])
             :     +- Exchange(distribution=[hash[user_id]])
-            :        +- TableSourceScan(table=[[default_catalog, default_database, Users, project=[user_id], metadata=[]]], fields=[user_id])
+            :        +- TableSourceScan(table=[[default_catalog, default_database, Users, project=[user_id]]], fields=[user_id])
             :- Exchange(distribution=[hash[user_id]])
-            :  +- TableSourceScan(table=[[default_catalog, default_database, Orders, project=[user_id, product], metadata=[]]], fields=[user_id, product])
+            :  +- TableSourceScan(table=[[default_catalog, default_database, Orders, project=[user_id, product]]], fields=[user_id, product])
             :- Exchange(distribution=[hash[user_id]])
             :  +- ChangelogNormalize(key=[category_id])
             :     +- Exchange(distribution=[hash[category_id]])
-            :        +- TableSourceScan(table=[[default_catalog, default_database, Categories, project=[category_id, category_name, user_id], metadata=[]]], fields=[category_id, category_name, user_id])
+            :        +- TableSourceScan(table=[[default_catalog, default_database, Categories, project=[category_id, category_name, user_id]]], fields=[category_id, category_name, user_id])
             +- Exchange(distribution=[hash[user_id]])
                +- ChangelogNormalize(key=[sale_id])
                   +- Exchange(distribution=[hash[sale_id]])
-                     +- TableSourceScan(table=[[default_catalog, default_database, Sales, project=[sale_id, user_id, amount], metadata=[]]], fields=[sale_id, user_id, amount])
+                     +- TableSourceScan(table=[[default_catalog, default_database, Sales, project=[sale_id, user_id, amount]]], fields=[sale_id, user_id, amount])
 ]]>
     </Resource>
   </TestCase>
@@ -203,9 +203,9 @@ Calc(select=[user_id, name, order_id, dept_name, project_name, budget])
    :- Exchange(distribution=[hash[user_id]])
    :  +- ChangelogNormalize(key=[user_id])
    :     +- Exchange(distribution=[hash[user_id]])
-   :        +- TableSourceScan(table=[[default_catalog, default_database, Users, project=[user_id, name], metadata=[]]], fields=[user_id, name])
+   :        +- TableSourceScan(table=[[default_catalog, default_database, Users, project=[user_id, name]]], fields=[user_id, name])
    :- Exchange(distribution=[hash[user_id]])
-   :  +- TableSourceScan(table=[[default_catalog, default_database, Orders, project=[order_id, user_id], metadata=[]]], fields=[order_id, user_id])
+   :  +- TableSourceScan(table=[[default_catalog, default_database, Orders, project=[order_id, user_id]]], fields=[order_id, user_id])
    :- Exchange(distribution=[hash[dept_id]])
    :  +- ChangelogNormalize(key=[dept_id], condition=[>(budget, 600000)])
    :     +- Exchange(distribution=[hash[dept_id]])
@@ -242,14 +242,14 @@ Calc(select=[user_id, name, order_id, payment_id, location])
    :- Exchange(distribution=[hash[user_id]])
    :  +- ChangelogNormalize(key=[user_id])
    :     +- Exchange(distribution=[hash[user_id]])
-   :        +- TableSourceScan(table=[[default_catalog, default_database, Users, project=[user_id, name], metadata=[]]], fields=[user_id, name])
+   :        +- TableSourceScan(table=[[default_catalog, default_database, Users, project=[user_id, name]]], fields=[user_id, name])
    +- Exchange(distribution=[hash[user_id]])
       +- Calc(select=[order_id, user_id, payment_id, location])
          +- MultiJoin(commonJoinKey=[user_id], joinTypes=[INNER, INNER], inputUniqueKeys=[(order_id), (payment_id), noUniqueKey], joinConditions=[=(user_id, user_id0), =(user_id0, user_id1)], select=[order_id,user_id,payment_id,user_id0,location,user_id1], rowType=[RecordType(VARCHAR(2147483647) order_id, VARCHAR(2147483647) user_id, VARCHAR(2147483647) payment_id, VARCHAR(2147483647) user_id0, VARCHAR(2147483647) location, VARCHAR(2147483647) user_id1)])
             :- Exchange(distribution=[hash[user_id]])
-            :  +- TableSourceScan(table=[[default_catalog, default_database, Orders, project=[order_id, user_id], metadata=[]]], fields=[order_id, user_id])
+            :  +- TableSourceScan(table=[[default_catalog, default_database, Orders, project=[order_id, user_id]]], fields=[order_id, user_id])
             :- Exchange(distribution=[hash[user_id]])
-            :  +- TableSourceScan(table=[[default_catalog, default_database, Payments, project=[payment_id, user_id], metadata=[]]], fields=[payment_id, user_id])
+            :  +- TableSourceScan(table=[[default_catalog, default_database, Payments, project=[payment_id, user_id]]], fields=[payment_id, user_id])
             +- Exchange(distribution=[hash[user_id]])
                +- TableSourceScan(table=[[default_catalog, default_database, Shipments]], fields=[location, user_id])
 ]]>
@@ -320,19 +320,19 @@ GroupAggregate(groupBy=[user_id, name], select=[user_id, name, COUNT_RETRACT(ord
          :        :        :- Exchange(distribution=[hash[user_id]])
          :        :        :  +- ChangelogNormalize(key=[user_id])
          :        :        :     +- Exchange(distribution=[hash[user_id]])
-         :        :        :        +- TableSourceScan(table=[[default_catalog, default_database, Users, project=[user_id, name], metadata=[]]], fields=[user_id, name])
+         :        :        :        +- TableSourceScan(table=[[default_catalog, default_database, Users, project=[user_id, name]]], fields=[user_id, name])
          :        :        :- Exchange(distribution=[hash[user_id]])
-         :        :        :  +- TableSourceScan(table=[[default_catalog, default_database, Orders, project=[order_id, user_id], metadata=[]]], fields=[order_id, user_id])
+         :        :        :  +- TableSourceScan(table=[[default_catalog, default_database, Orders, project=[order_id, user_id]]], fields=[order_id, user_id])
          :        :        +- Exchange(distribution=[hash[user_id]])
          :        :           +- TableSourceScan(table=[[default_catalog, default_database, Payments]], fields=[payment_id, price, user_id])
          :        +- Exchange(distribution=[hash[status_id]])
          :           +- ChangelogNormalize(key=[status_id])
          :              +- Exchange(distribution=[hash[status_id]])
-         :                 +- TableSourceScan(table=[[default_catalog, default_database, OrderStatus, project=[status_id, is_final], metadata=[]]], fields=[status_id, is_final])
+         :                 +- TableSourceScan(table=[[default_catalog, default_database, OrderStatus, project=[status_id, is_final]]], fields=[status_id, is_final])
          +- Exchange(distribution=[hash[method_id]])
             +- ChangelogNormalize(key=[method_id])
                +- Exchange(distribution=[hash[method_id]])
-                  +- TableSourceScan(table=[[default_catalog, default_database, PaymentMethods, project=[method_id], metadata=[]]], fields=[method_id])
+                  +- TableSourceScan(table=[[default_catalog, default_database, PaymentMethods, project=[method_id]]], fields=[method_id])
 ]]>
     </Resource>
   </TestCase>
@@ -498,7 +498,7 @@ Calc(select=[user_id, order_id, payment_id, category_name, CASE(AND(is_premium, 
    :        :- Exchange(distribution=[hash[user_id]])
    :        :  +- ChangelogNormalize(key=[user_id])
    :        :     +- Exchange(distribution=[hash[user_id]])
-   :        :        +- TableSourceScan(table=[[default_catalog, default_database, Users, project=[user_id], metadata=[]]], fields=[user_id])
+   :        :        +- TableSourceScan(table=[[default_catalog, default_database, Users, project=[user_id]]], fields=[user_id])
    :        :- Exchange(distribution=[hash[user_id]])
    :        :  +- TableSourceScan(table=[[default_catalog, default_database, Orders]], fields=[order_id, user_id, product])
    :        +- Exchange(distribution=[hash[user_id]])
@@ -597,16 +597,16 @@ Calc(select=[user_id, UPPER(name) AS user_name, total_orders, ROUND(total_spent,
          :        :- Exchange(distribution=[hash[user_id]])
          :        :  +- ChangelogNormalize(key=[user_id])
          :        :     +- Exchange(distribution=[hash[user_id]])
-         :        :        +- TableSourceScan(table=[[default_catalog, default_database, Users, project=[user_id, name], metadata=[]]], fields=[user_id, name])
+         :        :        +- TableSourceScan(table=[[default_catalog, default_database, Users, project=[user_id, name]]], fields=[user_id, name])
          :        :- Exchange(distribution=[hash[user_id]])
-         :        :  +- TableSourceScan(table=[[default_catalog, default_database, Orders, project=[order_id, user_id], metadata=[]]], fields=[order_id, user_id])
+         :        :  +- TableSourceScan(table=[[default_catalog, default_database, Orders, project=[order_id, user_id]]], fields=[order_id, user_id])
          :        +- Exchange(distribution=[hash[user_id]])
-         :           +- TableSourceScan(table=[[default_catalog, default_database, Payments, project=[price, user_id], metadata=[]]], fields=[price, user_id])
+         :           +- TableSourceScan(table=[[default_catalog, default_database, Payments, project=[price, user_id]]], fields=[price, user_id])
          +- Exchange(distribution=[hash[order_id]])
             +- Calc(select=[order_id, metric_value])
                +- ChangelogNormalize(key=[metric_id])
                   +- Exchange(distribution=[hash[metric_id]])
-                     +- TableSourceScan(table=[[default_catalog, default_database, OrderMetrics, project=[order_id, metric_value, metric_id], metadata=[]]], fields=[order_id, metric_value, metric_id])
+                     +- TableSourceScan(table=[[default_catalog, default_database, OrderMetrics, project=[order_id, metric_value, metric_id]]], fields=[order_id, metric_value, metric_id])
 ]]>
     </Resource>
   </TestCase>
@@ -674,6 +674,41 @@ Sink(table=[default_catalog.default_database.UnnestSink], targetColumns=[[0],[1]
 ]]>
     </Resource>
   </TestCase>
+  <TestCase name="testFirstInputUpsertKeyNotContainingJoinKeyOmitsUpdateBefore">
+    <Resource name="sql">
+      <![CDATA[INSERT INTO sink_regions
+SELECT r.user_id, r.region, u.description, a.location
+FROM UsersPK u
+JOIN UserRegionsPK r
+    ON u.user_id = r.user_id AND u.name = r.region
+JOIN AddressPK a
+    ON u.user_id = a.user_id]]>
+    </Resource>
+    <Resource name="ast">
+      <![CDATA[
+LogicalSink(table=[default_catalog.default_database.sink_regions], fields=[user_id, region, description, location])
++- LogicalProject(user_id=[$4], region=[$5], description=[$3], location=[$8])
+   +- LogicalJoin(condition=[=($0, $7)], joinType=[inner])
+      :- LogicalJoin(condition=[AND(=($0, $4), =($1, $5))], joinType=[inner])
+      :  :- LogicalTableScan(table=[[default_catalog, default_database, UsersPK]])
+      :  +- LogicalTableScan(table=[[default_catalog, default_database, UserRegionsPK]])
+      +- LogicalTableScan(table=[[default_catalog, default_database, AddressPK]])
+]]>
+    </Resource>
+    <Resource name="optimized rel plan">
+      <![CDATA[
+Sink(table=[default_catalog.default_database.sink_regions], fields=[user_id, region, description, location], changelogMode=[NONE])
++- Calc(select=[user_id0 AS user_id, region, description, location], changelogMode=[I,UA,D])
+   +- MultiJoin(commonJoinKey=[user_id], joinTypes=[INNER, INNER], inputUniqueKeys=[(user_id), (user_id, region), (user_id)], inputUpsertKeys=[(user_id), (user_id, region), (user_id)], joinConditions=[AND(=(user_id, user_id0), =(name, region)), =(user_id, user_id1)], select=[user_id,name,description,user_id0,region,user_id1,location], rowType=[RecordType(VARCHAR(2147483647) user_id, VARCHAR(2147483647) name, VARCHAR(2147483647) description, VARCHAR(2147483647) user_id0, VARCHAR(2147483647) region, VARCHAR(2147483647) user_id1, VARCHAR(2147483647) location)], changelogMode=[I,UA,D])
+      :- Exchange(distribution=[hash[user_id]], changelogMode=[I,UA,D])
+      :  +- TableSourceScan(table=[[default_catalog, default_database, UsersPK, project=[user_id, name, description]]], fields=[user_id, name, description], changelogMode=[I,UA,D])
+      :- Exchange(distribution=[hash[user_id]], changelogMode=[I,UA,D])
+      :  +- TableSourceScan(table=[[default_catalog, default_database, UserRegionsPK, project=[user_id, region]]], fields=[user_id, region], changelogMode=[I,UA,D])
+      +- Exchange(distribution=[hash[user_id]], changelogMode=[I,UA,D])
+         +- TableSourceScan(table=[[default_catalog, default_database, AddressPK]], fields=[user_id, location], changelogMode=[I,UA,D])
+]]>
+    </Resource>
+  </TestCase>
   <TestCase name="testFourWayComplexJoinExecPlan">
     <Resource name="sql">
       <![CDATA[
@@ -713,7 +748,7 @@ Calc(select=[user_id, name, order_id, payment_id, location])
    :     +- Exchange(distribution=[hash[user_id]])
    :        +- TableSourceScan(table=[[default_catalog, default_database, Users]], fields=[user_id, name, cash])
    :- Exchange(distribution=[hash[user_id]])
-   :  +- TableSourceScan(table=[[default_catalog, default_database, Orders, project=[order_id, user_id], metadata=[]]], fields=[order_id, user_id])
+   :  +- TableSourceScan(table=[[default_catalog, default_database, Orders, project=[order_id, user_id]]], fields=[order_id, user_id])
    :- Exchange(distribution=[hash[user_id]])
    :  +- TableSourceScan(table=[[default_catalog, default_database, Payments]], fields=[payment_id, price, user_id])
    +- Exchange(distribution=[hash[user_id]])
@@ -741,7 +776,7 @@ Calc(select=[user_id, name, order_id, payment_id, location])
    :     +- Exchange(distribution=[hash[user_id]])
    :        +- TableSourceScan(table=[[default_catalog, default_database, Users]], fields=[user_id, name, cash])
    :- Exchange(distribution=[hash[user_id]])
-   :  +- TableSourceScan(table=[[default_catalog, default_database, Orders, project=[order_id, user_id], metadata=[]]], fields=[order_id, user_id])
+   :  +- TableSourceScan(table=[[default_catalog, default_database, Orders, project=[order_id, user_id]]], fields=[order_id, user_id])
    :- Exchange(distribution=[hash[user_id]])
    :  +- TableSourceScan(table=[[default_catalog, default_database, Payments]], fields=[payment_id, price, user_id])
    +- Exchange(distribution=[hash[user_id]])
@@ -755,7 +790,7 @@ Calc(select=[user_id, name, order_id, payment_id, location])
    :     +- Exchange(distribution=[hash[user_id]])
    :        +- TableSourceScan(table=[[default_catalog, default_database, Users]], fields=[user_id, name, cash])
    :- Exchange(distribution=[hash[user_id]])
-   :  +- TableSourceScan(table=[[default_catalog, default_database, Orders, project=[order_id, user_id], metadata=[]]], fields=[order_id, user_id])
+   :  +- TableSourceScan(table=[[default_catalog, default_database, Orders, project=[order_id, user_id]]], fields=[order_id, user_id])
    :- Exchange(distribution=[hash[user_id]])
    :  +- TableSourceScan(table=[[default_catalog, default_database, Payments]], fields=[payment_id, price, user_id])
    +- Exchange(distribution=[hash[user_id]])
@@ -802,7 +837,7 @@ Calc(select=[user_id, name, order_id, payment_id, location])
    :     +- Exchange(distribution=[hash[user_id]])
    :        +- TableSourceScan(table=[[default_catalog, default_database, Users]], fields=[user_id, name, cash])
    :- Exchange(distribution=[hash[user_id]])
-   :  +- TableSourceScan(table=[[default_catalog, default_database, Orders, project=[order_id, user_id], metadata=[]]], fields=[order_id, user_id])
+   :  +- TableSourceScan(table=[[default_catalog, default_database, Orders, project=[order_id, user_id]]], fields=[order_id, user_id])
    :- Exchange(distribution=[hash[user_id]])
    :  +- TableSourceScan(table=[[default_catalog, default_database, Payments]], fields=[payment_id, price, user_id])
    +- Exchange(distribution=[hash[user_id]])
@@ -858,13 +893,13 @@ Calc(select=[user_id, name, order_id, payment_id, location])
    :        :        :     :- Exchange(distribution=[hash[user_id]])
    :        :        :     :  +- ChangelogNormalize(key=[user_id])
    :        :        :     :     +- Exchange(distribution=[hash[user_id]])
-   :        :        :     :        +- TableSourceScan(table=[[default_catalog, default_database, Users, project=[user_id, name], metadata=[]]], fields=[user_id, name])
+   :        :        :     :        +- TableSourceScan(table=[[default_catalog, default_database, Users, project=[user_id, name]]], fields=[user_id, name])
    :        :        :     +- Exchange(distribution=[hash[user_id]])
-   :        :        :        +- TableSourceScan(table=[[default_catalog, default_database, Orders, project=[order_id, user_id], metadata=[]]], fields=[order_id, user_id])
+   :        :        :        +- TableSourceScan(table=[[default_catalog, default_database, Orders, project=[order_id, user_id]]], fields=[order_id, user_id])
    :        :        +- Exchange(distribution=[hash[name]])
-   :        :           +- TableSourceScan(table=[[default_catalog, default_database, LookupTable, project=[name], metadata=[]]], fields=[name])
+   :        :           +- TableSourceScan(table=[[default_catalog, default_database, LookupTable, project=[name]]], fields=[name])
    :        +- Exchange(distribution=[hash[user_id]])
-   :           +- TableSourceScan(table=[[default_catalog, default_database, Payments, project=[payment_id, user_id], metadata=[]]], fields=[payment_id, user_id])
+   :           +- TableSourceScan(table=[[default_catalog, default_database, Payments, project=[payment_id, user_id]]], fields=[payment_id, user_id])
    +- Exchange(distribution=[hash[user_id]])
       +- TableSourceScan(table=[[default_catalog, default_database, Shipments]], fields=[location, user_id])
 ]]>
@@ -906,11 +941,11 @@ Calc(select=[user_id, name, order_id, payment_id, location])
    :- Exchange(distribution=[hash[user_id]])
    :  +- ChangelogNormalize(key=[user_id])
    :     +- Exchange(distribution=[hash[user_id]])
-   :        +- TableSourceScan(table=[[default_catalog, default_database, Users, project=[user_id, name], metadata=[]]], fields=[user_id, name])
+   :        +- TableSourceScan(table=[[default_catalog, default_database, Users, project=[user_id, name]]], fields=[user_id, name])
    :- Exchange(distribution=[hash[user_id]])
-   :  +- TableSourceScan(table=[[default_catalog, default_database, Orders, project=[order_id, user_id], metadata=[]]], fields=[order_id, user_id])
+   :  +- TableSourceScan(table=[[default_catalog, default_database, Orders, project=[order_id, user_id]]], fields=[order_id, user_id])
    :- Exchange(distribution=[hash[user_id]])
-   :  +- TableSourceScan(table=[[default_catalog, default_database, Payments, project=[payment_id, user_id], metadata=[]]], fields=[payment_id, user_id])
+   :  +- TableSourceScan(table=[[default_catalog, default_database, Payments, project=[payment_id, user_id]]], fields=[payment_id, user_id])
    +- Exchange(distribution=[hash[user_id]])
       +- TableSourceScan(table=[[default_catalog, default_database, Shipments]], fields=[location, user_id])
 ]]>
@@ -964,12 +999,12 @@ MultiJoin(commonJoinKey=[payment_id], joinTypes=[LEFT], inputUniqueKeys=[noUniqu
 :        :        :     +- Exchange(distribution=[hash[user_id]])
 :        :        :        +- TableSourceScan(table=[[default_catalog, default_database, Users]], fields=[user_id, name, cash])
 :        :        +- Exchange(distribution=[hash[user_id]])
-:        :           +- TableSourceScan(table=[[default_catalog, default_database, Orders, project=[order_id, user_id], metadata=[]]], fields=[order_id, user_id])
+:        :           +- TableSourceScan(table=[[default_catalog, default_database, Orders, project=[order_id, user_id]]], fields=[order_id, user_id])
 :        +- Exchange(distribution=[hash[user_id, $f3]])
 :           +- Calc(select=[payment_id, price, user_id, UPPER(payment_id) AS $f3])
 :              +- TableSourceScan(table=[[default_catalog, default_database, Payments]], fields=[payment_id, price, user_id])
 +- Exchange(distribution=[hash[location]])
-   +- TableSourceScan(table=[[default_catalog, default_database, Shipments, project=[location], metadata=[]]], fields=[location])
+   +- TableSourceScan(table=[[default_catalog, default_database, Shipments, project=[location]]], fields=[location])
 ]]>
     </Resource>
   </TestCase>
@@ -1006,11 +1041,11 @@ Calc(select=[user_id, name, order_id, payment_id])
    :     :- Exchange(distribution=[hash[user_id]])
    :     :  +- ChangelogNormalize(key=[user_id])
    :     :     +- Exchange(distribution=[hash[user_id]])
-   :     :        +- TableSourceScan(table=[[default_catalog, default_database, Users, project=[user_id, name], metadata=[]]], fields=[user_id, name])
+   :     :        +- TableSourceScan(table=[[default_catalog, default_database, Users, project=[user_id, name]]], fields=[user_id, name])
    :     +- Exchange(distribution=[hash[user_id]])
-   :        +- TableSourceScan(table=[[default_catalog, default_database, Orders, project=[order_id, user_id], metadata=[]]], fields=[order_id, user_id])
+   :        +- TableSourceScan(table=[[default_catalog, default_database, Orders, project=[order_id, user_id]]], fields=[order_id, user_id])
    +- Exchange(distribution=[hash[user_id]])
-      +- TableSourceScan(table=[[default_catalog, default_database, Payments, project=[payment_id, user_id], metadata=[]]], fields=[payment_id, user_id])
+      +- TableSourceScan(table=[[default_catalog, default_database, Payments, project=[payment_id, user_id]]], fields=[payment_id, user_id])
 ]]>
     </Resource>
   </TestCase>
@@ -1075,15 +1110,15 @@ Calc(select=[user_id, UPPER(name) AS user_name_upper, LOWER(product) AS product_
    :        :        :- Exchange(distribution=[hash[user_id]])
    :        :        :  +- ChangelogNormalize(key=[user_id])
    :        :        :     +- Exchange(distribution=[hash[user_id]])
-   :        :        :        +- TableSourceScan(table=[[default_catalog, default_database, Users, project=[user_id, name], metadata=[]]], fields=[user_id, name])
+   :        :        :        +- TableSourceScan(table=[[default_catalog, default_database, Users, project=[user_id, name]]], fields=[user_id, name])
    :        :        :- Exchange(distribution=[hash[user_id]])
-   :        :        :  +- TableSourceScan(table=[[default_catalog, default_database, Orders, project=[user_id, product], metadata=[]]], fields=[user_id, product])
+   :        :        :  +- TableSourceScan(table=[[default_catalog, default_database, Orders, project=[user_id, product]]], fields=[user_id, product])
    :        :        +- Exchange(distribution=[hash[user_id]])
-   :        :           +- TableSourceScan(table=[[default_catalog, default_database, Payments, project=[price, user_id], metadata=[]]], fields=[price, user_id])
+   :        :           +- TableSourceScan(table=[[default_catalog, default_database, Payments, project=[price, user_id]]], fields=[price, user_id])
    :        +- Exchange(distribution=[hash[product_id]])
    :           +- ChangelogNormalize(key=[product_id])
    :              +- Exchange(distribution=[hash[product_id]])
-   :                 +- TableSourceScan(table=[[default_catalog, default_database, ProductDetails, project=[product_id, description, created_date, tags], metadata=[]]], fields=[product_id, description, created_date, tags])
+   :                 +- TableSourceScan(table=[[default_catalog, default_database, ProductDetails, project=[product_id, description, created_date, tags]]], fields=[product_id, description, created_date, tags])
    +- Exchange(distribution=[hash[user_id]])
       +- ChangelogNormalize(key=[user_id])
          +- Exchange(distribution=[hash[user_id]])
@@ -1140,18 +1175,18 @@ Calc(select=[user_id, name, order_id, product_name, price, ROUND(*(price, 1.1), 
    :        :- Exchange(distribution=[hash[user_id]])
    :        :  +- ChangelogNormalize(key=[user_id])
    :        :     +- Exchange(distribution=[hash[user_id]])
-   :        :        +- TableSourceScan(table=[[default_catalog, default_database, Users, project=[user_id, name], metadata=[]]], fields=[user_id, name])
+   :        :        +- TableSourceScan(table=[[default_catalog, default_database, Users, project=[user_id, name]]], fields=[user_id, name])
    :        +- Exchange(distribution=[hash[user_id]])
    :           +- TableSourceScan(table=[[default_catalog, default_database, Orders]], fields=[order_id, user_id, product])
    :- Exchange(distribution=[hash[product_id]])
    :  +- ChangelogNormalize(key=[product_id])
    :     +- Exchange(distribution=[hash[product_id]])
-   :        +- TableSourceScan(table=[[default_catalog, default_database, ProductDetails, project=[product_id, product_name, price, created_date], metadata=[]]], fields=[product_id, product_name, price, created_date])
+   :        +- TableSourceScan(table=[[default_catalog, default_database, ProductDetails, project=[product_id, product_name, price, created_date]]], fields=[product_id, product_name, price, created_date])
    +- Exchange(distribution=[hash[product_id]])
       +- Calc(select=[product_id, rating, review_text])
          +- ChangelogNormalize(key=[review_id])
             +- Exchange(distribution=[hash[review_id]])
-               +- TableSourceScan(table=[[default_catalog, default_database, Reviews, project=[product_id, rating, review_text, review_id], metadata=[]]], fields=[product_id, rating, review_text, review_id])
+               +- TableSourceScan(table=[[default_catalog, default_database, Reviews, project=[product_id, rating, review_text, review_id]]], fields=[product_id, rating, review_text, review_id])
 ]]>
     </Resource>
   </TestCase>
@@ -1246,22 +1281,22 @@ Calc(select=[developer_id, person.info.name AS developer_name, ticket_id, report
    :        :        :  +- Calc(select=[developer_id, person, person.info.id AS $f3])
    :        :        :     +- ChangelogNormalize(key=[developer_id])
    :        :        :        +- Exchange(distribution=[hash[developer_id]])
-   :        :        :           +- TableSourceScan(table=[[default_catalog, default_database, Developers, project=[developer_id, person], metadata=[]]], fields=[developer_id, person])
+   :        :        :           +- TableSourceScan(table=[[default_catalog, default_database, Developers, project=[developer_id, person]]], fields=[developer_id, person])
    :        :        +- Exchange(distribution=[hash[$f3]])
    :        :           +- Calc(select=[ticket_id, reporter, reporter.info.id AS $f3])
    :        :              +- ChangelogNormalize(key=[ticket_id])
    :        :                 +- Exchange(distribution=[hash[ticket_id]])
-   :        :                    +- TableSourceScan(table=[[default_catalog, default_database, SupportTickets, project=[ticket_id, reporter], metadata=[]]], fields=[ticket_id, reporter])
+   :        :                    +- TableSourceScan(table=[[default_catalog, default_database, SupportTickets, project=[ticket_id, reporter]]], fields=[ticket_id, reporter])
    :        +- Exchange(distribution=[hash[$f3]])
    :           +- Calc(select=[feedback_id, author, author.info.id AS $f3])
    :              +- ChangelogNormalize(key=[feedback_id])
    :                 +- Exchange(distribution=[hash[feedback_id]])
-   :                    +- TableSourceScan(table=[[default_catalog, default_database, Feedback, project=[feedback_id, author], metadata=[]]], fields=[feedback_id, author])
+   :                    +- TableSourceScan(table=[[default_catalog, default_database, Feedback, project=[feedback_id, author]]], fields=[feedback_id, author])
    +- Exchange(distribution=[hash[$f3]])
       +- Calc(select=[sub_id, subscriber, subscriber.info.id AS $f3])
          +- ChangelogNormalize(key=[sub_id])
             +- Exchange(distribution=[hash[sub_id]])
-               +- TableSourceScan(table=[[default_catalog, default_database, Subscriptions, project=[sub_id, subscriber], metadata=[]]], fields=[sub_id, subscriber])
+               +- TableSourceScan(table=[[default_catalog, default_database, Subscriptions, project=[sub_id, subscriber]]], fields=[sub_id, subscriber])
 ]]>
     </Resource>
   </TestCase>
@@ -1305,13 +1340,13 @@ Calc(select=[user_id, order_id, product, price, location])
    :  +- Calc(select=[user_id])
    :     +- ChangelogNormalize(key=[user_id], condition=[>(cash, 100)])
    :        +- Exchange(distribution=[hash[user_id]])
-   :           +- TableSourceScan(table=[[default_catalog, default_database, Users, filter=[], project=[user_id, cash], metadata=[]]], fields=[user_id, cash])
+   :           +- TableSourceScan(table=[[default_catalog, default_database, Users, filter=[], project=[user_id, cash]]], fields=[user_id, cash])
    :- Exchange(distribution=[hash[user_id]])
    :  +- Calc(select=[user_id, order_id, product], where=[IS NOT NULL(product)])
    :     +- TableSourceScan(table=[[default_catalog, default_database, Orders, filter=[]]], fields=[order_id, user_id, product])
    :- Exchange(distribution=[hash[user_id]])
    :  +- Calc(select=[user_id, price], where=[>(price, 50)])
-   :     +- TableSourceScan(table=[[default_catalog, default_database, Payments, filter=[], project=[price, user_id], metadata=[]]], fields=[price, user_id])
+   :     +- TableSourceScan(table=[[default_catalog, default_database, Payments, filter=[], project=[price, user_id]]], fields=[price, user_id])
    +- Exchange(distribution=[hash[user_id]])
       +- Calc(select=[user_id, location], where=[IS NOT NULL(location)])
          +- TableSourceScan(table=[[default_catalog, default_database, Shipments, filter=[]]], fields=[location, user_id])
@@ -1350,14 +1385,14 @@ LogicalProject(user_id=[$0], name=[$1], cash=[$2], user_id0=[$3], order_id=[$4],
     </Resource>
     <Resource name="optimized rel plan">
       <![CDATA[
-MultiJoin(commonJoinKey=[user_id], joinTypes=[INNER], inputUniqueKeys=[(user_id), noUniqueKey], joinConditions=[=(user_id, user_id0)], select=[user_id,name,cash,user_id0,order_id,payment_id,price], rowType=[RecordType(VARCHAR(2147483647) user_id, VARCHAR(2147483647) name, INTEGER cash, VARCHAR(2147483647) user_id0, VARCHAR(2147483647) order_id, VARCHAR(2147483647) payment_id, INTEGER price)])
+MultiJoin(commonJoinKey=[user_id], joinTypes=[INNER], inputUniqueKeys=[(user_id), noUniqueKey], inputUpsertKeys=[(user_id), -], joinConditions=[=(user_id, user_id0)], select=[user_id,name,cash,user_id0,order_id,payment_id,price], rowType=[RecordType(VARCHAR(2147483647) user_id, VARCHAR(2147483647) name, INTEGER cash, VARCHAR(2147483647) user_id0, VARCHAR(2147483647) order_id, VARCHAR(2147483647) payment_id, INTEGER price)])
 :- Exchange(distribution=[hash[user_id]])
 :  +- TableSourceScan(table=[[default_catalog, default_database, Users]], fields=[user_id, name, cash])
 +- Exchange(distribution=[hash[user_id]])
    +- Calc(select=[user_id, order_id, payment_id, price])
       +- MultiJoin(commonJoinKey=[user_id], joinTypes=[INNER], inputUniqueKeys=[(order_id), (payment_id)], joinConditions=[=(user_id, user_id0)], select=[order_id,user_id,payment_id,user_id0,price], rowType=[RecordType(VARCHAR(2147483647) order_id, VARCHAR(2147483647) user_id, VARCHAR(2147483647) payment_id, VARCHAR(2147483647) user_id0, INTEGER price)])
          :- Exchange(distribution=[hash[user_id]])
-         :  +- TableSourceScan(table=[[default_catalog, default_database, Orders, project=[order_id, user_id], metadata=[]]], fields=[order_id, user_id])
+         :  +- TableSourceScan(table=[[default_catalog, default_database, Orders, project=[order_id, user_id]]], fields=[order_id, user_id])
          +- Exchange(distribution=[hash[user_id]])
             +- Calc(select=[payment_id, user_id, price], where=[>(price, 100)])
                +- TableSourceScan(table=[[default_catalog, default_database, Payments, filter=[]]], fields=[payment_id, price, user_id])
@@ -1381,13 +1416,13 @@ LogicalProject(user_id=[$0], name=[$1], order_id=[$3], payment_id=[$6])
     <Resource name="optimized rel plan">
       <![CDATA[
 Calc(select=[user_id, name, order_id, payment_id])
-+- MultiJoin(commonJoinKey=[user_id], joinTypes=[INNER, INNER], inputUniqueKeys=[(user_id), (order_id), (payment_id)], stateTtlHints=[[[STATE_TTL options:[1d, 2d, 1h]]]], joinConditions=[=(user_id, user_id0), =(user_id, user_id1)], select=[user_id,name,order_id,user_id0,payment_id,user_id1], rowType=[RecordType(VARCHAR(2147483647) user_id, VARCHAR(2147483647) name, VARCHAR(2147483647) order_id, VARCHAR(2147483647) user_id0, VARCHAR(2147483647) payment_id, VARCHAR(2147483647) user_id1)])
++- MultiJoin(commonJoinKey=[user_id], joinTypes=[INNER, INNER], inputUniqueKeys=[(user_id), (order_id), (payment_id)], inputUpsertKeys=[(user_id), -, -], stateTtlHints=[[[STATE_TTL options:[1d, 2d, 1h]]]], joinConditions=[=(user_id, user_id0), =(user_id, user_id1)], select=[user_id,name,order_id,user_id0,payment_id,user_id1], rowType=[RecordType(VARCHAR(2147483647) user_id, VARCHAR(2147483647) name, VARCHAR(2147483647) order_id, VARCHAR(2147483647) user_id0, VARCHAR(2147483647) payment_id, VARCHAR(2147483647) user_id1)])
    :- Exchange(distribution=[hash[user_id]])
-   :  +- TableSourceScan(table=[[default_catalog, default_database, Users, project=[user_id, name], metadata=[]]], fields=[user_id, name])
+   :  +- TableSourceScan(table=[[default_catalog, default_database, Users, project=[user_id, name]]], fields=[user_id, name])
    :- Exchange(distribution=[hash[user_id]])
-   :  +- TableSourceScan(table=[[default_catalog, default_database, Orders, project=[order_id, user_id], metadata=[]]], fields=[order_id, user_id])
+   :  +- TableSourceScan(table=[[default_catalog, default_database, Orders, project=[order_id, user_id]]], fields=[order_id, user_id])
    +- Exchange(distribution=[hash[user_id]])
-      +- TableSourceScan(table=[[default_catalog, default_database, Payments, project=[payment_id, user_id], metadata=[]]], fields=[payment_id, user_id])
+      +- TableSourceScan(table=[[default_catalog, default_database, Payments, project=[payment_id, user_id]]], fields=[payment_id, user_id])
 ]]>
     </Resource>
   </TestCase>
@@ -1415,9 +1450,9 @@ Calc(select=[user_id, name, order_id, location])
    :        :- Exchange(distribution=[hash[user_id]])
    :        :  +- ChangelogNormalize(key=[user_id])
    :        :     +- Exchange(distribution=[hash[user_id]])
-   :        :        +- TableSourceScan(table=[[default_catalog, default_database, Users, project=[user_id, name], metadata=[]]], fields=[user_id, name])
+   :        :        +- TableSourceScan(table=[[default_catalog, default_database, Users, project=[user_id, name]]], fields=[user_id, name])
    :        +- Exchange(distribution=[hash[user_id]])
-   :           +- TableSourceScan(table=[[default_catalog, default_database, Orders, project=[order_id, user_id], metadata=[]]], fields=[order_id, user_id])
+   :           +- TableSourceScan(table=[[default_catalog, default_database, Orders, project=[order_id, user_id]]], fields=[order_id, user_id])
    +- Exchange(distribution=[hash[user_id]])
       +- TableSourceScan(table=[[default_catalog, default_database, Shipments]], fields=[location, user_id])
 ]]>
@@ -1440,13 +1475,13 @@ LogicalProject(user_id=[$0], name=[$1], order_id=[$3], payment_id=[$6])
     <Resource name="optimized rel plan">
       <![CDATA[
 Calc(select=[user_id, name, order_id, payment_id])
-+- MultiJoin(commonJoinKey=[user_id], joinTypes=[INNER, INNER], inputUniqueKeys=[(user_id), (order_id), (payment_id)], joinConditions=[=(user_id, user_id0), =(user_id, user_id1)], select=[user_id,name,order_id,user_id0,payment_id,user_id1], rowType=[RecordType(VARCHAR(2147483647) user_id, VARCHAR(2147483647) name, VARCHAR(2147483647) order_id, VARCHAR(2147483647) user_id0, VARCHAR(2147483647) payment_id, VARCHAR(2147483647) user_id1)])
++- MultiJoin(commonJoinKey=[user_id], joinTypes=[INNER, INNER], inputUniqueKeys=[(user_id), (order_id), (payment_id)], inputUpsertKeys=[(user_id), -, -], joinConditions=[=(user_id, user_id0), =(user_id, user_id1)], select=[user_id,name,order_id,user_id0,payment_id,user_id1], rowType=[RecordType(VARCHAR(2147483647) user_id, VARCHAR(2147483647) name, VARCHAR(2147483647) order_id, VARCHAR(2147483647) user_id0, VARCHAR(2147483647) payment_id, VARCHAR(2147483647) user_id1)])
    :- Exchange(distribution=[hash[user_id]])
-   :  +- TableSourceScan(table=[[default_catalog, default_database, Users, project=[user_id, name], metadata=[]]], fields=[user_id, name])
+   :  +- TableSourceScan(table=[[default_catalog, default_database, Users, project=[user_id, name]]], fields=[user_id, name])
    :- Exchange(distribution=[hash[user_id]])
-   :  +- TableSourceScan(table=[[default_catalog, default_database, Orders, project=[order_id, user_id], metadata=[]]], fields=[order_id, user_id])
+   :  +- TableSourceScan(table=[[default_catalog, default_database, Orders, project=[order_id, user_id]]], fields=[order_id, user_id])
    +- Exchange(distribution=[hash[user_id]])
-      +- TableSourceScan(table=[[default_catalog, default_database, Payments, project=[payment_id, user_id], metadata=[]]], fields=[payment_id, user_id])
+      +- TableSourceScan(table=[[default_catalog, default_database, Payments, project=[payment_id, user_id]]], fields=[payment_id, user_id])
 ]]>
     </Resource>
   </TestCase>
@@ -1467,13 +1502,13 @@ LogicalProject(user_id=[$0], name=[$1], order_id=[$3], payment_id=[$6])
     <Resource name="optimized rel plan">
       <![CDATA[
 Calc(select=[user_id, name, order_id, payment_id])
-+- MultiJoin(commonJoinKey=[user_id], joinTypes=[INNER, INNER], inputUniqueKeys=[(user_id), (order_id), (payment_id)], joinConditions=[=(user_id, user_id0), =(user_id, user_id1)], select=[user_id,name,order_id,user_id0,payment_id,user_id1], rowType=[RecordType(VARCHAR(2147483647) user_id, VARCHAR(2147483647) name, VARCHAR(2147483647) order_id, VARCHAR(2147483647) user_id0, VARCHAR(2147483647) payment_id, VARCHAR(2147483647) user_id1)])
++- MultiJoin(commonJoinKey=[user_id], joinTypes=[INNER, INNER], inputUniqueKeys=[(user_id), (order_id), (payment_id)], inputUpsertKeys=[(user_id), -, -], joinConditions=[=(user_id, user_id0), =(user_id, user_id1)], select=[user_id,name,order_id,user_id0,payment_id,user_id1], rowType=[RecordType(VARCHAR(2147483647) user_id, VARCHAR(2147483647) name, VARCHAR(2147483647) order_id, VARCHAR(2147483647) user_id0, VARCHAR(2147483647) payment_id, VARCHAR(2147483647) user_id1)])
    :- Exchange(distribution=[hash[user_id]])
-   :  +- TableSourceScan(table=[[default_catalog, default_database, Users, project=[user_id, name], metadata=[]]], fields=[user_id, name])
+   :  +- TableSourceScan(table=[[default_catalog, default_database, Users, project=[user_id, name]]], fields=[user_id, name])
    :- Exchange(distribution=[hash[user_id]])
-   :  +- TableSourceScan(table=[[default_catalog, default_database, Orders, project=[order_id, user_id], metadata=[]]], fields=[order_id, user_id])
+   :  +- TableSourceScan(table=[[default_catalog, default_database, Orders, project=[order_id, user_id]]], fields=[order_id, user_id])
    +- Exchange(distribution=[hash[user_id]])
-      +- TableSourceScan(table=[[default_catalog, default_database, Payments, project=[payment_id, user_id], metadata=[]]], fields=[payment_id, user_id])
+      +- TableSourceScan(table=[[default_catalog, default_database, Payments, project=[payment_id, user_id]]], fields=[payment_id, user_id])
 ]]>
     </Resource>
   </TestCase>
@@ -1501,11 +1536,11 @@ Calc(select=[user_id, name, order_id, payment_id])
    :        :- Exchange(distribution=[hash[user_id]])
    :        :  +- ChangelogNormalize(key=[user_id])
    :        :     +- Exchange(distribution=[hash[user_id]])
-   :        :        +- TableSourceScan(table=[[default_catalog, default_database, Users, project=[user_id, name], metadata=[]]], fields=[user_id, name])
+   :        :        +- TableSourceScan(table=[[default_catalog, default_database, Users, project=[user_id, name]]], fields=[user_id, name])
    :        +- Exchange(distribution=[hash[user_id]])
-   :           +- TableSourceScan(table=[[default_catalog, default_database, Orders, project=[order_id, user_id], metadata=[]]], fields=[order_id, user_id])
+   :           +- TableSourceScan(table=[[default_catalog, default_database, Orders, project=[order_id, user_id]]], fields=[order_id, user_id])
    +- Exchange(distribution=[hash[user_id]])
-      +- TableSourceScan(table=[[default_catalog, default_database, Payments, project=[payment_id, user_id], metadata=[]]], fields=[payment_id, user_id])
+      +- TableSourceScan(table=[[default_catalog, default_database, Payments, project=[payment_id, user_id]]], fields=[payment_id, user_id])
 ]]>
     </Resource>
   </TestCase>
@@ -1519,26 +1554,26 @@ Sink(table=[default_catalog.default_database.sink1], fields=[a, day, EXPR$2, EXP
          +- MultiJoin(commonJoinKey=[a], joinTypes=[INNER], inputUniqueKeys=[noUniqueKey, noUniqueKey], joinConditions=[=(a, d)], select=[a,day,b0,c,d], rowType=[RecordType(INTEGER a, VARCHAR(2147483647) day, BIGINT b0, VARCHAR(2147483647) c, INTEGER d)])
             :- Exchange(distribution=[hash[a]])
             :  +- Calc(select=[a, DATE_FORMAT(CURRENT_TIMESTAMP(), 'yyMMdd') AS day])
-            :     +- TableSourceScan(table=[[default_catalog, default_database, src1, project=[a], metadata=[]]], fields=[a])
+            :     +- TableSourceScan(table=[[default_catalog, default_database, src1, project=[a]]], fields=[a])
             +- Exchange(distribution=[hash[d]])
-               +- TableSourceScan(table=[[default_catalog, default_database, src2, project=[b, c, d], metadata=[]]], fields=[b, c, d])
+               +- TableSourceScan(table=[[default_catalog, default_database, src2, project=[b, c, d]]], fields=[b, c, d])
 
 Sink(table=[default_catalog.default_database.sink2], fields=[a, day, b, c])
 +- Calc(select=[a, day, b0 AS b, c])
    +- MultiJoin(commonJoinKey=[a], joinTypes=[INNER], inputUniqueKeys=[noUniqueKey, noUniqueKey], joinConditions=[=(a, d)], select=[a,day,b0,c,d], rowType=[RecordType(INTEGER a, VARCHAR(2147483647) day, BIGINT b0, VARCHAR(2147483647) c, INTEGER d)])
       :- Exchange(distribution=[hash[a]])
       :  +- Calc(select=[a, DATE_FORMAT(CURRENT_TIMESTAMP(), 'yyMMdd') AS day])
-      :     +- TableSourceScan(table=[[default_catalog, default_database, src1, project=[a], metadata=[]]], fields=[a])
+      :     +- TableSourceScan(table=[[default_catalog, default_database, src1, project=[a]]], fields=[a])
       +- Exchange(distribution=[hash[d]])
          +- Calc(select=[b, c, d], where=[>(b, 100)])
-            +- TableSourceScan(table=[[default_catalog, default_database, src2, project=[b, c, d], metadata=[]]], fields=[b, c, d])
+            +- TableSourceScan(table=[[default_catalog, default_database, src2, project=[b, c, d]]], fields=[b, c, d])
 
 advice[1]: [ADVICE] You might want to enable local-global two-phase optimization by configuring ('table.exec.mini-batch.enabled' to 'true', 'table.exec.mini-batch.allow-latency' to a positive long value, 'table.exec.mini-batch.size' to a positive long value).
 advice[2]: [WARNING] The column(s): day(generated by non-deterministic function: CURRENT_TIMESTAMP ) can not satisfy the determinism requirement for correctly processing update message('UB'/'UA'/'D' in changelogMode, not 'I' only), this usually happens when input node has no upsertKey(upsertKeys=[{}]) or current node outputs non-deterministic update messages. Please consider removing these non-deterministic columns or making them deterministic by using deterministic functions.
 
 related rel plan:
 Calc(select=[a, DATE_FORMAT(CURRENT_TIMESTAMP(), _UTF-16LE'yyMMdd') AS day], changelogMode=[I,UB,UA,D])
-+- TableSourceScan(table=[[default_catalog, default_database, src1, project=[a], metadata=[]]], fields=[a], changelogMode=[I,UB,UA,D])
++- TableSourceScan(table=[[default_catalog, default_database, src1, project=[a]]], fields=[a], changelogMode=[I,UB,UA,D])
 
 
 ]]>
@@ -1572,14 +1607,14 @@ Calc(select=[user_id, order_id, payment_id, location])
    :        :- Exchange(distribution=[hash[user_id]])
    :        :  +- ChangelogNormalize(key=[user_id])
    :        :     +- Exchange(distribution=[hash[user_id]])
-   :        :        +- TableSourceScan(table=[[default_catalog, default_database, Users, project=[user_id], metadata=[]]], fields=[user_id])
+   :        :        +- TableSourceScan(table=[[default_catalog, default_database, Users, project=[user_id]]], fields=[user_id])
    :        +- Exchange(distribution=[hash[user_id]])
-   :           +- TableSourceScan(table=[[default_catalog, default_database, Orders, project=[order_id, user_id], metadata=[]]], fields=[order_id, user_id])
+   :           +- TableSourceScan(table=[[default_catalog, default_database, Orders, project=[order_id, user_id]]], fields=[order_id, user_id])
    +- Exchange(distribution=[hash[user_id]])
       +- Calc(select=[payment_id, user_id, location])
          +- MultiJoin(commonJoinKey=[user_id], joinTypes=[INNER], inputUniqueKeys=[(payment_id), noUniqueKey], joinConditions=[=(user_id, user_id0)], select=[payment_id,user_id,location,user_id0], rowType=[RecordType(VARCHAR(2147483647) payment_id, VARCHAR(2147483647) user_id, VARCHAR(2147483647) location, VARCHAR(2147483647) user_id0)])
             :- Exchange(distribution=[hash[user_id]])
-            :  +- TableSourceScan(table=[[default_catalog, default_database, Payments, project=[payment_id, user_id], metadata=[]]], fields=[payment_id, user_id])
+            :  +- TableSourceScan(table=[[default_catalog, default_database, Payments, project=[payment_id, user_id]]], fields=[payment_id, user_id])
             +- Exchange(distribution=[hash[user_id]])
                +- TableSourceScan(table=[[default_catalog, default_database, Shipments]], fields=[location, user_id])
 ]]>
@@ -1625,9 +1660,9 @@ LogicalSink(table=[default_catalog.default_database.sink_four_way], fields=[user
       <![CDATA[
 Sink(table=[default_catalog.default_database.sink_four_way], fields=[user_id, order_id, user_id0, payment_id, user_id1, name, location])
 +- Calc(select=[user_id, order_id, user_id0, payment_id, user_id1, name, location])
-   +- MultiJoin(commonJoinKey=[user_id], joinTypes=[INNER, INNER, INNER], inputUniqueKeys=[(user_id), (order_id, user_id), (payment_id, user_id), (user_id)], joinConditions=[=(user_id, user_id0), =(user_id, user_id1), =(user_id, user_id2)], select=[user_id,name,order_id,user_id0,payment_id,user_id1,user_id2,location], rowType=[RecordType(VARCHAR(2147483647) user_id, VARCHAR(2147483647) name, VARCHAR(2147483647) order_id, VARCHAR(2147483647) user_id0, VARCHAR(2147483647) payment_id, VARCHAR(2147483647) user_id1, VARCHAR(2147483647) user_id2, VARCHAR(2147483647) location)])
+   +- MultiJoin(commonJoinKey=[user_id], joinTypes=[INNER, INNER, INNER], inputUniqueKeys=[(user_id), (order_id, user_id), (payment_id, user_id), (user_id)], inputUpsertKeys=[(user_id), (order_id, user_id), (payment_id, user_id), (user_id)], joinConditions=[=(user_id, user_id0), =(user_id, user_id1), =(user_id, user_id2)], select=[user_id,name,order_id,user_id0,payment_id,user_id1,user_id2,location], rowType=[RecordType(VARCHAR(2147483647) user_id, VARCHAR(2147483647) name, VARCHAR(2147483647) order_id, VARCHAR(2147483647) user_id0, VARCHAR(2147483647) payment_id, VARCHAR(2147483647) user_id1, VARCHAR(2147483647) user_id2, VARCHAR(2147483647) location)])
       :- Exchange(distribution=[hash[user_id]])
-      :  +- TableSourceScan(table=[[default_catalog, default_database, UsersPK, project=[user_id, name], metadata=[]]], fields=[user_id, name])
+      :  +- TableSourceScan(table=[[default_catalog, default_database, UsersPK, project=[user_id, name]]], fields=[user_id, name])
       :- Exchange(distribution=[hash[user_id]])
       :  +- Calc(select=[order_id, user_id])
       :     +- ChangelogNormalize(key=[order_id, user_id], condition=[IS NOT NULL(product)])
@@ -1677,13 +1712,100 @@ LogicalSink(table=[default_catalog.default_database.sink_three_way], fields=[use
       <![CDATA[
 Sink(table=[default_catalog.default_database.sink_three_way], fields=[user_id, order_id, user_id0, payment_id, user_id1, description])
 +- Calc(select=[user_id0 AS user_id, order_id, user_id1 AS user_id0, payment_id, user_id AS user_id1, description])
-   +- MultiJoin(commonJoinKey=[user_id], joinTypes=[INNER, INNER], inputUniqueKeys=[(user_id), (order_id, user_id), (payment_id, user_id)], joinConditions=[=(user_id0, user_id), =(user_id0, user_id1)], select=[user_id,description,order_id,user_id0,payment_id,user_id1], rowType=[RecordType(VARCHAR(2147483647) user_id, VARCHAR(2147483647) description, VARCHAR(2147483647) order_id, VARCHAR(2147483647) user_id0, VARCHAR(2147483647) payment_id, VARCHAR(2147483647) user_id1)])
+   +- MultiJoin(commonJoinKey=[user_id], joinTypes=[INNER, INNER], inputUniqueKeys=[(user_id), (order_id, user_id), (payment_id, user_id)], inputUpsertKeys=[(user_id), (order_id, user_id), (payment_id, user_id)], joinConditions=[=(user_id0, user_id), =(user_id0, user_id1)], select=[user_id,description,order_id,user_id0,payment_id,user_id1], rowType=[RecordType(VARCHAR(2147483647) user_id, VARCHAR(2147483647) description, VARCHAR(2147483647) order_id, VARCHAR(2147483647) user_id0, VARCHAR(2147483647) payment_id, VARCHAR(2147483647) user_id1)])
       :- Exchange(distribution=[hash[user_id]])
-      :  +- TableSourceScan(table=[[default_catalog, default_database, UsersPK, project=[user_id, description], metadata=[]]], fields=[user_id, description])
+      :  +- TableSourceScan(table=[[default_catalog, default_database, UsersPK, project=[user_id, description]]], fields=[user_id, description])
       :- Exchange(distribution=[hash[user_id]])
-      :  +- TableSourceScan(table=[[default_catalog, default_database, OrdersPK, project=[order_id, user_id], metadata=[]]], fields=[order_id, user_id])
+      :  +- TableSourceScan(table=[[default_catalog, default_database, OrdersPK, project=[order_id, user_id]]], fields=[order_id, user_id])
       +- Exchange(distribution=[hash[user_id]])
-         +- TableSourceScan(table=[[default_catalog, default_database, PaymentsPK, project=[payment_id, user_id], metadata=[]]], fields=[payment_id, user_id])
+         +- TableSourceScan(table=[[default_catalog, default_database, PaymentsPK, project=[payment_id, user_id]]], fields=[payment_id, user_id])
+]]>
+    </Resource>
+  </TestCase>
+  <TestCase name="testPreservesUpsertKeyThreeWayJoinOnFewerLeftColumnsDoesNot">
+    <Resource name="sql">
+      <![CDATA[
+INSERT INTO sink_orders
+SELECT
+    o.order_id,
+    o.user_id,
+    r.name,
+    a.location
+FROM UserRegionsPK r
+JOIN OrdersPK o
+    ON r.user_id = o.user_id
+JOIN RegionAddressPK a
+    ON r.user_id = a.user_id AND r.region = a.region
+ON CONFLICT DO DEDUPLICATE]]>
+    </Resource>
+    <Resource name="ast">
+      <![CDATA[
+LogicalSink(table=[default_catalog.default_database.sink_orders], fields=[order_id, user_id, name, location])
++- LogicalProject(order_id=[$3], user_id=[$4], name=[$2], location=[$8])
+   +- LogicalJoin(condition=[AND(=($0, $6), =($1, $7))], joinType=[inner])
+      :- LogicalJoin(condition=[=($0, $4)], joinType=[inner])
+      :  :- LogicalTableScan(table=[[default_catalog, default_database, UserRegionsPK]])
+      :  +- LogicalTableScan(table=[[default_catalog, default_database, OrdersPK]])
+      +- LogicalTableScan(table=[[default_catalog, default_database, RegionAddressPK]])
+]]>
+    </Resource>
+    <Resource name="optimized rel plan">
+      <![CDATA[
+Sink(table=[default_catalog.default_database.sink_orders], fields=[order_id, user_id, name, location], upsertMaterialize=[true], conflictStrategy=[DEDUPLICATE])
++- Calc(select=[order_id, user_id0 AS user_id, name, location])
+   +- MultiJoin(commonJoinKey=[user_id], joinTypes=[INNER, INNER], inputUniqueKeys=[(user_id, region), (order_id, user_id), (user_id, region)], joinConditions=[=(user_id, user_id0), AND(=(user_id, user_id1), =(region, region0))], select=[user_id,region,name,order_id,user_id0,user_id1,region0,location], rowType=[RecordType(VARCHAR(2147483647) user_id, VARCHAR(2147483647) region, VARCHAR(2147483647) name, VARCHAR(2147483647) order_id, VARCHAR(2147483647) user_id0, VARCHAR(2147483647) user_id1, VARCHAR(2147483647) region0, VARCHAR(2147483647) location)])
+      :- Exchange(distribution=[hash[user_id]])
+      :  +- ChangelogNormalize(key=[user_id, region])
+      :     +- Exchange(distribution=[hash[user_id, region]])
+      :        +- TableSourceScan(table=[[default_catalog, default_database, UserRegionsPK]], fields=[user_id, region, name])
+      :- Exchange(distribution=[hash[user_id]])
+      :  +- ChangelogNormalize(key=[order_id, user_id])
+      :     +- Exchange(distribution=[hash[order_id, user_id]])
+      :        +- TableSourceScan(table=[[default_catalog, default_database, OrdersPK, project=[order_id, user_id]]], fields=[order_id, user_id])
+      +- Exchange(distribution=[hash[user_id]])
+         +- ChangelogNormalize(key=[user_id, region])
+            +- Exchange(distribution=[hash[user_id, region]])
+               +- TableSourceScan(table=[[default_catalog, default_database, RegionAddressPK]], fields=[user_id, region, location])
+]]>
+    </Resource>
+  </TestCase>
+  <TestCase name="testPreservesUpsertKeyThreeWayJoinOnSecondInputColumns">
+    <Resource name="sql">
+      <![CDATA[
+INSERT INTO sink_addresses
+SELECT
+    a.user_id,
+    a.region,
+    u.name,
+    a.location
+FROM UsersPK u
+JOIN UserRegionsPK r
+    ON u.user_id = r.user_id
+JOIN RegionAddressPK a
+    ON r.user_id = a.user_id AND r.region = a.region]]>
+    </Resource>
+    <Resource name="ast">
+      <![CDATA[
+LogicalSink(table=[default_catalog.default_database.sink_addresses], fields=[user_id, region, name, location])
++- LogicalProject(user_id=[$7], region=[$8], name=[$1], location=[$9])
+   +- LogicalJoin(condition=[AND(=($4, $7), =($5, $8))], joinType=[inner])
+      :- LogicalJoin(condition=[=($0, $4)], joinType=[inner])
+      :  :- LogicalTableScan(table=[[default_catalog, default_database, UsersPK]])
+      :  +- LogicalTableScan(table=[[default_catalog, default_database, UserRegionsPK]])
+      +- LogicalTableScan(table=[[default_catalog, default_database, RegionAddressPK]])
+]]>
+    </Resource>
+    <Resource name="optimized rel plan">
+      <![CDATA[
+Sink(table=[default_catalog.default_database.sink_addresses], fields=[user_id, region, name, location])
++- Calc(select=[user_id1 AS user_id, region0 AS region, name, location])
+   +- MultiJoin(commonJoinKey=[user_id], joinTypes=[INNER, INNER], inputUniqueKeys=[(user_id), (user_id, region), (user_id, region)], inputUpsertKeys=[(user_id), (user_id, region), (user_id, region)], joinConditions=[=(user_id, user_id0), AND(=(user_id0, user_id1), =(region, region0))], select=[user_id,name,user_id0,region,user_id1,region0,location], rowType=[RecordType(VARCHAR(2147483647) user_id, VARCHAR(2147483647) name, VARCHAR(2147483647) user_id0, VARCHAR(2147483647) region, VARCHAR(2147483647) user_id1, VARCHAR(2147483647) region0, VARCHAR(2147483647) location)])
+      :- Exchange(distribution=[hash[user_id]])
+      :  +- TableSourceScan(table=[[default_catalog, default_database, UsersPK, project=[user_id, name]]], fields=[user_id, name])
+      :- Exchange(distribution=[hash[user_id]])
+      :  +- TableSourceScan(table=[[default_catalog, default_database, UserRegionsPK, project=[user_id, region]]], fields=[user_id, region])
+      +- Exchange(distribution=[hash[user_id]])
+         +- TableSourceScan(table=[[default_catalog, default_database, RegionAddressPK]], fields=[user_id, region, location])
 ]]>
     </Resource>
   </TestCase>
@@ -1713,9 +1835,9 @@ LogicalSink(table=[default_catalog.default_database.sink_two_way], fields=[user_
       <![CDATA[
 Sink(table=[default_catalog.default_database.sink_two_way], fields=[user_id, order_id, product, region_id])
 +- Calc(select=[user_id0 AS user_id, order_id, product, region_id])
-   +- MultiJoin(commonJoinKey=[user_id], joinTypes=[INNER], inputUniqueKeys=[(user_id), (order_id, user_id)], joinConditions=[=(user_id, user_id0)], select=[user_id,region_id,order_id,user_id0,product], rowType=[RecordType(VARCHAR(2147483647) user_id, INTEGER region_id, VARCHAR(2147483647) order_id, VARCHAR(2147483647) user_id0, VARCHAR(2147483647) product)])
+   +- MultiJoin(commonJoinKey=[user_id], joinTypes=[INNER], inputUniqueKeys=[(user_id), (order_id, user_id)], inputUpsertKeys=[(user_id), (order_id, user_id)], joinConditions=[=(user_id, user_id0)], select=[user_id,region_id,order_id,user_id0,product], rowType=[RecordType(VARCHAR(2147483647) user_id, INTEGER region_id, VARCHAR(2147483647) order_id, VARCHAR(2147483647) user_id0, VARCHAR(2147483647) product)])
       :- Exchange(distribution=[hash[user_id]])
-      :  +- TableSourceScan(table=[[default_catalog, default_database, UsersPK, project=[user_id, region_id], metadata=[]]], fields=[user_id, region_id])
+      :  +- TableSourceScan(table=[[default_catalog, default_database, UsersPK, project=[user_id, region_id]]], fields=[user_id, region_id])
       +- Exchange(distribution=[hash[user_id]])
          +- TableSourceScan(table=[[default_catalog, default_database, OrdersPK]], fields=[order_id, user_id, product])
 ]]>
@@ -1752,7 +1874,7 @@ Sink(table=[default_catalog.default_database.sink_two_way], fields=[user_id, ord
       :- Exchange(distribution=[hash[user_id]])
       :  +- ChangelogNormalize(key=[user_id])
       :     +- Exchange(distribution=[hash[user_id]])
-      :        +- TableSourceScan(table=[[default_catalog, default_database, UsersPK, project=[user_id, region_id], metadata=[]]], fields=[user_id, region_id])
+      :        +- TableSourceScan(table=[[default_catalog, default_database, UsersPK, project=[user_id, region_id]]], fields=[user_id, region_id])
       +- Exchange(distribution=[hash[user_id]])
          +- ChangelogNormalize(key=[order_id])
             +- Exchange(distribution=[hash[order_id]])
@@ -1786,11 +1908,11 @@ LogicalSink(table=[default_catalog.default_database.sink_two_way], fields=[user_
       <![CDATA[
 Sink(table=[default_catalog.default_database.sink_two_way], fields=[user_id, order_id, product, region_id])
 +- Calc(select=[user_id, order_id, product, region_id])
-   +- MultiJoin(commonJoinKey=[user_id], joinTypes=[LEFT], inputUniqueKeys=[(order_id, user_id), (user_id)], joinConditions=[=(user_id0, user_id)], select=[order_id,user_id,product,user_id0,region_id], rowType=[RecordType(VARCHAR(2147483647) order_id, VARCHAR(2147483647) user_id, VARCHAR(2147483647) product, VARCHAR(2147483647) user_id0, INTEGER region_id)])
+   +- MultiJoin(commonJoinKey=[user_id], joinTypes=[LEFT], inputUniqueKeys=[(order_id, user_id), (user_id)], inputUpsertKeys=[(order_id, user_id), (user_id)], joinConditions=[=(user_id0, user_id)], select=[order_id,user_id,product,user_id0,region_id], rowType=[RecordType(VARCHAR(2147483647) order_id, VARCHAR(2147483647) user_id, VARCHAR(2147483647) product, VARCHAR(2147483647) user_id0, INTEGER region_id)])
       :- Exchange(distribution=[hash[user_id]])
       :  +- TableSourceScan(table=[[default_catalog, default_database, OrdersPK]], fields=[order_id, user_id, product])
       +- Exchange(distribution=[hash[user_id]])
-         +- TableSourceScan(table=[[default_catalog, default_database, UsersPK, project=[user_id, region_id], metadata=[]]], fields=[user_id, region_id])
+         +- TableSourceScan(table=[[default_catalog, default_database, UsersPK, project=[user_id, region_id]]], fields=[user_id, region_id])
 ]]>
     </Resource>
   </TestCase>
@@ -1830,15 +1952,15 @@ LogicalProject(user_id=[$0], name=[$1], order_id=[$3], age=[$7])
     <Resource name="optimized rel plan">
       <![CDATA[
 Calc(select=[user_id, name, order_id, age])
-+- MultiJoin(commonJoinKey=[user_id], joinTypes=[INNER, INNER], inputUniqueKeys=[(user_id), (order_id), noUniqueKey], joinConditions=[=(user_id, user_id0), =(user_id, user_id1)], select=[user_id,name,order_id,user_id0,user_id1,age], rowType=[RecordType(VARCHAR(2147483647) user_id, VARCHAR(2147483647) name, VARCHAR(2147483647) order_id, VARCHAR(2147483647) user_id0, VARCHAR(2147483647) user_id1, INTEGER age)])
++- MultiJoin(commonJoinKey=[user_id], joinTypes=[INNER, INNER], inputUniqueKeys=[(user_id), (order_id), noUniqueKey], inputUpsertKeys=[(user_id), -, -], joinConditions=[=(user_id, user_id0), =(user_id, user_id1)], select=[user_id,name,order_id,user_id0,user_id1,age], rowType=[RecordType(VARCHAR(2147483647) user_id, VARCHAR(2147483647) name, VARCHAR(2147483647) order_id, VARCHAR(2147483647) user_id0, VARCHAR(2147483647) user_id1, INTEGER age)])
    :- Exchange(distribution=[hash[user_id]])
-   :  +- TableSourceScan(table=[[default_catalog, default_database, Users, project=[user_id, name], metadata=[]]], fields=[user_id, name])
+   :  +- TableSourceScan(table=[[default_catalog, default_database, Users, project=[user_id, name]]], fields=[user_id, name])
    :- Exchange(distribution=[hash[user_id]])
-   :  +- TableSourceScan(table=[[default_catalog, default_database, Orders, project=[order_id, user_id], metadata=[]]], fields=[order_id, user_id])
+   :  +- TableSourceScan(table=[[default_catalog, default_database, Orders, project=[order_id, user_id]]], fields=[order_id, user_id])
    +- Exchange(distribution=[hash[user_id]])
       +- Calc(select=[user_id, age])
          +- LookupJoin(table=[default_catalog.default_database.LookupTable], joinType=[InnerJoin], lookup=[id=user_id], select=[user_id, id, age])
-            +- TableSourceScan(table=[[default_catalog, default_database, StreamTable, project=[user_id], metadata=[]]], fields=[user_id])
+            +- TableSourceScan(table=[[default_catalog, default_database, StreamTable, project=[user_id]]], fields=[user_id])
 ]]>
     </Resource>
   </TestCase>
@@ -1875,11 +1997,11 @@ Calc(select=[user_id, name, order_id, payment_id])
    :     :- Exchange(distribution=[hash[user_id]])
    :     :  +- ChangelogNormalize(key=[user_id])
    :     :     +- Exchange(distribution=[hash[user_id]])
-   :     :        +- TableSourceScan(table=[[default_catalog, default_database, Users, project=[user_id, name], metadata=[]]], fields=[user_id, name])
+   :     :        +- TableSourceScan(table=[[default_catalog, default_database, Users, project=[user_id, name]]], fields=[user_id, name])
    :     +- Exchange(distribution=[hash[user_id]])
-   :        +- TableSourceScan(table=[[default_catalog, default_database, Orders, project=[order_id, user_id], metadata=[]]], fields=[order_id, user_id])
+   :        +- TableSourceScan(table=[[default_catalog, default_database, Orders, project=[order_id, user_id]]], fields=[order_id, user_id])
    +- Exchange(distribution=[hash[user_id]])
-      +- TableSourceScan(table=[[default_catalog, default_database, Payments, project=[payment_id, user_id], metadata=[]]], fields=[payment_id, user_id])
+      +- TableSourceScan(table=[[default_catalog, default_database, Payments, project=[payment_id, user_id]]], fields=[payment_id, user_id])
 ]]>
     </Resource>
   </TestCase>
@@ -1909,7 +2031,7 @@ LogicalProject(user_id=[$0], name=[$1], cash=[$2], user_id0=[$3], name0=[$4], ca
     </Resource>
     <Resource name="optimized rel plan">
       <![CDATA[
-MultiJoin(commonJoinKey=[user_id], joinTypes=[LEFT, LEFT, LEFT], inputUniqueKeys=[(user_id), (user_id), (user_id), (user_id)], joinConditions=[=(user_id, user_id0), =(user_id0, user_id1), =(user_id1, user_id2)], select=[user_id,name,cash,user_id0,name0,cash0,user_id1,name1,cash1,user_id2,name2,cash2], rowType=[RecordType(VARCHAR(2147483647) user_id, VARCHAR(2147483647) name, INTEGER cash, VARCHAR(2147483647) user_id0, VARCHAR(2147483647) name0, INTEGER cash0, VARCHAR(2147483647) user_id1, VARCHAR(2147483647) name1, INTEGER cash1, VARCHAR(2147483647) user_id2, VARCHAR(2147483647) name2, INTEGER cash2)])
+MultiJoin(commonJoinKey=[user_id], joinTypes=[LEFT, LEFT, LEFT], inputUniqueKeys=[(user_id), (user_id), (user_id), (user_id)], inputUpsertKeys=[(user_id), (user_id), (user_id), (user_id)], joinConditions=[=(user_id, user_id0), =(user_id0, user_id1), =(user_id1, user_id2)], select=[user_id,name,cash,user_id0,name0,cash0,user_id1,name1,cash1,user_id2,name2,cash2], rowType=[RecordType(VARCHAR(2147483647) user_id, VARCHAR(2147483647) name, INTEGER cash, VARCHAR(2147483647) user_id0, VARCHAR(2147483647) name0, INTEGER cash0, VARCHAR(2147483647) user_id1, VARCHAR(2147483647) name1, INTEGER cash1, VARCHAR(2147483647) user_id2, VARCHAR(2147483647) name2, INTEGER cash2)])
 :- Exchange(distribution=[hash[user_id]])
 :  +- TableSourceScan(table=[[default_catalog, default_database, Users]], fields=[user_id, name, cash])
 :- Exchange(distribution=[hash[user_id]])
@@ -1979,13 +2101,13 @@ LogicalProject(user_id=[$0], name=[$1], order_id=[$3], payment_id=[$6])
     <Resource name="optimized exec plan">
       <![CDATA[
 Calc(select=[user_id, name, order_id, payment_id])
-+- MultiJoin(commonJoinKey=[user_id], joinTypes=[INNER, INNER], inputUniqueKeys=[(user_id), (order_id), (payment_id)], joinConditions=[(user_id = user_id0), (user_id = user_id1)], select=[user_id,name,order_id,user_id0,payment_id,user_id1], rowType=[RecordType(VARCHAR(2147483647) user_id, VARCHAR(2147483647) name, VARCHAR(2147483647) order_id, VARCHAR(2147483647) user_id0, VARCHAR(2147483647) payment_id, VARCHAR(2147483647) user_id1)])
++- MultiJoin(commonJoinKey=[user_id], joinTypes=[INNER, INNER], inputUniqueKeys=[(user_id), (order_id), (payment_id)], inputUpsertKeys=[(user_id), -, -], joinConditions=[(user_id = user_id0), (user_id = user_id1)], select=[user_id,name,order_id,user_id0,payment_id,user_id1], rowType=[RecordType(VARCHAR(2147483647) user_id, VARCHAR(2147483647) name, VARCHAR(2147483647) order_id, VARCHAR(2147483647) user_id0, VARCHAR(2147483647) payment_id, VARCHAR(2147483647) user_id1)])
    :- Exchange(distribution=[hash[user_id]])
-   :  +- TableSourceScan(table=[[default_catalog, default_database, Users, project=[user_id, name], metadata=[]]], fields=[user_id, name])
+   :  +- TableSourceScan(table=[[default_catalog, default_database, Users, project=[user_id, name]]], fields=[user_id, name])
    :- Exchange(distribution=[hash[user_id]])
-   :  +- TableSourceScan(table=[[default_catalog, default_database, Orders, project=[order_id, user_id], metadata=[]]], fields=[order_id, user_id])
+   :  +- TableSourceScan(table=[[default_catalog, default_database, Orders, project=[order_id, user_id]]], fields=[order_id, user_id])
    +- Exchange(distribution=[hash[user_id]])
-      +- TableSourceScan(table=[[default_catalog, default_database, Payments, project=[payment_id, user_id], metadata=[]]], fields=[payment_id, user_id])
+      +- TableSourceScan(table=[[default_catalog, default_database, Payments, project=[payment_id, user_id]]], fields=[payment_id, user_id])
 ]]>
     </Resource>
   </TestCase>
@@ -2001,23 +2123,23 @@ LogicalProject(user_id=[$0], name=[$1], order_id=[$3], payment_id=[$6])
 
 == Optimized Physical Plan ==
 Calc(select=[user_id, name, order_id, payment_id])
-+- MultiJoin(commonJoinKey=[user_id], joinTypes=[INNER, INNER], inputUniqueKeys=[(user_id), (order_id), (payment_id)], joinConditions=[=(user_id, user_id0), =(user_id, user_id1)], select=[user_id,name,order_id,user_id0,payment_id,user_id1], rowType=[RecordType(VARCHAR(2147483647) user_id, VARCHAR(2147483647) name, VARCHAR(2147483647) order_id, VARCHAR(2147483647) user_id0, VARCHAR(2147483647) payment_id, VARCHAR(2147483647) user_id1)])
++- MultiJoin(commonJoinKey=[user_id], joinTypes=[INNER, INNER], inputUniqueKeys=[(user_id), (order_id), (payment_id)], inputUpsertKeys=[(user_id), -, -], joinConditions=[=(user_id, user_id0), =(user_id, user_id1)], select=[user_id,name,order_id,user_id0,payment_id,user_id1], rowType=[RecordType(VARCHAR(2147483647) user_id, VARCHAR(2147483647) name, VARCHAR(2147483647) order_id, VARCHAR(2147483647) user_id0, VARCHAR(2147483647) payment_id, VARCHAR(2147483647) user_id1)])
    :- Exchange(distribution=[hash[user_id]])
-   :  +- TableSourceScan(table=[[default_catalog, default_database, Users, project=[user_id, name], metadata=[]]], fields=[user_id, name])
+   :  +- TableSourceScan(table=[[default_catalog, default_database, Users, project=[user_id, name]]], fields=[user_id, name])
    :- Exchange(distribution=[hash[user_id]])
-   :  +- TableSourceScan(table=[[default_catalog, default_database, Orders, project=[order_id, user_id], metadata=[]]], fields=[order_id, user_id])
+   :  +- TableSourceScan(table=[[default_catalog, default_database, Orders, project=[order_id, user_id]]], fields=[order_id, user_id])
    +- Exchange(distribution=[hash[user_id]])
-      +- TableSourceScan(table=[[default_catalog, default_database, Payments, project=[payment_id, user_id], metadata=[]]], fields=[payment_id, user_id])
+      +- TableSourceScan(table=[[default_catalog, default_database, Payments, project=[payment_id, user_id]]], fields=[payment_id, user_id])
 
 == Optimized Execution Plan ==
 Calc(select=[user_id, name, order_id, payment_id])
-+- MultiJoin(commonJoinKey=[user_id], joinTypes=[INNER, INNER], inputUniqueKeys=[(user_id), (order_id), (payment_id)], joinConditions=[(user_id = user_id0), (user_id = user_id1)], select=[user_id,name,order_id,user_id0,payment_id,user_id1], rowType=[RecordType(VARCHAR(2147483647) user_id, VARCHAR(2147483647) name, VARCHAR(2147483647) order_id, VARCHAR(2147483647) user_id0, VARCHAR(2147483647) payment_id, VARCHAR(2147483647) user_id1)])
++- MultiJoin(commonJoinKey=[user_id], joinTypes=[INNER, INNER], inputUniqueKeys=[(user_id), (order_id), (payment_id)], inputUpsertKeys=[(user_id), -, -], joinConditions=[(user_id = user_id0), (user_id = user_id1)], select=[user_id,name,order_id,user_id0,payment_id,user_id1], rowType=[RecordType(VARCHAR(2147483647) user_id, VARCHAR(2147483647) name, VARCHAR(2147483647) order_id, VARCHAR(2147483647) user_id0, VARCHAR(2147483647) payment_id, VARCHAR(2147483647) user_id1)])
    :- Exchange(distribution=[hash[user_id]])
-   :  +- TableSourceScan(table=[[default_catalog, default_database, Users, project=[user_id, name], metadata=[]]], fields=[user_id, name])
+   :  +- TableSourceScan(table=[[default_catalog, default_database, Users, project=[user_id, name]]], fields=[user_id, name])
    :- Exchange(distribution=[hash[user_id]])
-   :  +- TableSourceScan(table=[[default_catalog, default_database, Orders, project=[order_id, user_id], metadata=[]]], fields=[order_id, user_id])
+   :  +- TableSourceScan(table=[[default_catalog, default_database, Orders, project=[order_id, user_id]]], fields=[order_id, user_id])
    +- Exchange(distribution=[hash[user_id]])
-      +- TableSourceScan(table=[[default_catalog, default_database, Payments, project=[payment_id, user_id], metadata=[]]], fields=[payment_id, user_id])
+      +- TableSourceScan(table=[[default_catalog, default_database, Payments, project=[payment_id, user_id]]], fields=[payment_id, user_id])
 ]]>
     </Resource>
   </TestCase>
@@ -2048,13 +2170,13 @@ LogicalProject(user_id=[$0], name=[$1], order_id=[$3], payment_id=[$6])
     <Resource name="optimized rel plan">
       <![CDATA[
 Calc(select=[user_id, name, order_id, payment_id])
-+- MultiJoin(commonJoinKey=[user_id], joinTypes=[INNER, INNER], inputUniqueKeys=[(user_id), (order_id), (payment_id)], joinConditions=[=(user_id, user_id0), =(user_id, user_id1)], select=[user_id,name,order_id,user_id0,payment_id,user_id1], rowType=[RecordType(VARCHAR(2147483647) user_id, VARCHAR(2147483647) name, VARCHAR(2147483647) order_id, VARCHAR(2147483647) user_id0, VARCHAR(2147483647) payment_id, VARCHAR(2147483647) user_id1)])
++- MultiJoin(commonJoinKey=[user_id], joinTypes=[INNER, INNER], inputUniqueKeys=[(user_id), (order_id), (payment_id)], inputUpsertKeys=[(user_id), -, -], joinConditions=[=(user_id, user_id0), =(user_id, user_id1)], select=[user_id,name,order_id,user_id0,payment_id,user_id1], rowType=[RecordType(VARCHAR(2147483647) user_id, VARCHAR(2147483647) name, VARCHAR(2147483647) order_id, VARCHAR(2147483647) user_id0, VARCHAR(2147483647) payment_id, VARCHAR(2147483647) user_id1)])
    :- Exchange(distribution=[hash[user_id]])
-   :  +- TableSourceScan(table=[[default_catalog, default_database, Users, project=[user_id, name], metadata=[]]], fields=[user_id, name])
+   :  +- TableSourceScan(table=[[default_catalog, default_database, Users, project=[user_id, name]]], fields=[user_id, name])
    :- Exchange(distribution=[hash[user_id]])
-   :  +- TableSourceScan(table=[[default_catalog, default_database, Orders, project=[order_id, user_id], metadata=[]]], fields=[order_id, user_id])
+   :  +- TableSourceScan(table=[[default_catalog, default_database, Orders, project=[order_id, user_id]]], fields=[order_id, user_id])
    +- Exchange(distribution=[hash[user_id]])
-      +- TableSourceScan(table=[[default_catalog, default_database, Payments, project=[payment_id, user_id], metadata=[]]], fields=[payment_id, user_id])
+      +- TableSourceScan(table=[[default_catalog, default_database, Payments, project=[payment_id, user_id]]], fields=[payment_id, user_id])
 ]]>
     </Resource>
   </TestCase>
@@ -2094,9 +2216,9 @@ Calc(select=[user_id, name, order_id, payment_id])
    :        :     +- Exchange(distribution=[hash[user_id]])
    :        :        +- TableSourceScan(table=[[default_catalog, default_database, Users]], fields=[user_id, name, cash])
    :        +- Exchange(distribution=[hash[user_id]])
-   :           +- TableSourceScan(table=[[default_catalog, default_database, Orders, project=[order_id, user_id], metadata=[]]], fields=[order_id, user_id])
+   :           +- TableSourceScan(table=[[default_catalog, default_database, Orders, project=[order_id, user_id]]], fields=[order_id, user_id])
    +- Exchange(distribution=[hash[price]])
-      +- TableSourceScan(table=[[default_catalog, default_database, Payments, project=[payment_id, price], metadata=[]]], fields=[payment_id, price])
+      +- TableSourceScan(table=[[default_catalog, default_database, Payments, project=[payment_id, price]]], fields=[payment_id, price])
 ]]>
     </Resource>
   </TestCase>
@@ -2128,13 +2250,13 @@ LogicalProject(user_id=[$0], name=[$1], order_id=[$3], payment_id=[$6])
     <Resource name="optimized rel plan">
       <![CDATA[
 Calc(select=[user_id, name, order_id, payment_id])
-+- MultiJoin(commonJoinKey=[user_id], joinTypes=[INNER, INNER], inputUniqueKeys=[(user_id), (order_id), (payment_id)], stateTtlHints=[[[STATE_TTL options:[0s, 2d, 0s]]]], joinConditions=[=(user_id, user_id0), =(user_id, user_id1)], select=[user_id,name,order_id,user_id0,payment_id,user_id1], rowType=[RecordType(VARCHAR(2147483647) user_id, VARCHAR(2147483647) name, VARCHAR(2147483647) order_id, VARCHAR(2147483647) user_id0, VARCHAR(2147483647) payment_id, VARCHAR(2147483647) user_id1)])
++- MultiJoin(commonJoinKey=[user_id], joinTypes=[INNER, INNER], inputUniqueKeys=[(user_id), (order_id), (payment_id)], inputUpsertKeys=[(user_id), -, -], stateTtlHints=[[[STATE_TTL options:[0s, 2d, 0s]]]], joinConditions=[=(user_id, user_id0), =(user_id, user_id1)], select=[user_id,name,order_id,user_id0,payment_id,user_id1], rowType=[RecordType(VARCHAR(2147483647) user_id, VARCHAR(2147483647) name, VARCHAR(2147483647) order_id, VARCHAR(2147483647) user_id0, VARCHAR(2147483647) payment_id, VARCHAR(2147483647) user_id1)])
    :- Exchange(distribution=[hash[user_id]])
-   :  +- TableSourceScan(table=[[default_catalog, default_database, Users, project=[user_id, name], metadata=[]]], fields=[user_id, name])
+   :  +- TableSourceScan(table=[[default_catalog, default_database, Users, project=[user_id, name]]], fields=[user_id, name])
    :- Exchange(distribution=[hash[user_id]])
-   :  +- TableSourceScan(table=[[default_catalog, default_database, Orders, project=[order_id, user_id], metadata=[]]], fields=[order_id, user_id])
+   :  +- TableSourceScan(table=[[default_catalog, default_database, Orders, project=[order_id, user_id]]], fields=[order_id, user_id])
    +- Exchange(distribution=[hash[user_id]])
-      +- TableSourceScan(table=[[default_catalog, default_database, Payments, project=[payment_id, user_id], metadata=[]]], fields=[payment_id, user_id])
+      +- TableSourceScan(table=[[default_catalog, default_database, Payments, project=[payment_id, user_id]]], fields=[payment_id, user_id])
 ]]>
     </Resource>
   </TestCase>
@@ -2166,13 +2288,13 @@ LogicalProject(user_id=[$0], name=[$1], order_id=[$3], payment_id=[$6])
     <Resource name="optimized rel plan">
       <![CDATA[
 Calc(select=[user_id, name, order_id, payment_id])
-+- MultiJoin(commonJoinKey=[user_id], joinTypes=[INNER, INNER], inputUniqueKeys=[(user_id), (order_id), (payment_id)], stateTtlHints=[[[STATE_TTL options:[1d, 2d, 1h]]]], joinConditions=[=(user_id, user_id0), =(user_id, user_id1)], select=[user_id,name,order_id,user_id0,payment_id,user_id1], rowType=[RecordType(VARCHAR(2147483647) user_id, VARCHAR(2147483647) name, VARCHAR(2147483647) order_id, VARCHAR(2147483647) user_id0, VARCHAR(2147483647) payment_id, VARCHAR(2147483647) user_id1)])
++- MultiJoin(commonJoinKey=[user_id], joinTypes=[INNER, INNER], inputUniqueKeys=[(user_id), (order_id), (payment_id)], inputUpsertKeys=[(user_id), -, -], stateTtlHints=[[[STATE_TTL options:[1d, 2d, 1h]]]], joinConditions=[=(user_id, user_id0), =(user_id, user_id1)], select=[user_id,name,order_id,user_id0,payment_id,user_id1], rowType=[RecordType(VARCHAR(2147483647) user_id, VARCHAR(2147483647) name, VARCHAR(2147483647) order_id, VARCHAR(2147483647) user_id0, VARCHAR(2147483647) payment_id, VARCHAR(2147483647) user_id1)])
    :- Exchange(distribution=[hash[user_id]])
-   :  +- TableSourceScan(table=[[default_catalog, default_database, Users, project=[user_id, name], metadata=[]]], fields=[user_id, name])
+   :  +- TableSourceScan(table=[[default_catalog, default_database, Users, project=[user_id, name]]], fields=[user_id, name])
    :- Exchange(distribution=[hash[user_id]])
-   :  +- TableSourceScan(table=[[default_catalog, default_database, Orders, project=[order_id, user_id], metadata=[]]], fields=[order_id, user_id])
+   :  +- TableSourceScan(table=[[default_catalog, default_database, Orders, project=[order_id, user_id]]], fields=[order_id, user_id])
    +- Exchange(distribution=[hash[user_id]])
-      +- TableSourceScan(table=[[default_catalog, default_database, Payments, project=[payment_id, user_id], metadata=[]]], fields=[payment_id, user_id])
+      +- TableSourceScan(table=[[default_catalog, default_database, Payments, project=[payment_id, user_id]]], fields=[payment_id, user_id])
 ]]>
     </Resource>
   </TestCase>
@@ -2206,11 +2328,11 @@ MultiJoin(commonJoinKey=[noCommonJoinKey], joinTypes=[INNER], inputUniqueKeys=[n
 :     :- Exchange(distribution=[single])
 :     :  +- ChangelogNormalize(key=[user_id])
 :     :     +- Exchange(distribution=[hash[user_id]])
-:     :        +- TableSourceScan(table=[[default_catalog, default_database, Users, project=[user_id, name], metadata=[]]], fields=[user_id, name])
+:     :        +- TableSourceScan(table=[[default_catalog, default_database, Users, project=[user_id, name]]], fields=[user_id, name])
 :     +- Exchange(distribution=[single])
-:        +- TableSourceScan(table=[[default_catalog, default_database, Orders, project=[order_id], metadata=[]]], fields=[order_id])
+:        +- TableSourceScan(table=[[default_catalog, default_database, Orders, project=[order_id]]], fields=[order_id])
 +- Exchange(distribution=[single])
-   +- TableSourceScan(table=[[default_catalog, default_database, Payments, project=[payment_id], metadata=[]]], fields=[payment_id])
+   +- TableSourceScan(table=[[default_catalog, default_database, Payments, project=[payment_id]]], fields=[payment_id])
 ]]>
     </Resource>
   </TestCase>
@@ -2231,13 +2353,13 @@ LogicalProject(user_id=[$0], name=[$1], order_id=[$3], payment_id=[$6])
     <Resource name="optimized rel plan">
       <![CDATA[
 Calc(select=[user_id, name, order_id, payment_id])
-+- MultiJoin(commonJoinKey=[user_id], joinTypes=[INNER, LEFT], inputUniqueKeys=[(user_id), (order_id), (payment_id)], joinConditions=[=(user_id, user_id0), =(user_id, user_id1)], select=[user_id,name,order_id,user_id0,payment_id,user_id1], rowType=[RecordType(VARCHAR(2147483647) user_id, VARCHAR(2147483647) name, VARCHAR(2147483647) order_id, VARCHAR(2147483647) user_id0, VARCHAR(2147483647) payment_id, VARCHAR(2147483647) user_id1)])
++- MultiJoin(commonJoinKey=[user_id], joinTypes=[INNER, LEFT], inputUniqueKeys=[(user_id), (order_id), (payment_id)], inputUpsertKeys=[(user_id), -, -], joinConditions=[=(user_id, user_id0), =(user_id, user_id1)], select=[user_id,name,order_id,user_id0,payment_id,user_id1], rowType=[RecordType(VARCHAR(2147483647) user_id, VARCHAR(2147483647) name, VARCHAR(2147483647) order_id, VARCHAR(2147483647) user_id0, VARCHAR(2147483647) payment_id, VARCHAR(2147483647) user_id1)])
    :- Exchange(distribution=[hash[user_id]])
-   :  +- TableSourceScan(table=[[default_catalog, default_database, Users, project=[user_id, name], metadata=[]]], fields=[user_id, name])
+   :  +- TableSourceScan(table=[[default_catalog, default_database, Users, project=[user_id, name]]], fields=[user_id, name])
    :- Exchange(distribution=[hash[user_id]])
-   :  +- TableSourceScan(table=[[default_catalog, default_database, Orders, project=[order_id, user_id], metadata=[]]], fields=[order_id, user_id])
+   :  +- TableSourceScan(table=[[default_catalog, default_database, Orders, project=[order_id, user_id]]], fields=[order_id, user_id])
    +- Exchange(distribution=[hash[user_id]])
-      +- TableSourceScan(table=[[default_catalog, default_database, Payments, project=[payment_id, user_id], metadata=[]]], fields=[payment_id, user_id])
+      +- TableSourceScan(table=[[default_catalog, default_database, Payments, project=[payment_id, user_id]]], fields=[payment_id, user_id])
 ]]>
     </Resource>
   </TestCase>
@@ -2277,9 +2399,9 @@ Calc(select=[name, proctime, $rowtime, price])
    :- Exchange(distribution=[hash[user_id]])
    :  +- Calc(select=[user_id, CAST($rowtime AS TIMESTAMP(3)) AS $rowtime])
    :     +- WatermarkAssigner(rowtime=[$rowtime], watermark=[$rowtime])
-   :        +- TableSourceScan(table=[[default_catalog, default_database, OrdersWithRowtime, project=[user_id, $rowtime], metadata=[]]], fields=[user_id, $rowtime])
+   :        +- TableSourceScan(table=[[default_catalog, default_database, OrdersWithRowtime, project=[user_id, $rowtime]]], fields=[user_id, $rowtime])
    +- Exchange(distribution=[hash[user_id]])
-      +- TableSourceScan(table=[[default_catalog, default_database, Payments, project=[price, user_id], metadata=[]]], fields=[price, user_id])
+      +- TableSourceScan(table=[[default_catalog, default_database, Payments, project=[price, user_id]]], fields=[price, user_id])
 ]]>
     </Resource>
   </TestCase>
@@ -2310,13 +2432,13 @@ LogicalProject(user_id=[$0], name=[$1], order_id=[$3], payment_id=[$6])
     <Resource name="optimized exec plan">
       <![CDATA[
 Calc(select=[user_id, name, order_id, payment_id])
-+- MultiJoin(commonJoinKey=[user_id], joinTypes=[LEFT, LEFT], inputUniqueKeys=[(user_id), (order_id), (payment_id)], joinConditions=[(user_id = user_id0), (user_id = user_id1)], select=[user_id,name,order_id,user_id0,payment_id,user_id1], rowType=[RecordType(VARCHAR(2147483647) user_id, VARCHAR(2147483647) name, VARCHAR(2147483647) order_id, VARCHAR(2147483647) user_id0, VARCHAR(2147483647) payment_id, VARCHAR(2147483647) user_id1)])
++- MultiJoin(commonJoinKey=[user_id], joinTypes=[LEFT, LEFT], inputUniqueKeys=[(user_id), (order_id), (payment_id)], inputUpsertKeys=[(user_id), -, -], joinConditions=[(user_id = user_id0), (user_id = user_id1)], select=[user_id,name,order_id,user_id0,payment_id,user_id1], rowType=[RecordType(VARCHAR(2147483647) user_id, VARCHAR(2147483647) name, VARCHAR(2147483647) order_id, VARCHAR(2147483647) user_id0, VARCHAR(2147483647) payment_id, VARCHAR(2147483647) user_id1)])
    :- Exchange(distribution=[hash[user_id]])
-   :  +- TableSourceScan(table=[[default_catalog, default_database, Users, project=[user_id, name], metadata=[]]], fields=[user_id, name])
+   :  +- TableSourceScan(table=[[default_catalog, default_database, Users, project=[user_id, name]]], fields=[user_id, name])
    :- Exchange(distribution=[hash[user_id]])
-   :  +- TableSourceScan(table=[[default_catalog, default_database, Orders, project=[order_id, user_id], metadata=[]]], fields=[order_id, user_id])
+   :  +- TableSourceScan(table=[[default_catalog, default_database, Orders, project=[order_id, user_id]]], fields=[order_id, user_id])
    +- Exchange(distribution=[hash[user_id]])
-      +- TableSourceScan(table=[[default_catalog, default_database, Payments, project=[payment_id, user_id], metadata=[]]], fields=[payment_id, user_id])
+      +- TableSourceScan(table=[[default_catalog, default_database, Payments, project=[payment_id, user_id]]], fields=[payment_id, user_id])
 ]]>
     </Resource>
   </TestCase>
@@ -2332,23 +2454,23 @@ LogicalProject(user_id=[$0], name=[$1], order_id=[$3], payment_id=[$6])
 
 == Optimized Physical Plan ==
 Calc(select=[user_id, name, order_id, payment_id])
-+- MultiJoin(commonJoinKey=[user_id], joinTypes=[LEFT, LEFT], inputUniqueKeys=[(user_id), (order_id), (payment_id)], joinConditions=[=(user_id, user_id0), =(user_id, user_id1)], select=[user_id,name,order_id,user_id0,payment_id,user_id1], rowType=[RecordType(VARCHAR(2147483647) user_id, VARCHAR(2147483647) name, VARCHAR(2147483647) order_id, VARCHAR(2147483647) user_id0, VARCHAR(2147483647) payment_id, VARCHAR(2147483647) user_id1)])
++- MultiJoin(commonJoinKey=[user_id], joinTypes=[LEFT, LEFT], inputUniqueKeys=[(user_id), (order_id), (payment_id)], inputUpsertKeys=[(user_id), -, -], joinConditions=[=(user_id, user_id0), =(user_id, user_id1)], select=[user_id,name,order_id,user_id0,payment_id,user_id1], rowType=[RecordType(VARCHAR(2147483647) user_id, VARCHAR(2147483647) name, VARCHAR(2147483647) order_id, VARCHAR(2147483647) user_id0, VARCHAR(2147483647) payment_id, VARCHAR(2147483647) user_id1)])
    :- Exchange(distribution=[hash[user_id]])
-   :  +- TableSourceScan(table=[[default_catalog, default_database, Users, project=[user_id, name], metadata=[]]], fields=[user_id, name])
+   :  +- TableSourceScan(table=[[default_catalog, default_database, Users, project=[user_id, name]]], fields=[user_id, name])
    :- Exchange(distribution=[hash[user_id]])
-   :  +- TableSourceScan(table=[[default_catalog, default_database, Orders, project=[order_id, user_id], metadata=[]]], fields=[order_id, user_id])
+   :  +- TableSourceScan(table=[[default_catalog, default_database, Orders, project=[order_id, user_id]]], fields=[order_id, user_id])
    +- Exchange(distribution=[hash[user_id]])
-      +- TableSourceScan(table=[[default_catalog, default_database, Payments, project=[payment_id, user_id], metadata=[]]], fields=[payment_id, user_id])
+      +- TableSourceScan(table=[[default_catalog, default_database, Payments, project=[payment_id, user_id]]], fields=[payment_id, user_id])
 
 == Optimized Execution Plan ==
 Calc(select=[user_id, name, order_id, payment_id])
-+- MultiJoin(commonJoinKey=[user_id], joinTypes=[LEFT, LEFT], inputUniqueKeys=[(user_id), (order_id), (payment_id)], joinConditions=[(user_id = user_id0), (user_id = user_id1)], select=[user_id,name,order_id,user_id0,payment_id,user_id1], rowType=[RecordType(VARCHAR(2147483647) user_id, VARCHAR(2147483647) name, VARCHAR(2147483647) order_id, VARCHAR(2147483647) user_id0, VARCHAR(2147483647) payment_id, VARCHAR(2147483647) user_id1)])
++- MultiJoin(commonJoinKey=[user_id], joinTypes=[LEFT, LEFT], inputUniqueKeys=[(user_id), (order_id), (payment_id)], inputUpsertKeys=[(user_id), -, -], joinConditions=[(user_id = user_id0), (user_id = user_id1)], select=[user_id,name,order_id,user_id0,payment_id,user_id1], rowType=[RecordType(VARCHAR(2147483647) user_id, VARCHAR(2147483647) name, VARCHAR(2147483647) order_id, VARCHAR(2147483647) user_id0, VARCHAR(2147483647) payment_id, VARCHAR(2147483647) user_id1)])
    :- Exchange(distribution=[hash[user_id]])
-   :  +- TableSourceScan(table=[[default_catalog, default_database, Users, project=[user_id, name], metadata=[]]], fields=[user_id, name])
+   :  +- TableSourceScan(table=[[default_catalog, default_database, Users, project=[user_id, name]]], fields=[user_id, name])
    :- Exchange(distribution=[hash[user_id]])
-   :  +- TableSourceScan(table=[[default_catalog, default_database, Orders, project=[order_id, user_id], metadata=[]]], fields=[order_id, user_id])
+   :  +- TableSourceScan(table=[[default_catalog, default_database, Orders, project=[order_id, user_id]]], fields=[order_id, user_id])
    +- Exchange(distribution=[hash[user_id]])
-      +- TableSourceScan(table=[[default_catalog, default_database, Payments, project=[payment_id, user_id], metadata=[]]], fields=[payment_id, user_id])
+      +- TableSourceScan(table=[[default_catalog, default_database, Payments, project=[payment_id, user_id]]], fields=[payment_id, user_id])
 ]]>
     </Resource>
   </TestCase>
@@ -2379,13 +2501,13 @@ LogicalProject(user_id=[$0], name=[$1], order_id=[$3], payment_id=[$6])
     <Resource name="optimized rel plan">
       <![CDATA[
 Calc(select=[user_id, name, order_id, payment_id])
-+- MultiJoin(commonJoinKey=[user_id], joinTypes=[LEFT, LEFT], inputUniqueKeys=[(user_id), (order_id), (payment_id)], joinConditions=[=(user_id, user_id0), =(user_id, user_id1)], select=[user_id,name,order_id,user_id0,payment_id,user_id1], rowType=[RecordType(VARCHAR(2147483647) user_id, VARCHAR(2147483647) name, VARCHAR(2147483647) order_id, VARCHAR(2147483647) user_id0, VARCHAR(2147483647) payment_id, VARCHAR(2147483647) user_id1)])
++- MultiJoin(commonJoinKey=[user_id], joinTypes=[LEFT, LEFT], inputUniqueKeys=[(user_id), (order_id), (payment_id)], inputUpsertKeys=[(user_id), -, -], joinConditions=[=(user_id, user_id0), =(user_id, user_id1)], select=[user_id,name,order_id,user_id0,payment_id,user_id1], rowType=[RecordType(VARCHAR(2147483647) user_id, VARCHAR(2147483647) name, VARCHAR(2147483647) order_id, VARCHAR(2147483647) user_id0, VARCHAR(2147483647) payment_id, VARCHAR(2147483647) user_id1)])
    :- Exchange(distribution=[hash[user_id]])
-   :  +- TableSourceScan(table=[[default_catalog, default_database, Users, project=[user_id, name], metadata=[]]], fields=[user_id, name])
+   :  +- TableSourceScan(table=[[default_catalog, default_database, Users, project=[user_id, name]]], fields=[user_id, name])
    :- Exchange(distribution=[hash[user_id]])
-   :  +- TableSourceScan(table=[[default_catalog, default_database, Orders, project=[order_id, user_id], metadata=[]]], fields=[order_id, user_id])
+   :  +- TableSourceScan(table=[[default_catalog, default_database, Orders, project=[order_id, user_id]]], fields=[order_id, user_id])
    +- Exchange(distribution=[hash[user_id]])
-      +- TableSourceScan(table=[[default_catalog, default_database, Payments, project=[payment_id, user_id], metadata=[]]], fields=[payment_id, user_id])
+      +- TableSourceScan(table=[[default_catalog, default_database, Payments, project=[payment_id, user_id]]], fields=[payment_id, user_id])
 ]]>
     </Resource>
   </TestCase>
@@ -2418,14 +2540,14 @@ LogicalProject(user_id=[$0], name=[$1], order_id=[$3], payment_id=[$6])
     <Resource name="optimized exec plan">
       <![CDATA[
 Calc(select=[user_id, CAST('Gus' AS VARCHAR(2147483647)) AS name, order_id, CAST(payment_id AS VARCHAR(2147483647)) AS payment_id])
-+- MultiJoin(commonJoinKey=[user_id], joinTypes=[LEFT, INNER], inputUniqueKeys=[(user_id), (order_id), (payment_id)], joinConditions=[(user_id = user_id0), (user_id = user_id1)], select=[user_id,order_id,user_id0,payment_id,user_id1], rowType=[RecordType(VARCHAR(2147483647) user_id, VARCHAR(2147483647) order_id, VARCHAR(2147483647) user_id0, VARCHAR(2147483647) payment_id, VARCHAR(2147483647) user_id1)])
++- MultiJoin(commonJoinKey=[user_id], joinTypes=[LEFT, INNER], inputUniqueKeys=[(user_id), (order_id), (payment_id)], inputUpsertKeys=[(user_id), -, -], joinConditions=[(user_id = user_id0), (user_id = user_id1)], select=[user_id,order_id,user_id0,payment_id,user_id1], rowType=[RecordType(VARCHAR(2147483647) user_id, VARCHAR(2147483647) order_id, VARCHAR(2147483647) user_id0, VARCHAR(2147483647) payment_id, VARCHAR(2147483647) user_id1)])
    :- Exchange(distribution=[hash[user_id]])
    :  +- Calc(select=[user_id])
    :     +- ChangelogNormalize(key=[user_id], condition=[(name = 'Gus')])
    :        +- Exchange(distribution=[hash[user_id]])
-   :           +- TableSourceScan(table=[[default_catalog, default_database, Users, filter=[], project=[user_id, name], metadata=[]]], fields=[user_id, name])
+   :           +- TableSourceScan(table=[[default_catalog, default_database, Users, filter=[], project=[user_id, name]]], fields=[user_id, name])
    :- Exchange(distribution=[hash[user_id]])
-   :  +- TableSourceScan(table=[[default_catalog, default_database, Orders, project=[order_id, user_id], metadata=[]]], fields=[order_id, user_id])
+   :  +- TableSourceScan(table=[[default_catalog, default_database, Orders, project=[order_id, user_id]]], fields=[order_id, user_id])
    +- Exchange(distribution=[hash[user_id]])
       +- Calc(select=[payment_id, user_id], where=[(price > 10)])
          +- TableSourceScan(table=[[default_catalog, default_database, Payments, filter=[]]], fields=[payment_id, price, user_id])
@@ -2445,28 +2567,28 @@ LogicalProject(user_id=[$0], name=[$1], order_id=[$3], payment_id=[$6])
 
 == Optimized Physical Plan ==
 Calc(select=[user_id, CAST(_UTF-16LE'Gus':VARCHAR(2147483647) CHARACTER SET "UTF-16LE" AS VARCHAR(2147483647) CHARACTER SET "UTF-16LE") AS name, order_id, CAST(payment_id AS VARCHAR(2147483647) CHARACTER SET "UTF-16LE") AS payment_id])
-+- MultiJoin(commonJoinKey=[user_id], joinTypes=[LEFT, INNER], inputUniqueKeys=[(user_id), (order_id), (payment_id)], joinConditions=[=(user_id, user_id0), =(user_id, user_id1)], select=[user_id,order_id,user_id0,payment_id,user_id1], rowType=[RecordType(VARCHAR(2147483647) user_id, VARCHAR(2147483647) order_id, VARCHAR(2147483647) user_id0, VARCHAR(2147483647) payment_id, VARCHAR(2147483647) user_id1)])
++- MultiJoin(commonJoinKey=[user_id], joinTypes=[LEFT, INNER], inputUniqueKeys=[(user_id), (order_id), (payment_id)], inputUpsertKeys=[(user_id), -, -], joinConditions=[=(user_id, user_id0), =(user_id, user_id1)], select=[user_id,order_id,user_id0,payment_id,user_id1], rowType=[RecordType(VARCHAR(2147483647) user_id, VARCHAR(2147483647) order_id, VARCHAR(2147483647) user_id0, VARCHAR(2147483647) payment_id, VARCHAR(2147483647) user_id1)])
    :- Exchange(distribution=[hash[user_id]])
    :  +- Calc(select=[user_id])
    :     +- ChangelogNormalize(key=[user_id], condition=[=(name, _UTF-16LE'Gus':VARCHAR(2147483647) CHARACTER SET "UTF-16LE")])
    :        +- Exchange(distribution=[hash[user_id]])
-   :           +- TableSourceScan(table=[[default_catalog, default_database, Users, filter=[], project=[user_id, name], metadata=[]]], fields=[user_id, name])
+   :           +- TableSourceScan(table=[[default_catalog, default_database, Users, filter=[], project=[user_id, name]]], fields=[user_id, name])
    :- Exchange(distribution=[hash[user_id]])
-   :  +- TableSourceScan(table=[[default_catalog, default_database, Orders, project=[order_id, user_id], metadata=[]]], fields=[order_id, user_id])
+   :  +- TableSourceScan(table=[[default_catalog, default_database, Orders, project=[order_id, user_id]]], fields=[order_id, user_id])
    +- Exchange(distribution=[hash[user_id]])
       +- Calc(select=[payment_id, user_id], where=[>(price, 10)])
          +- TableSourceScan(table=[[default_catalog, default_database, Payments, filter=[]]], fields=[payment_id, price, user_id])
 
 == Optimized Execution Plan ==
 Calc(select=[user_id, CAST('Gus' AS VARCHAR(2147483647)) AS name, order_id, CAST(payment_id AS VARCHAR(2147483647)) AS payment_id])
-+- MultiJoin(commonJoinKey=[user_id], joinTypes=[LEFT, INNER], inputUniqueKeys=[(user_id), (order_id), (payment_id)], joinConditions=[(user_id = user_id0), (user_id = user_id1)], select=[user_id,order_id,user_id0,payment_id,user_id1], rowType=[RecordType(VARCHAR(2147483647) user_id, VARCHAR(2147483647) order_id, VARCHAR(2147483647) user_id0, VARCHAR(2147483647) payment_id, VARCHAR(2147483647) user_id1)])
++- MultiJoin(commonJoinKey=[user_id], joinTypes=[LEFT, INNER], inputUniqueKeys=[(user_id), (order_id), (payment_id)], inputUpsertKeys=[(user_id), -, -], joinConditions=[(user_id = user_id0), (user_id = user_id1)], select=[user_id,order_id,user_id0,payment_id,user_id1], rowType=[RecordType(VARCHAR(2147483647) user_id, VARCHAR(2147483647) order_id, VARCHAR(2147483647) user_id0, VARCHAR(2147483647) payment_id, VARCHAR(2147483647) user_id1)])
    :- Exchange(distribution=[hash[user_id]])
    :  +- Calc(select=[user_id])
    :     +- ChangelogNormalize(key=[user_id], condition=[(name = 'Gus')])
    :        +- Exchange(distribution=[hash[user_id]])
-   :           +- TableSourceScan(table=[[default_catalog, default_database, Users, filter=[], project=[user_id, name], metadata=[]]], fields=[user_id, name])
+   :           +- TableSourceScan(table=[[default_catalog, default_database, Users, filter=[], project=[user_id, name]]], fields=[user_id, name])
    :- Exchange(distribution=[hash[user_id]])
-   :  +- TableSourceScan(table=[[default_catalog, default_database, Orders, project=[order_id, user_id], metadata=[]]], fields=[order_id, user_id])
+   :  +- TableSourceScan(table=[[default_catalog, default_database, Orders, project=[order_id, user_id]]], fields=[order_id, user_id])
    +- Exchange(distribution=[hash[user_id]])
       +- Calc(select=[payment_id, user_id], where=[(price > 10)])
          +- TableSourceScan(table=[[default_catalog, default_database, Payments, filter=[]]], fields=[payment_id, price, user_id])
@@ -2502,14 +2624,14 @@ LogicalProject(user_id=[$0], name=[$1], order_id=[$3], payment_id=[$6])
     <Resource name="optimized rel plan">
       <![CDATA[
 Calc(select=[user_id, CAST('Gus' AS VARCHAR(2147483647)) AS name, order_id, CAST(payment_id AS VARCHAR(2147483647)) AS payment_id])
-+- MultiJoin(commonJoinKey=[user_id], joinTypes=[LEFT, INNER], inputUniqueKeys=[(user_id), (order_id), (payment_id)], joinConditions=[=(user_id, user_id0), =(user_id, user_id1)], select=[user_id,order_id,user_id0,payment_id,user_id1], rowType=[RecordType(VARCHAR(2147483647) user_id, VARCHAR(2147483647) order_id, VARCHAR(2147483647) user_id0, VARCHAR(2147483647) payment_id, VARCHAR(2147483647) user_id1)])
++- MultiJoin(commonJoinKey=[user_id], joinTypes=[LEFT, INNER], inputUniqueKeys=[(user_id), (order_id), (payment_id)], inputUpsertKeys=[(user_id), -, -], joinConditions=[=(user_id, user_id0), =(user_id, user_id1)], select=[user_id,order_id,user_id0,payment_id,user_id1], rowType=[RecordType(VARCHAR(2147483647) user_id, VARCHAR(2147483647) order_id, VARCHAR(2147483647) user_id0, VARCHAR(2147483647) payment_id, VARCHAR(2147483647) user_id1)])
    :- Exchange(distribution=[hash[user_id]])
    :  +- Calc(select=[user_id])
    :     +- ChangelogNormalize(key=[user_id], condition=[=(name, 'Gus')])
    :        +- Exchange(distribution=[hash[user_id]])
-   :           +- TableSourceScan(table=[[default_catalog, default_database, Users, filter=[], project=[user_id, name], metadata=[]]], fields=[user_id, name])
+   :           +- TableSourceScan(table=[[default_catalog, default_database, Users, filter=[], project=[user_id, name]]], fields=[user_id, name])
    :- Exchange(distribution=[hash[user_id]])
-   :  +- TableSourceScan(table=[[default_catalog, default_database, Orders, project=[order_id, user_id], metadata=[]]], fields=[order_id, user_id])
+   :  +- TableSourceScan(table=[[default_catalog, default_database, Orders, project=[order_id, user_id]]], fields=[order_id, user_id])
    +- Exchange(distribution=[hash[user_id]])
       +- Calc(select=[payment_id, user_id], where=[>(price, 10)])
          +- TableSourceScan(table=[[default_catalog, default_database, Payments, filter=[]]], fields=[payment_id, price, user_id])
@@ -2595,13 +2717,54 @@ LogicalProject(order_id=[$0], user_id=[$1], product=[$2], user_id0=[$3], name=[$
     </Resource>
     <Resource name="optimized rel plan">
       <![CDATA[
-MultiJoin(commonJoinKey=[user_id], joinTypes=[LEFT], inputUniqueKeys=[noUniqueKey, (user_id)], joinConditions=[=(user_id, user_id0)], select=[order_id,user_id,product,user_id0,name,cash], rowType=[RecordType(VARCHAR(2147483647) order_id, VARCHAR(2147483647) user_id, VARCHAR(2147483647) product, VARCHAR(2147483647) user_id0, VARCHAR(2147483647) name, INTEGER cash)])
+MultiJoin(commonJoinKey=[user_id], joinTypes=[LEFT], inputUniqueKeys=[noUniqueKey, (user_id)], inputUpsertKeys=[-, (user_id)], joinConditions=[=(user_id, user_id0)], select=[order_id,user_id,product,user_id0,name,cash], rowType=[RecordType(VARCHAR(2147483647) order_id, VARCHAR(2147483647) user_id, VARCHAR(2147483647) product, VARCHAR(2147483647) user_id0, VARCHAR(2147483647) name, INTEGER cash)])
 :- Exchange(distribution=[hash[user_id]])
 :  +- Union(all=[true], union=[order_id, user_id, product])
 :     :- TableSourceScan(table=[[default_catalog, default_database, Orders]], fields=[order_id, user_id, product])
 :     +- TableSourceScan(table=[[default_catalog, default_database, Orders2]], fields=[order_id, user_id, product])
 +- Exchange(distribution=[hash[user_id]])
    +- TableSourceScan(table=[[default_catalog, default_database, Users]], fields=[user_id, name, cash])
+]]>
+    </Resource>
+  </TestCase>
+  <TestCase name="testUpsertKeyNotContainingJoinKeyKeepsUpdateBefore">
+    <Resource name="sql">
+      <![CDATA[INSERT INTO sink_orders
+SELECT o.user_id, u.name, o.order_id, a.location
+FROM UsersPK u
+JOIN OrdersPK o
+    ON u.user_id = o.user_id AND u.name = o.product
+JOIN AddressPK a
+    ON u.user_id = a.user_id]]>
+    </Resource>
+    <Resource name="ast">
+      <![CDATA[
+LogicalSink(table=[default_catalog.default_database.sink_orders], fields=[user_id, name, order_id, location])
++- LogicalProject(user_id=[$5], name=[$1], order_id=[$4], location=[$8])
+   +- LogicalJoin(condition=[=($0, $7)], joinType=[inner])
+      :- LogicalJoin(condition=[AND(=($0, $5), =($1, $6))], joinType=[inner])
+      :  :- LogicalTableScan(table=[[default_catalog, default_database, UsersPK]])
+      :  +- LogicalTableScan(table=[[default_catalog, default_database, OrdersPK]])
+      +- LogicalTableScan(table=[[default_catalog, default_database, AddressPK]])
+]]>
+    </Resource>
+    <Resource name="optimized rel plan">
+      <![CDATA[
+Sink(table=[default_catalog.default_database.sink_orders], fields=[user_id, name, order_id, location], changelogMode=[NONE])
++- Calc(select=[user_id0 AS user_id, name, order_id, location], changelogMode=[I,UB,UA,D])
+   +- MultiJoin(commonJoinKey=[user_id], joinTypes=[INNER, INNER], inputUniqueKeys=[(user_id), (order_id, user_id), (user_id)], joinConditions=[AND(=(user_id, user_id0), =(name, product)), =(user_id, user_id1)], select=[user_id,name,order_id,user_id0,product,user_id1,location], rowType=[RecordType(VARCHAR(2147483647) user_id, VARCHAR(2147483647) name, VARCHAR(2147483647) order_id, VARCHAR(2147483647) user_id0, VARCHAR(2147483647) product, VARCHAR(2147483647) user_id1, VARCHAR(2147483647) location)], changelogMode=[I,UB,UA,D])
+      :- Exchange(distribution=[hash[user_id]], changelogMode=[I,UB,UA,D])
+      :  +- ChangelogNormalize(key=[user_id], changelogMode=[I,UB,UA,D])
+      :     +- Exchange(distribution=[hash[user_id]], changelogMode=[I,UA,D])
+      :        +- TableSourceScan(table=[[default_catalog, default_database, UsersPK, project=[user_id, name]]], fields=[user_id, name], changelogMode=[I,UA,D])
+      :- Exchange(distribution=[hash[user_id]], changelogMode=[I,UB,UA,D])
+      :  +- ChangelogNormalize(key=[order_id, user_id], changelogMode=[I,UB,UA,D])
+      :     +- Exchange(distribution=[hash[order_id, user_id]], changelogMode=[I,UA,D])
+      :        +- TableSourceScan(table=[[default_catalog, default_database, OrdersPK]], fields=[order_id, user_id, product], changelogMode=[I,UA,D])
+      +- Exchange(distribution=[hash[user_id]], changelogMode=[I,UB,UA,D])
+         +- ChangelogNormalize(key=[user_id], changelogMode=[I,UB,UA,D])
+            +- Exchange(distribution=[hash[user_id]], changelogMode=[I,UA,D])
+               +- TableSourceScan(table=[[default_catalog, default_database, AddressPK]], fields=[user_id, location], changelogMode=[I,UA,D])
 ]]>
     </Resource>
   </TestCase>
@@ -2650,12 +2813,12 @@ Calc(select=[user_id, name, order_id, payment_id, location])
    :        :        :- Exchange(distribution=[hash[user_id]])
    :        :        :  +- ChangelogNormalize(key=[user_id])
    :        :        :     +- Exchange(distribution=[hash[user_id]])
-   :        :        :        +- TableSourceScan(table=[[default_catalog, default_database, Users, project=[user_id, name], metadata=[]]], fields=[user_id, name])
+   :        :        :        +- TableSourceScan(table=[[default_catalog, default_database, Users, project=[user_id, name]]], fields=[user_id, name])
    :        :        +- Exchange(distribution=[hash[user_id]])
-   :        :           +- TableSourceScan(table=[[default_catalog, default_database, Orders, project=[order_id, user_id], metadata=[]]], fields=[order_id, user_id])
+   :        :           +- TableSourceScan(table=[[default_catalog, default_database, Orders, project=[order_id, user_id]]], fields=[order_id, user_id])
    :        +- Exchange(distribution=[hash[user_id0]])
    :           +- Calc(select=[payment_id, CAST(user_id AS INTEGER) AS user_id0])
-   :              +- TableSourceScan(table=[[default_catalog, default_database, Payments, project=[payment_id, user_id], metadata=[]]], fields=[payment_id, user_id])
+   :              +- TableSourceScan(table=[[default_catalog, default_database, Payments, project=[payment_id, user_id]]], fields=[payment_id, user_id])
    +- Exchange(distribution=[hash[user_id]])
       +- TableSourceScan(table=[[default_catalog, default_database, Shipments]], fields=[location, user_id])
 ]]>
@@ -2697,11 +2860,11 @@ Calc(select=[user_id, name, order_id, payment_id, location])
    :- Exchange(distribution=[hash[user_id]])
    :  +- ChangelogNormalize(key=[user_id])
    :     +- Exchange(distribution=[hash[user_id]])
-   :        +- TableSourceScan(table=[[default_catalog, default_database, Users, project=[user_id, name], metadata=[]]], fields=[user_id, name])
+   :        +- TableSourceScan(table=[[default_catalog, default_database, Users, project=[user_id, name]]], fields=[user_id, name])
    :- Exchange(distribution=[hash[user_id]])
-   :  +- TableSourceScan(table=[[default_catalog, default_database, Orders, project=[order_id, user_id], metadata=[]]], fields=[order_id, user_id])
+   :  +- TableSourceScan(table=[[default_catalog, default_database, Orders, project=[order_id, user_id]]], fields=[order_id, user_id])
    :- Exchange(distribution=[hash[user_id]])
-   :  +- TableSourceScan(table=[[default_catalog, default_database, Payments, project=[payment_id, user_id], metadata=[]]], fields=[payment_id, user_id])
+   :  +- TableSourceScan(table=[[default_catalog, default_database, Payments, project=[payment_id, user_id]]], fields=[payment_id, user_id])
    +- Exchange(distribution=[hash[user_id]])
       +- TableSourceScan(table=[[default_catalog, default_database, Shipments]], fields=[location, user_id])
 ]]>
@@ -2803,11 +2966,11 @@ Calc(select=[user_id, name, order_id, payment_id, location])
    :     :        :- Exchange(distribution=[hash[user_id]])
    :     :        :  +- ChangelogNormalize(key=[user_id])
    :     :        :     +- Exchange(distribution=[hash[user_id]])
-   :     :        :        +- TableSourceScan(table=[[default_catalog, default_database, Users, project=[user_id, name], metadata=[]]], fields=[user_id, name])
+   :     :        :        +- TableSourceScan(table=[[default_catalog, default_database, Users, project=[user_id, name]]], fields=[user_id, name])
    :     :        +- Exchange(distribution=[hash[user_id]])
-   :     :           +- TableSourceScan(table=[[default_catalog, default_database, Orders, project=[order_id, user_id], metadata=[]]], fields=[order_id, user_id])
+   :     :           +- TableSourceScan(table=[[default_catalog, default_database, Orders, project=[order_id, user_id]]], fields=[order_id, user_id])
    :     +- Exchange(distribution=[single])
-   :        +- TableSourceScan(table=[[default_catalog, default_database, Payments, project=[payment_id, user_id], metadata=[]]], fields=[payment_id, user_id])
+   :        +- TableSourceScan(table=[[default_catalog, default_database, Payments, project=[payment_id, user_id]]], fields=[payment_id, user_id])
    +- Exchange(distribution=[hash[user_id]])
       +- TableSourceScan(table=[[default_catalog, default_database, Shipments]], fields=[location, user_id])
 ]]>
