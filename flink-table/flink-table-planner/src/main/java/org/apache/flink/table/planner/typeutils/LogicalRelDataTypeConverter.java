@@ -23,7 +23,6 @@ import org.apache.flink.table.api.TableException;
 import org.apache.flink.table.catalog.DataTypeFactory;
 import org.apache.flink.table.planner.calcite.FlinkTypeFactory;
 import org.apache.flink.table.planner.plan.schema.BitmapRelDataType;
-import org.apache.flink.table.planner.plan.schema.GeographyRelDataType;
 import org.apache.flink.table.planner.plan.schema.RawRelDataType;
 import org.apache.flink.table.planner.plan.schema.StructuredRelDataType;
 import org.apache.flink.table.planner.plan.schema.TimeIndicatorRelDataType;
@@ -482,7 +481,7 @@ public final class LogicalRelDataTypeConverter {
 
         @Override
         public RelDataType visit(GeographyType geographyType) {
-            return new GeographyRelDataType(geographyType);
+            return relDataTypeFactory.createSqlType(SqlTypeName.GEOGRAPHY);
         }
 
         @Override
@@ -611,6 +610,8 @@ public final class LogicalRelDataTypeConverter {
                 return new VariantType(false);
             case UUID:
                 return new UuidType(false);
+            case GEOGRAPHY:
+                return new GeographyType(false);
             case STRUCTURED:
             case OTHER:
                 if (relDataType instanceof StructuredRelDataType) {
@@ -619,8 +620,6 @@ public final class LogicalRelDataTypeConverter {
                     return ((RawRelDataType) relDataType).getRawType();
                 } else if (relDataType instanceof BitmapRelDataType) {
                     return ((BitmapRelDataType) relDataType).getBitmapType();
-                } else if (relDataType instanceof GeographyRelDataType) {
-                    return ((GeographyRelDataType) relDataType).getGeographyType();
                 }
             // fall through
             case REAL:

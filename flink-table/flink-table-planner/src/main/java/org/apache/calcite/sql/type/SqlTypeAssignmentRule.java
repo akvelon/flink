@@ -197,6 +197,7 @@ public class SqlTypeAssignmentRule implements SqlTypeMappingRule {
         rule.add(SqlTypeName.CHAR);
         rule.add(SqlTypeName.VARCHAR);
         rules.add(SqlTypeName.GEOMETRY, rule);
+        rules.add(SqlTypeName.GEOGRAPHY, EnumSet.of(SqlTypeName.GEOGRAPHY));
 
         // ARRAY is assignable from ...
         rules.add(SqlTypeName.ARRAY, EnumSet.of(SqlTypeName.ARRAY));
