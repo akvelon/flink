@@ -24,6 +24,9 @@ import org.apache.flink.core.memory.MemorySegmentFactory;
 import org.apache.flink.table.api.TableRuntimeException;
 import org.apache.flink.table.data.GeographyData;
 
+import javax.annotation.Nullable;
+
+import java.nio.ByteOrder;
 import java.util.Arrays;
 
 /**
@@ -47,6 +50,8 @@ public final class BinaryGeographyData extends BinarySection implements Geograph
     private static final int WKB_POINT_COORDINATE_SIZE = 16;
     private static final int BIG_ENDIAN = 0;
     private static final int LITTLE_ENDIAN = 1;
+    private static final int NATIVE_BYTE_ORDER =
+            ByteOrder.nativeOrder() == ByteOrder.LITTLE_ENDIAN ? LITTLE_ENDIAN : BIG_ENDIAN;
     private static final int UNKNOWN_SUBTYPE_ID = 0;
     private static final long MAX_INT_ADDRESS_EXCLUSIVE = (long) Integer.MAX_VALUE + 1;
 
@@ -97,7 +102,7 @@ public final class BinaryGeographyData extends BinarySection implements Geograph
             return null;
         }
         checkRange(bytes, offset, numBytes);
-        validatePayload(new MemorySegment[] {MemorySegmentFactory.wrap(bytes)}, offset, numBytes);
+        walkPayload(new MemorySegment[] {MemorySegmentFactory.wrap(bytes)}, offset, numBytes, null);
         byte[] copy = Arrays.copyOfRange(bytes, offset, offset + numBytes);
         return fromAddress(new MemorySegment[] {MemorySegmentFactory.wrap(copy)}, 0, copy.length);
     }
@@ -120,6 +125,23 @@ public final class BinaryGeographyData extends BinarySection implements Geograph
         return sizeInBytes;
     }
 
+    /** Returns whether the geography contains no points, including inside collections. */
+    public static boolean isEmpty(GeographyData geography) {
+        final Emptiness emptiness = new Emptiness();
+        if (geography instanceof BinaryGeographyData) {
+            final BinaryGeographyData binary = (BinaryGeographyData) geography;
+            walkPayload(binary.segments, binary.offset, binary.sizeInBytes, emptiness);
+        } else {
+            final byte[] bytes = geography.toBytes();
+            walkPayload(
+                    new MemorySegment[] {MemorySegmentFactory.wrap(bytes)},
+                    0,
+                    bytes.length,
+                    emptiness);
+        }
+        return emptiness.empty;
+    }
+
     private static void checkRange(byte[] bytes, int offset, int numBytes) {
         if (offset < 0 || numBytes < 0 || offset > bytes.length - numBytes) {
             throw new TableRuntimeException(
@@ -129,12 +151,13 @@ public final class BinaryGeographyData extends BinarySection implements Geograph
         }
     }
 
-    private static void validatePayload(MemorySegment[] segments, int offset, int sizeInBytes) {
+    private static void walkPayload(
+            MemorySegment[] segments, int offset, int sizeInBytes, @Nullable Emptiness emptiness) {
         // WKB stores unsigned 32-bit counts, so parser cursors stay long to avoid overflow. Flink's
         // binary memory model is still addressed by signed ints at the actual read boundary.
         final long endOffset = (long) offset + sizeInBytes;
         final GeometryHeader header = readHeader(segments, offset, endOffset);
-        final long consumedOffset = validateGeometry(segments, offset, endOffset, header);
+        final long consumedOffset = walkGeometry(segments, offset, endOffset, header, emptiness);
         if (consumedOffset != endOffset) {
             throw new TableRuntimeException(
                     String.format(
@@ -148,36 +171,67 @@ public final class BinaryGeographyData extends BinarySection implements Geograph
         return readHeader(segments, offset, endOffset).subtypeId;
     }
 
-    private static long validateGeometry(
-            MemorySegment[] segments, long geometryOffset, long endOffset) {
-        final GeometryHeader header = readHeader(segments, geometryOffset, endOffset);
-        return validateGeometry(segments, geometryOffset, endOffset, header);
-    }
-
-    private static long validateGeometry(
-            MemorySegment[] segments, long geometryOffset, long endOffset, GeometryHeader header) {
-        long cursor = geometryOffset + MIN_WKB_HEADER_SIZE;
+    private static long walkGeometry(
+            MemorySegment[] segments,
+            long geometryOffset,
+            long endOffset,
+            GeometryHeader header,
+            @Nullable Emptiness emptiness) {
+        final long cursor = geometryOffset + MIN_WKB_HEADER_SIZE;
 
         switch (header.subtypeId) {
             case GeographyData.POINT:
-                return requireBytes(
-                                cursor, WKB_POINT_COORDINATE_SIZE, endOffset, "POINT coordinates")
-                        + WKB_POINT_COORDINATE_SIZE;
+                requireBytes(cursor, WKB_POINT_COORDINATE_SIZE, endOffset, "POINT coordinates");
+                if (emptiness != null && emptiness.empty) {
+                    final int address =
+                            checkedAddress(
+                                    cursor,
+                                    WKB_POINT_COORDINATE_SIZE,
+                                    endOffset,
+                                    "POINT coordinates");
+                    emptiness.empty =
+                            isNaNCoordinate(segments, address, header.byteOrder)
+                                    || isNaNCoordinate(
+                                            segments, address + Long.BYTES, header.byteOrder);
+                }
+                return cursor + WKB_POINT_COORDINATE_SIZE;
             case GeographyData.LINE_STRING:
-                return skipCoordinateSequence(segments, cursor, endOffset, header.byteOrder);
+                return skipCoordinateSequence(
+                        segments, cursor, endOffset, header.byteOrder, emptiness);
             case GeographyData.POLYGON:
-                return skipPolygon(segments, cursor, endOffset, header.byteOrder);
+                return skipPolygon(segments, cursor, endOffset, header.byteOrder, emptiness);
             case GeographyData.MULTI_POINT:
-                return skipTypedGeometryCollection(
-                        segments, cursor, endOffset, header.byteOrder, GeographyData.POINT);
+                return skipGeometryCollection(
+                        segments,
+                        cursor,
+                        endOffset,
+                        header.byteOrder,
+                        GeographyData.POINT,
+                        emptiness);
             case GeographyData.MULTI_LINE_STRING:
-                return skipTypedGeometryCollection(
-                        segments, cursor, endOffset, header.byteOrder, GeographyData.LINE_STRING);
+                return skipGeometryCollection(
+                        segments,
+                        cursor,
+                        endOffset,
+                        header.byteOrder,
+                        GeographyData.LINE_STRING,
+                        emptiness);
             case GeographyData.MULTI_POLYGON:
-                return skipTypedGeometryCollection(
-                        segments, cursor, endOffset, header.byteOrder, GeographyData.POLYGON);
+                return skipGeometryCollection(
+                        segments,
+                        cursor,
+                        endOffset,
+                        header.byteOrder,
+                        GeographyData.POLYGON,
+                        emptiness);
             case GeographyData.GEOMETRY_COLLECTION:
-                return skipGeometryCollection(segments, cursor, endOffset, header.byteOrder);
+                return skipGeometryCollection(
+                        segments,
+                        cursor,
+                        endOffset,
+                        header.byteOrder,
+                        UNKNOWN_SUBTYPE_ID,
+                        emptiness);
             default:
                 throw new TableRuntimeException(
                         String.format(
@@ -186,56 +240,68 @@ public final class BinaryGeographyData extends BinarySection implements Geograph
         }
     }
 
+    private static boolean isNaNCoordinate(MemorySegment[] segments, int offset, int byteOrder) {
+        final long nativeBits = BinarySegmentUtils.getLong(segments, offset);
+        final long bits =
+                byteOrder == NATIVE_BYTE_ORDER ? nativeBits : Long.reverseBytes(nativeBits);
+        return Double.isNaN(Double.longBitsToDouble(bits));
+    }
+
     private static long skipCoordinateSequence(
-            MemorySegment[] segments, long offset, long endOffset, int byteOrder) {
+            MemorySegment[] segments,
+            long offset,
+            long endOffset,
+            int byteOrder,
+            @Nullable Emptiness emptiness) {
         final long numPoints =
                 readUnsignedInt(segments, offset, endOffset, byteOrder, "point count");
         long cursor = offset + WKB_COUNT_SIZE;
         final long coordinateSequenceSize =
                 multiplyExact(numPoints, WKB_POINT_COORDINATE_SIZE, "coordinate sequence");
+        if (emptiness != null && numPoints > 0) {
+            emptiness.empty = false;
+        }
         return requireBytes(cursor, coordinateSequenceSize, endOffset, "coordinate sequence")
                 + coordinateSequenceSize;
     }
 
     private static long skipPolygon(
-            MemorySegment[] segments, long offset, long endOffset, int byteOrder) {
-        final long numRings = readUnsignedInt(segments, offset, endOffset, byteOrder, "ring count");
-        long cursor = offset + WKB_COUNT_SIZE;
-        for (long i = 0; i < numRings; i++) {
-            cursor = skipCoordinateSequence(segments, cursor, endOffset, byteOrder);
-        }
-        return cursor;
-    }
-
-    private static long skipTypedGeometryCollection(
             MemorySegment[] segments,
             long offset,
             long endOffset,
             int byteOrder,
-            int expectedSubtypeId) {
-        final long numGeometries =
-                readUnsignedInt(segments, offset, endOffset, byteOrder, "geometry count");
+            @Nullable Emptiness emptiness) {
+        final long numRings = readUnsignedInt(segments, offset, endOffset, byteOrder, "ring count");
         long cursor = offset + WKB_COUNT_SIZE;
-        for (long i = 0; i < numGeometries; i++) {
-            final GeometryHeader nestedHeader = readHeader(segments, cursor, endOffset);
-            if (nestedHeader.subtypeId != expectedSubtypeId) {
-                throw new TableRuntimeException(
-                        String.format(
-                                "Malformed ISO WKB payload. Expected nested subtype ID %d but found %d.",
-                                expectedSubtypeId, nestedHeader.subtypeId));
-            }
-            cursor = validateGeometry(segments, cursor, endOffset);
+        for (long i = 0; i < numRings; i++) {
+            // The first ring is the polygon shell, which determines emptiness.
+            cursor =
+                    skipCoordinateSequence(
+                            segments, cursor, endOffset, byteOrder, i == 0 ? emptiness : null);
         }
         return cursor;
     }
 
     private static long skipGeometryCollection(
-            MemorySegment[] segments, long offset, long endOffset, int byteOrder) {
+            MemorySegment[] segments,
+            long offset,
+            long endOffset,
+            int byteOrder,
+            int expectedSubtypeId,
+            @Nullable Emptiness emptiness) {
         final long numGeometries =
                 readUnsignedInt(segments, offset, endOffset, byteOrder, "geometry count");
         long cursor = offset + WKB_COUNT_SIZE;
         for (long i = 0; i < numGeometries; i++) {
-            cursor = validateGeometry(segments, cursor, endOffset);
+            final GeometryHeader nestedHeader = readHeader(segments, cursor, endOffset);
+            if (expectedSubtypeId != UNKNOWN_SUBTYPE_ID
+                    && nestedHeader.subtypeId != expectedSubtypeId) {
+                throw new TableRuntimeException(
+                        String.format(
+                                "Malformed ISO WKB payload. Expected nested subtype ID %d but found %d.",
+                                expectedSubtypeId, nestedHeader.subtypeId));
+            }
+            cursor = walkGeometry(segments, cursor, endOffset, nestedHeader, emptiness);
         }
         return cursor;
     }
@@ -323,6 +389,10 @@ public final class BinaryGeographyData extends BinarySection implements Geograph
                     String.format("Malformed ISO WKB payload. %s size overflows.", componentName));
         }
         return result;
+    }
+
+    private static final class Emptiness {
+        private boolean empty = true;
     }
 
     private static final class GeometryHeader {

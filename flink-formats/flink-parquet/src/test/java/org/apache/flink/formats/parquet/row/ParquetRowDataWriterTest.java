@@ -29,6 +29,7 @@ import org.apache.flink.table.api.DataTypes;
 import org.apache.flink.table.api.EnvironmentSettings;
 import org.apache.flink.table.api.Table;
 import org.apache.flink.table.api.TableEnvironment;
+import org.apache.flink.table.api.ValidationException;
 import org.apache.flink.table.data.GenericArrayData;
 import org.apache.flink.table.data.GenericRowData;
 import org.apache.flink.table.data.GeographyData;
@@ -73,6 +74,9 @@ import org.apache.parquet.schema.LogicalTypeAnnotation;
 import org.apache.parquet.schema.PrimitiveType;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
+import org.locationtech.jts.io.ByteOrderValues;
+import org.locationtech.jts.io.WKBWriter;
+import org.locationtech.jts.io.WKTReader;
 
 import java.io.File;
 import java.io.IOException;
@@ -344,6 +348,101 @@ class ParquetRowDataWriterTest {
         assertThat(points[1]).isNull();
         assertThat(first.getField(3)).isNull();
         assertThat(rows.get(1)).isEqualTo(Row.of(2L, null, null, null));
+    }
+
+    @Test
+    void testGeographyAccessors(@TempDir java.nio.file.Path folder) throws Exception {
+        final Object[][] fixtures = {
+            {"POINT (1 2)", false, "POINT"},
+            {"POINT EMPTY", true, "POINT"},
+            {"LINESTRING (0 0, 1 1)", false, "LINESTRING"},
+            {"LINESTRING EMPTY", true, "LINESTRING"},
+            {"POLYGON ((0 0, 0 1, 1 0, 0 0))", false, "POLYGON"},
+            {"POLYGON EMPTY", true, "POLYGON"},
+            {"MULTIPOINT ((1 2), (2 3))", false, "MULTIPOINT"},
+            {"MULTIPOINT EMPTY", true, "MULTIPOINT"},
+            {"MULTIPOINT (EMPTY)", true, "MULTIPOINT"},
+            {"MULTILINESTRING ((0 0, 1 1))", false, "MULTILINESTRING"},
+            {"MULTILINESTRING EMPTY", true, "MULTILINESTRING"},
+            {"MULTILINESTRING (EMPTY)", true, "MULTILINESTRING"},
+            {"MULTIPOLYGON (((0 0, 0 1, 1 0, 0 0)))", false, "MULTIPOLYGON"},
+            {"MULTIPOLYGON EMPTY", true, "MULTIPOLYGON"},
+            {"MULTIPOLYGON (EMPTY)", true, "MULTIPOLYGON"},
+            {"GEOMETRYCOLLECTION (POINT EMPTY, POINT (1 2))", false, "GEOMETRYCOLLECTION"},
+            {"GEOMETRYCOLLECTION EMPTY", true, "GEOMETRYCOLLECTION"},
+            {"GEOMETRYCOLLECTION (POINT EMPTY, POLYGON EMPTY)", true, "GEOMETRYCOLLECTION"},
+            {null, null, null}
+        };
+        final Path source = new Path(folder.resolve("source.parquet").toUri());
+        final RowType rowType =
+                RowType.of(
+                        new LogicalType[] {new IntType(false), new GeographyType()},
+                        new String[] {"id", "geo"});
+        final WKTReader reader = new WKTReader();
+        final WKBWriter littleEndian = new WKBWriter(2, ByteOrderValues.LITTLE_ENDIAN);
+        final WKBWriter bigEndian = new WKBWriter(2, ByteOrderValues.BIG_ENDIAN);
+        final List<byte[]> payloads = new ArrayList<>();
+        try (FSDataOutputStream stream =
+                source.getFileSystem().create(source, FileSystem.WriteMode.NO_OVERWRITE)) {
+            final BulkWriter<RowData> writer =
+                    ParquetRowDataBuilder.createWriterFactory(rowType, new Configuration(), true)
+                            .create(stream);
+            for (int i = 0; i < fixtures.length; i++) {
+                final String wkt = (String) fixtures[i][0];
+                final WKBWriter wkb = i % 2 == 0 ? littleEndian : bigEndian;
+                final byte[] bytes = wkt == null ? null : wkb.write(reader.read(wkt));
+                payloads.add(bytes);
+                writer.addElement(GenericRowData.of(i, GeographyData.fromBytes(bytes)));
+            }
+            writer.finish();
+        }
+
+        final TableEnvironment env = TableEnvironment.create(EnvironmentSettings.inBatchMode());
+        env.getConfig()
+                .getConfiguration()
+                .setString("table.exec.resource.default-parallelism", "1");
+        env.executeSql(
+                "CREATE TABLE geo_source (id INT NOT NULL, geo GEOGRAPHY)"
+                        + " WITH ('connector' = 'filesystem', 'format' = 'parquet', 'path' = '"
+                        + source.toUri()
+                        + "')");
+        env.executeSql(
+                "CREATE TABLE geo_sink (id INT NOT NULL, geo GEOGRAPHY, is_empty BOOLEAN,"
+                        + " shape STRING) WITH ('connector' = 'filesystem',"
+                        + " 'format' = 'parquet', 'path' = '"
+                        + folder.resolve("sink").toUri()
+                        + "')");
+        final Table projection =
+                env.sqlQuery(
+                        "SELECT id, geo, ST_IsEmpty(geo) AS is_empty,"
+                                + " ST_GeometryType(geo) AS shape FROM geo_source");
+        assertThat(projection.getResolvedSchema().getColumnDataTypes())
+                .containsExactly(
+                        DataTypes.INT().notNull(),
+                        DataTypes.GEOGRAPHY(),
+                        DataTypes.BOOLEAN(),
+                        DataTypes.STRING());
+        assertThatThrownBy(() -> env.sqlQuery("SELECT ST_IsEmpty(1)"))
+                .isInstanceOf(ValidationException.class);
+        assertThatThrownBy(() -> env.sqlQuery("SELECT ST_GeometryType('POINT EMPTY')"))
+                .isInstanceOf(ValidationException.class);
+        projection.executeInsert("geo_sink").await();
+
+        final List<Row> rows = new ArrayList<>();
+        try (CloseableIterator<Row> result =
+                env.executeSql("SELECT id, geo, is_empty, shape FROM geo_sink ORDER BY id")
+                        .collect()) {
+            result.forEachRemaining(rows::add);
+        }
+        assertThat(rows).hasSize(fixtures.length);
+        for (int i = 0; i < fixtures.length; i++) {
+            final Row row = rows.get(i);
+            final GeographyData geography = row.getFieldAs(1);
+            assertThat(row.getField(0)).isEqualTo(i);
+            assertThat(geography == null ? null : geography.toBytes()).isEqualTo(payloads.get(i));
+            assertThat(row.getField(2)).isEqualTo(fixtures[i][1]);
+            assertThat(row.getField(3)).isEqualTo(fixtures[i][2]);
+        }
     }
 
     @Test
