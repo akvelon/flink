@@ -283,6 +283,7 @@ public class SqlTypeFactoryImpl extends RelDataTypeFactoryImpl {
         int nullableCount = 0;
         int javaCount = 0;
         int anyCount = 0;
+        int geographyCount = 0;
 
         for (RelDataType type : types) {
             final SqlTypeName typeName = type.getSqlTypeName();
@@ -291,6 +292,9 @@ public class SqlTypeFactoryImpl extends RelDataTypeFactoryImpl {
             }
             if (typeName == SqlTypeName.ANY) {
                 anyCount++;
+            }
+            if (typeName == SqlTypeName.GEOGRAPHY) {
+                geographyCount++;
             }
             if (type.isNullable()) {
                 ++nullableCount;
@@ -307,6 +311,10 @@ public class SqlTypeFactoryImpl extends RelDataTypeFactoryImpl {
         if (anyCount > 0) {
             return createTypeWithNullability(
                     createSqlType(SqlTypeName.ANY), nullCount > 0 || nullableCount > 0);
+        }
+
+        if (geographyCount > 0 && geographyCount + nullCount < types.size()) {
+            return null;
         }
 
         for (int i = 0; i < types.size(); ++i) {

@@ -1976,6 +1976,7 @@ public class SqlValidatorImpl implements SqlValidatorWithHints {
             // a known type with the unknown type
             return;
         }
+        SqlValidatorUtil.validateGeographyMapKeys(this, node, type);
         nodeToTypeMap.put(node, type);
     }
 
@@ -4132,6 +4133,13 @@ public class SqlValidatorImpl implements SqlValidatorWithHints {
         // depend on the GROUP BY list, or the window function might reference
         // window name in the WINDOW clause etc.
         final RelDataType rowType = validateSelectList(selectItems, select, targetRowType);
+        if (select.isDistinct()) {
+            SqlValidatorUtil.validateGeographyHashKey(
+                    this,
+                    requireNonNull(select.getModifierNode(SqlSelectKeyword.DISTINCT)),
+                    rowType,
+                    "DISTINCT");
+        }
         ns.setType(rowType);
         validateHavingClause(select);
 
@@ -4960,6 +4968,9 @@ public class SqlValidatorImpl implements SqlValidatorWithHints {
 
         final SqlValidatorScope orderScope = getOrderScope(select);
         validateExpr(orderItem, orderScope);
+        final SqlNode key = SqlUtil.stripOrderModifiers(orderItem);
+        SqlValidatorUtil.validateGeographyOrderKey(
+                this, key, deriveType(orderScope, expandOrderExpr(select, key)));
     }
 
     @Override
@@ -5070,9 +5081,13 @@ public class SqlValidatorImpl implements SqlValidatorWithHints {
                 break;
             default:
                 if (groupItem instanceof SqlNodeList) {
+                    for (SqlNode item : (SqlNodeList) groupItem) {
+                        validateGroupItem(groupScope, aggregatingScope, item);
+                    }
                     break;
                 }
                 final RelDataType type = deriveType(groupScope, groupItem);
+                SqlValidatorUtil.validateGeographyHashKey(this, groupItem, type, "GROUP BY");
                 setValidatedNodeType(groupItem, type);
         }
     }

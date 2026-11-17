@@ -1,0 +1,252 @@
+diff --git a/core/src/main/java/org/apache/calcite/adapter/enumerable/EnumerableTableScan.java b/core/src/main/java/org/apache/calcite/adapter/enumerable/EnumerableTableScan.java
+index 5d6d7a646..1cc163742 100644
+--- a/core/src/main/java/org/apache/calcite/adapter/enumerable/EnumerableTableScan.java
++++ b/core/src/main/java/org/apache/calcite/adapter/enumerable/EnumerableTableScan.java
+@@ -41,6 +41,7 @@
+ import org.apache.calcite.rel.type.RelDataTypeField;
+ import org.apache.calcite.sql.type.SqlTypeUtil;
+ import org.apache.calcite.schema.FilterableTable;
++import org.apache.calcite.schema.GeographyTable;
+ import org.apache.calcite.schema.ProjectableFilterableTable;
+ import org.apache.calcite.schema.QueryableTable;
+ import org.apache.calcite.schema.ScannableTable;
+@@ -329,7 +330,7 @@ private static boolean hasCollectionField(RelDataType rowType) {
+   }
+ 
+   @Override public Result implement(EnumerableRelImplementor implementor, Prefer pref) {
+-    if (SqlTypeUtil.containsGeography(getRowType())) {
++    if (SqlTypeUtil.containsGeography(getRowType()) && table.unwrap(GeographyTable.class) == null) {
+       throw new UnsupportedOperationException("Local GEOGRAPHY table scans are not supported");
+     }
+     // Note that representation is ARRAY. This assumes that the table
+diff --git a/core/src/main/java/org/apache/calcite/adapter/enumerable/RexToLixTranslator.java b/core/src/main/java/org/apache/calcite/adapter/enumerable/RexToLixTranslator.java
+index 4af9394c4..6e10cb0d5 100644
+--- a/core/src/main/java/org/apache/calcite/adapter/enumerable/RexToLixTranslator.java
++++ b/core/src/main/java/org/apache/calcite/adapter/enumerable/RexToLixTranslator.java
+@@ -62,6 +62,7 @@
+ import org.apache.calcite.sql.SqlIntervalQualifier;
+ import org.apache.calcite.sql.SqlKind;
+ import org.apache.calcite.sql.SqlOperator;
++import org.apache.calcite.sql.SqlSpatialTypeOperatorTable;
+ import org.apache.calcite.sql.SqlWindowTableFunction;
+ import org.apache.calcite.sql.fun.SqlStdOperatorTable;
+ import org.apache.calcite.sql.type.SqlTypeFamily;
+@@ -1458,7 +1459,8 @@ private ConstantExpression getTypedNullLiteral(RexLiteral literal) {
+     if (call.getOperator() instanceof SqlUserDefinedFunction
+         && (SqlTypeUtil.containsGeography(call.getType())
+             || call.getOperands().stream()
+-                .anyMatch(operand -> SqlTypeUtil.containsGeography(operand.getType())))) {
++                .anyMatch(operand -> SqlTypeUtil.containsGeography(operand.getType())))
++        && !SqlSpatialTypeOperatorTable.isGeographyAccessor(call.getOperator())) {
+       throw new UnsupportedOperationException("Local Java functions involving GEOGRAPHY are not supported");
+     }
+     if (rexResultMap.containsKey(call)) {
+diff --git a/core/src/main/java/org/apache/calcite/interpreter/TableScanNode.java b/core/src/main/java/org/apache/calcite/interpreter/TableScanNode.java
+index a6cb4d080..c6e25d3a2 100644
+--- a/core/src/main/java/org/apache/calcite/interpreter/TableScanNode.java
++++ b/core/src/main/java/org/apache/calcite/interpreter/TableScanNode.java
+@@ -30,6 +30,7 @@
+ import org.apache.calcite.rex.RexUtil;
+ import org.apache.calcite.runtime.Enumerables;
+ import org.apache.calcite.schema.FilterableTable;
++import org.apache.calcite.schema.GeographyTable;
+ import org.apache.calcite.schema.ProjectableFilterableTable;
+ import org.apache.calcite.schema.QueryableTable;
+ import org.apache.calcite.schema.ScannableTable;
+@@ -77,10 +78,11 @@ private TableScanNode(Compiler compiler, TableScan rel,
+    * any filters and projects that cannot be implemented by the table. */
+   static TableScanNode create(Compiler compiler, TableScan rel,
+       ImmutableList<RexNode> filters, @Nullable ImmutableIntList projects) {
+-    if (SqlTypeUtil.containsGeography(rel.getRowType())) {
++    final RelOptTable relOptTable = rel.getTable();
++    if (SqlTypeUtil.containsGeography(rel.getRowType())
++        && relOptTable.unwrap(GeographyTable.class) == null) {
+       throw new UnsupportedOperationException("Local GEOGRAPHY table scans are not supported");
+     }
+-    final RelOptTable relOptTable = rel.getTable();
+     final ProjectableFilterableTable pfTable =
+         relOptTable.unwrap(ProjectableFilterableTable.class);
+     if (pfTable != null) {
+diff --git a/core/src/main/java/org/apache/calcite/jdbc/JavaTypeFactoryImpl.java b/core/src/main/java/org/apache/calcite/jdbc/JavaTypeFactoryImpl.java
+index 5c11e6778..bdbffb18e 100644
+--- a/core/src/main/java/org/apache/calcite/jdbc/JavaTypeFactoryImpl.java
++++ b/core/src/main/java/org/apache/calcite/jdbc/JavaTypeFactoryImpl.java
+@@ -27,6 +27,7 @@
+ import org.apache.calcite.rel.type.RelDataTypeFieldImpl;
+ import org.apache.calcite.rel.type.RelDataTypeSystem;
+ import org.apache.calcite.rel.type.RelRecordType;
++import org.apache.calcite.runtime.GeographyValue;
+ import org.apache.calcite.runtime.Unit;
+ import org.apache.calcite.sql.type.BasicSqlType;
+ import org.apache.calcite.sql.type.IntervalSqlType;
+@@ -227,7 +228,7 @@ private static Type fieldType(Field field) {
+       case GEOMETRY:
+         return Geometry.class;
+       case GEOGRAPHY:
+-        return Object.class;
++        return GeographyValue.class;
+       case SYMBOL:
+         return Enum.class;
+       case ANY:
+diff --git a/core/src/main/java/org/apache/calcite/runtime/GeographyValue.java b/core/src/main/java/org/apache/calcite/runtime/GeographyValue.java
+new file mode 100644
+index 000000000..1ac3555bc
+--- /dev/null
++++ b/core/src/main/java/org/apache/calcite/runtime/GeographyValue.java
+@@ -0,0 +1,44 @@
++/*
++ * Licensed to the Apache Software Foundation (ASF) under one or more
++ * contributor license agreements.  See the NOTICE file distributed with
++ * this work for additional information regarding copyright ownership.
++ * The ASF licenses this file to you under the Apache License, Version 2.0
++ * (the "License"); you may not use this file except in compliance with
++ * the License.  You may obtain a copy of the License at
++ *
++ * http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++package org.apache.calcite.runtime;
++
++import org.apache.calcite.linq4j.function.Strict;
++
++import org.locationtech.jts.geom.Geometry;
++
++import static java.util.Objects.requireNonNull;
++
++/** Java value supplied by adapters for the structural GEOGRAPHY accessors. */
++@Strict
++public final class GeographyValue {
++  private final Geometry geometry;
++
++  /** Wraps a geometry already supplied by an adapter. */
++  public GeographyValue(Geometry geometry) {
++    this.geometry = requireNonNull(geometry, "geometry");
++  }
++
++  /** Returns whether the geography has no points. */
++  public static boolean isEmpty(GeographyValue value) {
++    return SpatialTypeFunctions.ST_IsEmpty(value.geometry);
++  }
++
++  /** Returns the concrete spatial type name. */
++  public static String geometryType(GeographyValue value) {
++    return SpatialTypeFunctions.ST_GeometryType(value.geometry);
++  }
++}
+diff --git a/core/src/main/java/org/apache/calcite/schema/GeographyTable.java b/core/src/main/java/org/apache/calcite/schema/GeographyTable.java
+new file mode 100644
+index 000000000..a0087c1fe
+--- /dev/null
++++ b/core/src/main/java/org/apache/calcite/schema/GeographyTable.java
+@@ -0,0 +1,29 @@
++/*
++ * Licensed to the Apache Software Foundation (ASF) under one or more
++ * contributor license agreements.  See the NOTICE file distributed with
++ * this work for additional information regarding copyright ownership.
++ * The ASF licenses this file to you under the Apache License, Version 2.0
++ * (the "License"); you may not use this file except in compliance with
++ * the License.  You may obtain a copy of the License at
++ *
++ * http://www.apache.org/licenses/LICENSE-2.0
++ *
++ * Unless required by applicable law or agreed to in writing, software
++ * distributed under the License is distributed on an "AS IS" BASIS,
++ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++ * See the License for the specific language governing permissions and
++ * limitations under the License.
++ */
++package org.apache.calcite.schema;
++
++import org.apache.calcite.runtime.GeographyValue;
++
++/**
++ * A scannable table that supplies local GEOGRAPHY values.
++ *
++ * <p>Declare geography columns with the SQL GEOGRAPHY type and supply a
++ * {@link GeographyValue} for each non-null geography value. NULL values are
++ * represented by Java {@code null}.
++ */
++public interface GeographyTable extends ScannableTable {
++}
+diff --git a/core/src/main/java/org/apache/calcite/sql/SqlSpatialTypeOperatorTable.java b/core/src/main/java/org/apache/calcite/sql/SqlSpatialTypeOperatorTable.java
+index 6d0f920d2..f8a2aa752 100644
+--- a/core/src/main/java/org/apache/calcite/sql/SqlSpatialTypeOperatorTable.java
++++ b/core/src/main/java/org/apache/calcite/sql/SqlSpatialTypeOperatorTable.java
+@@ -19,17 +19,29 @@
+ import org.apache.calcite.config.CalciteConnectionConfigImpl;
+ import org.apache.calcite.jdbc.CalciteSchema;
+ import org.apache.calcite.jdbc.JavaTypeFactoryImpl;
++import org.apache.calcite.linq4j.tree.Types;
+ import org.apache.calcite.model.ModelHandler;
+ import org.apache.calcite.prepare.CalciteCatalogReader;
++import org.apache.calcite.rel.type.RelDataType;
+ import org.apache.calcite.runtime.AccumOperation;
+ import org.apache.calcite.runtime.CollectOperation;
++import org.apache.calcite.runtime.GeographyValue;
+ import org.apache.calcite.runtime.SpatialTypeFunctions;
+ import org.apache.calcite.runtime.UnionOperation;
+ import org.apache.calcite.schema.SchemaPlus;
+ import org.apache.calcite.schema.impl.AggregateFunctionImpl;
++import org.apache.calcite.schema.impl.ScalarFunctionImpl;
+ import org.apache.calcite.sql.fun.SqlSpatialTypeFunctions;
++import org.apache.calcite.sql.parser.SqlParserPos;
++import org.apache.calcite.sql.type.InferTypes;
++import org.apache.calcite.sql.type.OperandTypes;
++import org.apache.calcite.sql.type.ReturnTypes;
++import org.apache.calcite.sql.type.SqlTypeFamily;
++import org.apache.calcite.sql.type.SqlTypeName;
++import org.apache.calcite.sql.type.SqlTypeTransforms;
+ import org.apache.calcite.sql.util.SqlOperatorTables;
+ import org.apache.calcite.sql.validate.SqlNameMatcher;
++import org.apache.calcite.sql.validate.SqlUserDefinedFunction;
+ 
+ import com.google.common.collect.ImmutableList;
+ 
+@@ -45,6 +57,11 @@
+  */
+ public class SqlSpatialTypeOperatorTable implements SqlOperatorTable {
+ 
++  private static final SqlOperator GEOGRAPHY_IS_EMPTY =
++      geographyAccessor("ST_ISEMPTY", "isEmpty", SqlTypeName.BOOLEAN);
++  private static final SqlOperator GEOGRAPHY_GEOMETRY_TYPE =
++      geographyAccessor("ST_GEOMETRYTYPE", "geometryType", SqlTypeName.VARCHAR);
++
+   private final SqlOperatorTable operatorTable;
+ 
+   public SqlSpatialTypeOperatorTable() {
+@@ -75,7 +92,29 @@ public SqlSpatialTypeOperatorTable() {
+             new JavaTypeFactoryImpl(),
+             CalciteConnectionConfigImpl.DEFAULT);
+ 
+-    operatorTable = SqlOperatorTables.of(catalogReader.getOperatorList());
++    operatorTable = SqlOperatorTables.of(ImmutableList.<SqlOperator>builder()
++        .addAll(catalogReader.getOperatorList())
++        .add(GEOGRAPHY_IS_EMPTY, GEOGRAPHY_GEOMETRY_TYPE)
++        .build());
++  }
++
++  private static SqlOperator geographyAccessor(String name, String method,
++      SqlTypeName resultType) {
++    final RelDataType geography = new JavaTypeFactoryImpl().createSqlType(SqlTypeName.GEOGRAPHY);
++    return new SqlUserDefinedFunction(new SqlIdentifier(name, SqlParserPos.ZERO),
++        SqlKind.OTHER_FUNCTION, ReturnTypes.explicit(resultType)
++            .andThen(SqlTypeTransforms.TO_NULLABLE),
++        InferTypes.explicit(ImmutableList.of(geography)),
++        OperandTypes.operandMetadata(ImmutableList.of(SqlTypeFamily.GEOGRAPHY),
++            typeFactory -> ImmutableList.of(typeFactory.createSqlType(SqlTypeName.GEOGRAPHY)),
++            i -> "geography", i -> false),
++        ScalarFunctionImpl.create(
++            Types.lookupMethod(GeographyValue.class, method, GeographyValue.class)));
++  }
++
++  /** Whether this is one of the built-in local geography accessors. */
++  public static boolean isGeographyAccessor(SqlOperator operator) {
++    return operator == GEOGRAPHY_IS_EMPTY || operator == GEOGRAPHY_GEOMETRY_TYPE;
+   }
+ 
+   @Override public void lookupOperatorOverloads(SqlIdentifier opName,
