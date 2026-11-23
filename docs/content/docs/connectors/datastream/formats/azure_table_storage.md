@@ -69,11 +69,12 @@ Paste the following code:
 
 ```java
 import java.util.Map;
+import org.apache.flink.api.common.RuntimeExecutionMode;
 import org.apache.flink.api.common.functions.MapFunction;
-import org.apache.flink.api.java.DataStream;
-import org.apache.flink.api.java.ExecutionEnvironment;
+import org.apache.flink.api.java.hadoop.mapreduce.HadoopInputFormat;
 import org.apache.flink.api.java.tuple.Tuple2;
-import org.apache.flink.hadoopcompatibility.mapreduce.HadoopInputFormat;
+import org.apache.flink.streaming.api.datastream.DataStream;
+import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
 import org.apache.hadoop.io.Text;
 import org.apache.hadoop.mapreduce.Job;
 import com.microsoft.hadoop.azure.AzureTableConfiguration;
@@ -92,7 +93,7 @@ public class AzureTableExample {
     HadoopInputFormat<Text, WritableEntity> hdIf = new HadoopInputFormat<Text, WritableEntity>(new AzureTableInputFormat(), Text.class, WritableEntity.class, new Job());
 
     // set the Account URI, something like: https://apacheflink.table.core.windows.net
-    hdIf.getConfiguration().set(azuretableconfiguration.Keys.ACCOUNT_URI.getKey(), "TODO");
+    hdIf.getConfiguration().set(AzureTableConfiguration.Keys.ACCOUNT_URI.getKey(), "TODO");
     // set the secret storage key here
     hdIf.getConfiguration().set(AzureTableConfiguration.Keys.STORAGE_KEY.getKey(), "TODO");
     // set the table name here

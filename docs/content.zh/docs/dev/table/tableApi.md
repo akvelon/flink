@@ -76,12 +76,11 @@ counts.execute().print();
 {{< /tab >}}
 {{< tab "Scala" >}}
 
-Scala 的 Table API 通过引入 `org.apache.flink.table.api._`、`org.apache.flink.api.scala._` 和 `org.apache.flink.table.api.bridge.scala._`（开启数据流的桥接支持）来使用。
+Scala 的 Table API 通过引入 `org.apache.flink.table.api._` 和 `org.apache.flink.table.api.bridge.scala._`（开启数据流的桥接支持）来使用。
 
 下面的例子展示了如何创建一个 Scala 的 Table API 程序。通过 Scala 的带美元符号（`$`）的字符串插值来实现表字段引用。
 
 ```scala
-import org.apache.flink.api.scala._
 import org.apache.flink.table.api._
 import org.apache.flink.table.api.bridge.scala._
 
@@ -330,9 +329,11 @@ val table = tEnv.fromValues(
 {{< /tab >}}
 {{< tab "Python" >}}
 ```python
+from decimal import Decimal
+
 table = t_env.from_elements(
-  [(1, 'ABC'), (2, 'ABCDE')],
-  schema=DataTypes.Row([DataTypes.FIELD('id', DataTypes.DECIMAL(10, 2)),
+  [(Decimal(1), 'ABC'), (Decimal(2), 'ABCDE')],
+  schema=DataTypes.ROW([DataTypes.FIELD('id', DataTypes.DECIMAL(10, 2)),
                         DataTypes.FIELD('name', DataTypes.STRING())]))
 ```
 {{< /tab >}}
@@ -501,7 +502,7 @@ val result = orders.addColumns(concat($"c", "Sunny"))
 {{< /tab >}}
 {{< tab "Python" >}}
 ```python
-from pyflink.table.expressions import concat
+from pyflink.table.expressions import col, concat
 
 orders = t_env.from_path("Orders")
 result = orders.add_columns(concat(col("c"), 'sunny'))
@@ -532,7 +533,7 @@ val result = orders.addOrReplaceColumns(concat($"c", "Sunny") as "desc")
 {{< /tab >}}
 {{< tab "Python" >}}
 ```python
-from pyflink.table.expressions import concat
+from pyflink.table.expressions import col, concat
 
 orders = t_env.from_path("Orders")
 result = orders.add_or_replace_columns(concat(col("c"), 'sunny').alias('desc'))
@@ -826,7 +827,7 @@ Table orders = tEnv.from("Orders");
 
 // 对用户定义的聚合函数使用互异（互不相同、去重）聚合
 tEnv.createTemporarySystemFunction("myUdagg", MyUdagg.class);
-orders.groupBy("users")
+orders.groupBy($("users"))
     .select(
         $("users"),
         call("myUdagg", $("points")).distinct().as("myDistinctResult")
@@ -1004,7 +1005,7 @@ val result = left.join(right)
 {{< /tab >}}
 {{< tab "Python" >}}
 ```python
-from pyflink.table.expressions import col
+from pyflink.table.expressions import col, lit
 
 left = t_env.from_path("Source1").select(col('a'), col('b'), col('c'), col('rowtime1'))
 right = t_env.from_path("Source2").select(col('d'), col('e'), col('f'), col('rowtime2'))
@@ -1124,8 +1125,8 @@ Table ratesHistory = tableEnv.from("RatesHistory");
 
 // 注册带有时间属性和主键的 temporal table function
 TemporalTableFunction rates = ratesHistory.createTemporalTableFunction(
-    "r_proctime",
-    "r_currency");
+    $("r_proctime"),
+    $("r_currency"));
 tableEnv.createTemporarySystemFunction("rates", rates);
 
 // 基于时间属性和键与“Orders”表关联
@@ -1144,11 +1145,52 @@ val rates = ratesHistory.createTemporalTableFunction($"r_proctime", $"r_currency
 // 基于时间属性和键与“Orders”表关联
 val orders = tableEnv.from("Orders")
 val result = orders
-    .joinLateral(rates($"o_rowtime"), $"r_currency" === $"o_currency")
+    .joinLateral(rates($"o_proctime"), $"r_currency" === $"o_currency")
 ```
 {{< /tab >}}
 {{< tab "Python" >}}
 目前不支持 Python 的 Table API。
+{{< /tab >}}
+{{< /tabs >}}
+
+#### Lateral Snapshot Join
+
+{{< label "Batch" >}} {{< label "Streaming" >}}
+
+Enriches an append-only table with the current state of an updating table by calling the built-in `SNAPSHOT` [process table function]({{< ref "docs/sql/built-in-functions/process-table-functions" >}}) as the build (right) side of a `LATERAL` join. Each probe-side row is joined with the build-side state that is current when the row is processed. Both inner and left outer joins are supported. An equality predicate is recommended but not required.
+
+See [LATERAL SNAPSHOT join]({{< ref "docs/sql/reference/queries/joins" >}}#lateral-snapshot-join) for the full list of `SNAPSHOT` arguments and the join semantics.
+
+{{< tabs "snapshotjoin" >}}
+{{< tab "Java" >}}
+```java
+Table orders = tableEnv.from("Orders");
+Table currencyRates = tableEnv.from("CurrencyRates");
+
+// inner join: enrich every order with the current conversion rate
+Table result = orders
+    .joinLateral(
+        call(
+            "SNAPSHOT",
+            currencyRates.asArgument("input"),
+            descriptor("update_time").asArgument("on_time")),
+        $("currency").isEqual($("r_currency")));
+
+// left outer join: unmatched orders are preserved and padded with nulls
+Table leftResult = orders
+    .leftOuterJoinLateral(
+        call(
+            "SNAPSHOT",
+            currencyRates.asArgument("input"),
+            descriptor("update_time").asArgument("on_time")),
+        $("currency").isEqual($("r_currency")));
+```
+{{< /tab >}}
+{{< tab "Scala" >}}
+Currently not supported in Scala Table API.
+{{< /tab >}}
+{{< tab "Python" >}}
+Currently not supported in Python Table API.
 {{< /tab >}}
 {{< /tabs >}}
 
@@ -1158,7 +1200,7 @@ val result = orders
 
 #### Union
 
-{{< label Batch >}}
+{{< label Batch >}} {{< label Streaming >}}
 
 和 SQL `UNION` 子句类似。Union 两张表会删除重复记录。两张表必须具有相同的字段类型。
 
@@ -1188,6 +1230,8 @@ left.union(right)
 ```
 {{< /tab >}}
 {{< /tabs >}}
+
+{{< query_state_warning_zh >}}
 
 #### UnionAll
 
@@ -1226,7 +1270,7 @@ left.union_all(right)
 
 #### Intersect 
 
-{{< label Batch >}}
+{{< label Batch >}} {{< label Streaming >}}
 
 和 SQL `INTERSECT` 子句类似。Intersect 返回两个表中都存在的记录。如果一条记录在一张或两张表中存在多次，则只返回一条记录，也就是说，结果表中不存在重复的记录。两张表必须具有相同的字段类型。
 
@@ -1257,9 +1301,11 @@ left.intersect(right)
 {{< /tab >}}
 {{< /tabs >}}
 
+{{< query_state_warning_zh >}}
+
 #### IntersectAll
 
-{{< label Batch >}}
+{{< label Batch >}} {{< label Streaming >}}
 
 和 SQL `INTERSECT ALL` 子句类似。IntersectAll 返回两个表中都存在的记录。如果一条记录在两张表中出现多次，那么该记录返回的次数同该记录在两个表中都出现的次数一致，也就是说，结果表可能存在重复记录。两张表必须具有相同的字段类型。
 
@@ -1290,9 +1336,11 @@ left.intersect_all(right)
 {{< /tab >}}
 {{< /tabs >}}
 
+{{< query_state_warning_zh >}}
+
 #### Minus 
 
-{{< label Batch  >}}
+{{< label Batch >}} {{< label Streaming >}}
 
 和 SQL `EXCEPT` 子句类似。Minus 返回左表中存在且右表中不存在的记录。左表中的重复记录只返回一次，换句话说，结果表中没有重复记录。两张表必须具有相同的字段类型。
 
@@ -1323,8 +1371,10 @@ left.minus(right)
 {{< /tab >}}
 {{< /tabs >}}
 
+{{< query_state_warning_zh >}}
+
 #### MinusAll
-{{< label Batch >}}
+{{< label Batch >}} {{< label Streaming >}}
 
 和 SQL `EXCEPT ALL` 子句类似。MinusAll 返回右表中不存在的记录。在左表中出现 n 次且在右表中出现 m 次的记录，在结果表中出现 (n - m) 次，例如，也就是说结果中删掉了在右表中存在重复记录的条数的记录。两张表必须具有相同的字段类型。
 
@@ -1354,6 +1404,8 @@ left.minus_all(right)
 ```
 {{< /tab >}}
 {{< /tabs >}}
+
+{{< query_state_warning_zh >}}
 
 #### In 
 
@@ -2068,7 +2120,7 @@ table = input.over_window([w: OverWindow].alias("w"))
 .window(Over.partitionBy($("a")).orderBy($("rowtime")).preceding(UNBOUNDED_RANGE).as("w"));
 
 // 无界的处理时间 over window（假定有一个叫“proctime”的处理时间属性）
-.window(Over.partitionBy($("a")).orderBy("proctime").preceding(UNBOUNDED_RANGE).as("w"));
+.window(Over.partitionBy($("a")).orderBy($("proctime")).preceding(UNBOUNDED_RANGE).as("w"));
 
 // 无界的事件时间行数 over window（假定有一个叫“rowtime”的事件时间属性）
 .window(Over.partitionBy($("a")).orderBy($("rowtime")).preceding(UNBOUNDED_ROW).as("w"));
@@ -2360,7 +2412,7 @@ public class MyMinMax extends AggregateFunction<Row, MyMinMaxAcc> {
     @Override
     public TypeInference getTypeInference(DataTypeFactory typeFactory) {
         return TypeInference.newBuilder()
-                .typedArguments(DataTypes.INT())
+                .staticArguments(StaticArgument.scalar("value", DataTypes.INT(), false))
                 .accumulatorTypeStrategy(
                         TypeStrategies.explicit(
                                 DataTypes.STRUCTURED(
@@ -2410,7 +2462,7 @@ class MyMinMax extends AggregateFunction[Row, MyMinMaxAcc] {
 
   override def getTypeInference(typeFactory: DataTypeFactory): TypeInference =
     TypeInference.newBuilder
-      .typedArguments(DataTypes.INT)
+      .staticArguments(StaticArgument.scalar("value", DataTypes.INT, false))
       .accumulatorTypeStrategy(
         TypeStrategies.explicit(
           DataTypes.STRUCTURED(
@@ -2436,6 +2488,7 @@ val table = input
 from pyflink.common import Row
 from pyflink.table import DataTypes
 from pyflink.table.udf import AggregateFunction, udaf
+from pyflink.table.expressions import col
 
 class CountAndSumAggregateFunction(AggregateFunction):
 
@@ -2856,7 +2909,7 @@ val asyncPredictResult = model.predict(
 
 行中的字段可以是一般类型和(嵌套)复合类型(比如 POJO、元组、行、 Scala 案例类)。
 
-任意嵌套的复合类型的字段都可以通过[值访问函数]({{< ref "docs/sql/functions/built-in-functions" >}}#value-access-functions)来访问。
+任意嵌套的复合类型的字段都可以通过[值访问函数]({{< ref "docs/sql/built-in-functions/row-and-structured-types" >}})来访问。
 
 [用户自定义函数]({{< ref "docs/dev/table/functions/udfs" >}})可以将泛型当作黑匣子一样传输和处理。
 

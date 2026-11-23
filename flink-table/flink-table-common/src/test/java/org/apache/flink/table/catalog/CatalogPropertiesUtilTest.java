@@ -160,6 +160,13 @@ class CatalogPropertiesUtilTest {
                                 .distribution(rangeDist)
                                 .build(),
                         resolvedSchema),
+                new ResolvedCatalogTable(
+                        CatalogTable.newBuilder()
+                                .schema(schema)
+                                .comment("some comment")
+                                .connection(UnresolvedIdentifier.of("mycat", "mydb", "myconn"))
+                                .build(),
+                        resolvedSchema),
                 new ResolvedCatalogMaterializedTable(
                         CatalogMaterializedTable.newBuilder()
                                 .schema(schema)
@@ -176,6 +183,6 @@ class CatalogPropertiesUtilTest {
                         resolvedSchema,
                         RefreshMode.CONTINUOUS,
                         IntervalFreshness.ofHour(123),
-                        StartMode.of(StartMode.StartModeKind.FROM_BEGINNING)));
+                        StartMode.fromBeginning()));
     }
 }

@@ -29,7 +29,10 @@ import { ConfigService } from './config.service';
   providedIn: 'root'
 })
 export class JarService {
-  constructor(private readonly httpClient: HttpClient, private readonly configService: ConfigService) {}
+  constructor(
+    private readonly httpClient: HttpClient,
+    private readonly configService: ConfigService
+  ) {}
 
   public loadJarList(): Observable<JarList> {
     return this.httpClient.get<JarList>(`${this.configService.BASE_URL}/jars`).pipe(
@@ -47,7 +50,7 @@ export class JarService {
     const formData = new FormData();
     formData.append('jarfile', fd, fd.name);
     const req = new HttpRequest('POST', `${this.configService.BASE_URL}/jars/upload`, formData, {
-      reportProgress: true
+      reportUploadProgress: true
     });
     return this.httpClient.request(req);
   }
@@ -76,7 +79,7 @@ export class JarService {
       params = params.append('program-args', programArgs);
     }
     if (savepointPath) {
-      params = params.append('savepointPath', programArgs);
+      params = params.append('savepointPath', savepointPath);
     }
     if (allowNonRestoredState) {
       params = params.append('allowNonRestoredState', allowNonRestoredState);

@@ -224,8 +224,13 @@ For more details, see [FLIP-560](https://cwiki.apache.org/confluence/display/FLI
 
 Additionally, when any of multiple running jobs in Application Mode (submitted for example using
 `executeAsync()`) gets cancelled, all jobs will be stopped and the JobManager will shut down by default.
-This behavior can be configured through the [`execution.terminate-application-on-any-job-terminated-exceptionally`]({{< ref "docs/deployment/config" >}}#execution-terminate-application-on-any-job-terminated-exceptionally) option.
+This behavior can be configured through the [`execution.terminate-application-on-any-job-terminated-exceptionally`]({{< ref "docs/deployment/config" >}}#execution-terminate-application-on-any-job-terminated-exceptiona) option.
 Regular job completions (by the sources shutting down) are supported.
+{{< /hint >}}
+
+{{< hint info >}}
+For low-throughput applications, the JobManager and TaskManager of an Application Mode cluster can also be run together in a
+single process. See [Application Mode in a MiniCluster]({{< ref "docs/deployment/resource-providers/standalone/overview" >}}#application-mode-in-a-minicluster).
 {{< /hint >}}
 
 #### Session Mode

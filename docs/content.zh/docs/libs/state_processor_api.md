@@ -254,7 +254,6 @@ DataStream<KeyedState> keyRange = savepoint.readKeyedState(
 * `SavepointKeyFilter.exact(K key)` / `SavepointKeyFilter.exact(Set<K> keys)` — match a single key or a finite set of keys.
 * `SavepointKeyFilter.range(K lower, boolean lowerInclusive, K upper, boolean upperInclusive)` — match a range; `K` must implement `Comparable<K>`. Either bound may be `null` to leave that side unbounded.
 * `SavepointKeyFilter.range(K lower, boolean lowerInclusive, K upper, boolean upperInclusive, SerializableComparator<K> comparator)` — same, but with an explicit comparator for key types that do not implement `Comparable<K>`. The comparator must be serializable because the filter is shipped with the job; lambdas and method references assigned to `SerializableComparator` satisfy this automatically.
-* `SavepointKeyFilter.empty()` — match no keys. Not intended for direct use — it only serves as an internal building block for the Table API filter pushdown.
 
 When the built-in filters are not enough, you can implement the `SavepointKeyFilter<K>` interface yourself.
 For use with the DataStream API, only `test(K key)` has to be implemented; it is called for every key in each opened split and decides whether that key will be read.
@@ -313,8 +312,6 @@ DataStream<KeyedState> firstKeys = savepoint.readKeyedState(
     TypeInformation.of(KeyedState.class),
     new UpToKeyFilter(100));
 ```
-
-The remaining interface methods can be left at their defaults for DataStream API usage, as they are only used internally in the Table API during push-down handling.
 
 ### 窗口状态 Window State
 
@@ -451,12 +448,12 @@ public class SimpleBootstrapFunction extends StateBootstrapFunction<Integer> {
 	
     @Override
     public void initializeState(FunctionInitializationContext context) throws Exception {
-        state = context.getOperatorState().getListState(new ListStateDescriptor<>("state", Types.INT));
+        state = context.getOperatorStateStore().getListState(new ListStateDescriptor<>("state", Types.INT));
     }
 }
 
 StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
-DataStream<Integer> data = env.fromElements(1, 2, 3);
+DataStream<Integer> data = env.fromData(1, 2, 3);
 
 StateBootstrapTransformation transformation = OperatorTransformation
     .bootstrapWith(data)
@@ -472,6 +469,13 @@ public class CurrencyRate {
     public String currency;
 
     public Double rate;
+
+    public CurrencyRate() {}
+
+    public CurrencyRate(String currency, Double rate) {
+        this.currency = currency;
+        this.rate = rate;
+    }
 }
 
 public class CurrencyBootstrapFunction extends BroadcastStateBootstrapFunction<CurrencyRate> {
@@ -485,7 +489,7 @@ public class CurrencyBootstrapFunction extends BroadcastStateBootstrapFunction<C
     }
 }
 
-DataStream<CurrencyRate> currencyDataSet = env.fromCollection(
+DataStream<CurrencyRate> currencyDataSet = env.fromData(
     new CurrencyRate("USD", 1.0), new CurrencyRate("EUR", 1.3));
 
 StateBootstrapTransformation<CurrencyRate> broadcastTransformation = OperatorTransformation
@@ -523,7 +527,7 @@ public class AccountBootstrapper extends KeyedStateBootstrapFunction<Integer, Ac
  
 StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
 
-DataStream<Account> accountDataSet = env.fromCollection(accounts);
+DataStream<Account> accountDataSet = env.fromData(accounts);
 
 StateBootstrapTransformation<Account> transformation = OperatorTransformation
     .bootstrapWith(accountDataSet)
@@ -554,7 +558,7 @@ public class Account {
  
 StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
 
-DataStream<Account> accountDataSet = env.fromCollection(accounts);
+DataStream<Account> accountDataSet = env.fromData(accounts);
 
 StateBootstrapTransformation<Account> transformation = OperatorTransformation
     .bootstrapWith(accountDataSet)

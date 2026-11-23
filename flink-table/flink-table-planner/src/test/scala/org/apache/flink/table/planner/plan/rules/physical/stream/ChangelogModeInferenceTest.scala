@@ -19,10 +19,12 @@ package org.apache.flink.table.planner.plan.rules.physical.stream
 
 import org.apache.flink.table.api.ExplainDetail
 import org.apache.flink.table.api.config.{AggregatePhaseStrategy, OptimizerConfigOptions}
+import org.apache.flink.table.planner.plan.nodes.exec.stream.ProcessTableFunctionTestUtils.UpdatingJoinFunction
 import org.apache.flink.table.planner.plan.optimize.program.FlinkChangelogModeInferenceProgram
 import org.apache.flink.table.planner.utils.ImmutableColConstraintTestUtils.addImmutableColConstraint
 import org.apache.flink.table.planner.utils.TableTestBase
 
+import org.assertj.core.api.Assertions.assertThatThrownBy
 import org.junit.jupiter.api.{BeforeEach, Test}
 
 import java.time.Duration
@@ -86,6 +88,17 @@ class ChangelogModeInferenceTest extends TableTestBase {
                     |) WITH (
                     |  'connector' = 'values',
                     |  'changelog-mode' = 'I,UA,UB,D'
+                    |)
+      """.stripMargin)
+
+    util.addTable("""
+                    |CREATE TABLE LookupDim (
+                    | id BIGINT,
+                    | v STRING,
+                    | PRIMARY KEY (id) NOT ENFORCED
+                    |) WITH (
+                    | 'connector' = 'values',
+                    | 'bounded' = 'true'
                     |)
       """.stripMargin)
   }
@@ -429,6 +442,77 @@ class ChangelogModeInferenceTest extends TableTestBase {
   }
 
   @Test
+  def testFilterPushedDownWithoutUpsertKey(): Unit = {
+    util.tableEnv.executeSql("""
+                               |create table src (
+                               | name string,
+                               | score int,
+                               | id int
+                               |) with (
+                               | 'connector' = 'values',
+                               | 'changelog-mode' = 'I,UA,UB',
+                               | 'filterable-fields' = 'name'
+                               |)
+                               |""".stripMargin)
+
+    // without upsert keys the filter is also kept in a Calc
+    util.verifyRelPlan("select * from src where name <> 'Tom'", ExplainDetail.CHANGELOG_MODE)
+  }
+
+  @Test
+  def testFilterPushedDownOnPartOfUpsertKey(): Unit = {
+    util.tableEnv.executeSql("""
+                               |create table src (
+                               | score int,
+                               | name string,
+                               | id int,
+                               | primary key (name, id) not enforced
+                               |) with (
+                               | 'connector' = 'values',
+                               | 'changelog-mode' = 'I,UA,UB',
+                               | 'filterable-fields' = 'name'
+                               |)
+                               |""".stripMargin)
+
+    // upsert key {name, id} contains {name}, so it's only pushed
+    util.verifyRelPlan("select * from src where name <> 'Tom'", ExplainDetail.CHANGELOG_MODE)
+  }
+
+  @Test
+  def testFilterPushedDownOnDeletesByKeyWithoutUpdates(): Unit = {
+    util.tableEnv.executeSql("""
+                               |create table src (
+                               | name string,
+                               | score int,
+                               | id int primary key not enforced
+                               |) with (
+                               | 'connector' = 'values',
+                               | 'changelog-mode' = 'I,D',
+                               | 'source.produces-delete-by-key' = 'true',
+                               | 'filterable-fields' = 'name'
+                               |)
+                               |""".stripMargin)
+    util.tableEnv.executeSql("""
+                               |create table snk (
+                               | name string,
+                               | score int,
+                               | id int primary key not enforced
+                               |) with (
+                               | 'connector' = 'values',
+                               | 'sink-insert-only' = 'false',
+                               | 'sink.supports-delete-by-key' = 'true'
+                               |)
+                               |""".stripMargin)
+
+    // a delete by key has no name to filter on
+    assertThatThrownBy(
+      () => util.verifyRelPlanInsert("insert into snk select * from src where name <> 'Tom'"))
+      .hasMessageContaining(
+        "Can't generate a valid execution plan for the given query because of a changelog " +
+          "mismatch: an operator cannot produce the changelog its consumer requires.")
+  }
+
+  @Test
   def testSinkPkCoveredByUpsertKeyAndImmutableCols(): Unit = {
     util.tableEnv.executeSql("""
                                |create table src (
@@ -545,5 +629,134 @@ class ChangelogModeInferenceTest extends TableTestBase {
     // sink pk: {id}
     // upsert key {id, name} is NOT a subset of sink pk {id}, so BEFORE_AND_AFTER is required
     util.verifyRelPlan(statementSet, ExplainDetail.CHANGELOG_MODE)
+  }
+
+  @Test
+  def testKeylessUpsertSinkKeepsUpsertWhenInputHasUpsertKey(): Unit = {
+    // Input keeps its upsert key (currency), so a keyless upsert-only sink stays upsert.
+    util.addTable("""
+                    |CREATE TABLE keyless_upsert_sink (
+                    |  currency STRING,
+                    |  rate INT
+                    |) WITH (
+                    |  'connector' = 'values',
+                    |  'sink-insert-only' = 'false',
+                    |  'sink-changelog-mode-enforced' = 'I,UA,D'
+                    |)
+                    |""".stripMargin)
+    util.verifyRelPlanInsert(
+      "INSERT INTO keyless_upsert_sink SELECT currency, rate FROM DeduplicatedView",
+      ExplainDetail.CHANGELOG_MODE)
+  }
+
+  @Test
+  def testKeylessUpsertSinkFallsBackToRetractWhenUpsertKeyProjectedAway(): Unit = {
+    // The input upsert key (currency) is projected away, so a keyless upsert-only sink cannot
+    // upsert and the planner falls back to retract; the deduplicate's ChangelogNormalize supplies
+    // UPDATE_BEFORE.
+    util.addTable("""
+                    |CREATE TABLE keyless_upsert_sink_no_key (
+                    |  rate INT
+                    |) WITH (
+                    |  'connector' = 'values',
+                    |  'sink-insert-only' = 'false',
+                    |  'sink-changelog-mode-enforced' = 'I,UA,D'
+                    |)
+                    |""".stripMargin)
+    util.verifyRelPlanInsert(
+      "INSERT INTO keyless_upsert_sink_no_key SELECT rate FROM DeduplicatedView",
+      ExplainDetail.CHANGELOG_MODE)
+  }
+
+  @Test
+  def testKeylessUpsertSinkFallsBackToRetractOnGlobalAggregate(): Unit = {
+    // A global aggregation reports an empty upsert key, meaning "at most one row" rather than a
+    // set of columns. The keyless sink must fall back to retract, or consumers receive bare
+    // UPDATE_AFTER rows with no key to apply them by.
+    util.addTable("""
+                    |CREATE TABLE keyless_upsert_sink_count (
+                    |  cnt BIGINT
+                    |) WITH (
+                    |  'connector' = 'values',
+                    |  'sink-insert-only' = 'false',
+                    |  'sink-changelog-mode-enforced' = 'I,UA,D'
+                    |)
+                    |""".stripMargin)
+    util.verifyRelPlanInsert(
+      "INSERT INTO keyless_upsert_sink_count SELECT COUNT(*) FROM MyTable",
+      ExplainDetail.CHANGELOG_MODE)
+  }
+
+  @Test
+  def testKeylessUpsertSinkWithLookupJoinOnGlobalAggregateProbeSide(): Unit = {
+    // The reported key (dim.id) isn't invariant across updates - it really tracks the volatile
+    // join value (cnt) - but lookup joins don't filter that out, unlike regular joins.
+    util.addTable("""
+                    |CREATE TABLE lookup_sink (
+                    |  id BIGINT,
+                    |  v STRING
+                    |) WITH (
+                    |  'connector' = 'values',
+                    |  'sink-insert-only' = 'false',
+                    |  'sink-changelog-mode-enforced' = 'I,UA,D'
+                    |)
+                    |""".stripMargin)
+    val sql =
+      """
+        |INSERT INTO lookup_sink
+        |SELECT dim.id, dim.v
+        |FROM (SELECT COUNT(*) AS cnt, PROCTIME() AS pt FROM MyTable) g
+        |JOIN LookupDim FOR SYSTEM_TIME AS OF g.pt AS dim
+        |ON g.cnt = dim.id
+      """.stripMargin
+    util.verifyRelPlanInsert(sql, ExplainDetail.CHANGELOG_MODE)
+  }
+
+  @Test
+  def testKeylessUpsertSinkWithMultiTableArgUpsertPtfComputesDistinctKeyPerArg(): Unit = {
+    // Multi-arg PTF with a partitioned table argument after the first: the 2nd+ arg's partition
+    // columns must not collapse to an empty key, or a real key gets mixed with a spurious empty
+    // candidate and the sink would wrongly stay upsert.
+    util.addTemporarySystemFunction("f", classOf[UpdatingJoinFunction])
+    util.addTable("""
+                    |CREATE TABLE scores_ptf_probe (
+                    |  name STRING,
+                    |  score INT,
+                    |  PRIMARY KEY(name) NOT ENFORCED
+                    |) WITH (
+                    |  'connector' = 'values',
+                    |  'changelog-mode' = 'I,UA,D',
+                    |  'source.produces-delete-by-key' = 'true'
+                    |)
+                    |""".stripMargin)
+    util.addTable("""
+                    |CREATE TABLE city_ptf_probe (
+                    |  name STRING,
+                    |  city STRING,
+                    |  PRIMARY KEY(name) NOT ENFORCED
+                    |) WITH (
+                    |  'connector' = 'values',
+                    |  'changelog-mode' = 'I,UA,D',
+                    |  'source.produces-delete-by-key' = 'true'
+                    |)
+                    |""".stripMargin)
+    util.addTable("""
+                    |CREATE TABLE keyless_upsert_sink_ptf_probe (
+                    |  name STRING,
+                    |  name0 STRING,
+                    |  `out` STRING
+                    |) WITH (
+                    |  'connector' = 'values',
+                    |  'sink-insert-only' = 'false',
+                    |  'sink-changelog-mode-enforced' = 'I,UA,D',
+                    |  'sink.supports-delete-by-key' = 'true'
+                    |)
+                    |""".stripMargin)
+    util.verifyRelPlanInsert(
+      "INSERT INTO keyless_upsert_sink_ptf_probe SELECT `name`, name0, `out` FROM f("
+        + "scoreTable => TABLE scores_ptf_probe PARTITION BY name, "
+        + "cityTable => TABLE city_ptf_probe PARTITION BY name)",
+      ExplainDetail.CHANGELOG_MODE
+    )
   }
 }

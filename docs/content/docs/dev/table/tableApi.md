@@ -77,12 +77,11 @@ counts.execute().print();
 {{< /tab >}}
 {{< tab "Scala" >}}
 
-The Scala Table API is enabled by importing `org.apache.flink.table.api._`, `org.apache.flink.api.scala._`, and `org.apache.flink.table.api.bridge.scala._` (for bridging to/from DataStream).
+The Scala Table API is enabled by importing `org.apache.flink.table.api._` and `org.apache.flink.table.api.bridge.scala._` (for bridging to/from DataStream).
 
 The following example shows how a Scala Table API program is constructed. Table fields are referenced using Scala's String interpolation using a dollar character (`$`).
 
 ```scala
-import org.apache.flink.api.scala._
 import org.apache.flink.table.api._
 import org.apache.flink.table.api.bridge.scala._
 
@@ -332,9 +331,11 @@ val table = tEnv.fromValues(
 {{< /tab >}}
 {{< tab "Python" >}}
 ```python
+from decimal import Decimal
+
 table = t_env.from_elements(
-  [(1, 'ABC'), (2, 'ABCDE')],
-  schema=DataTypes.Row([DataTypes.FIELD('id', DataTypes.DECIMAL(10, 2)),
+  [(Decimal(1), 'ABC'), (Decimal(2), 'ABCDE')],
+  schema=DataTypes.ROW([DataTypes.FIELD('id', DataTypes.DECIMAL(10, 2)),
                         DataTypes.FIELD('name', DataTypes.STRING())]))
 ```
 {{< /tab >}}
@@ -500,7 +501,7 @@ val result = orders.addColumns(concat($"c", "Sunny"))
 {{< /tab >}}
 {{< tab "Python" >}}
 ```python
-from pyflink.table.expressions import concat
+from pyflink.table.expressions import col, concat
 
 orders = t_env.from_path("Orders")
 result = orders.add_columns(concat(col("c"), 'sunny'))
@@ -531,7 +532,7 @@ val result = orders.addOrReplaceColumns(concat($"c", "Sunny") as "desc")
 {{< /tab >}}
 {{< tab "Python" >}}
 ```python
-from pyflink.table.expressions import concat
+from pyflink.table.expressions import col, concat
 
 orders = t_env.from_path("Orders")
 result = orders.add_or_replace_columns(concat(col("c"), 'sunny').alias('desc'))
@@ -665,7 +666,7 @@ from pyflink.table.window import Tumble
 from pyflink.table.expressions import lit, col
 
 orders = t_env.from_path("Orders")
-result = orders.window(Tumble.over(lit(5).minutes).on(col('rowtime')).alias("w")) \ 
+result = orders.window(Tumble.over(lit(5).minutes).on(col('rowtime')).alias("w")) \
                .group_by(col('a'), col('w')) \
                .select(col('a'), col('w').start, col('w').end, col('b').sum.alias('d'))
 ```
@@ -825,7 +826,7 @@ Table orders = tEnv.from("Orders");
 
 // Use distinct aggregation for user-defined aggregate functions
 tEnv.createTemporarySystemFunction("myUdagg", MyUdagg.class);
-orders.groupBy("users")
+orders.groupBy($("users"))
     .select(
         $("users"),
         call("myUdagg", $("points")).distinct().as("myDistinctResult")
@@ -1003,7 +1004,7 @@ val result = left.join(right)
 {{< /tab >}}
 {{< tab "Python" >}}
 ```python
-from pyflink.table.expressions import col
+from pyflink.table.expressions import col, lit
 
 left = t_env.from_path("Source1").select(col('a'), col('b'), col('c'), col('rowtime1'))
 right = t_env.from_path("Source2").select(col('d'), col('e'), col('f'), col('rowtime2'))
@@ -1123,8 +1124,8 @@ Table ratesHistory = tableEnv.from("RatesHistory");
 
 // register temporal table function with a time attribute and primary key
 TemporalTableFunction rates = ratesHistory.createTemporalTableFunction(
-    "r_proctime",
-    "r_currency");
+    $("r_proctime"),
+    $("r_currency"));
 tableEnv.createTemporarySystemFunction("rates", rates);
 
 // join with "Orders" based on the time attribute and key
@@ -1143,8 +1144,49 @@ val rates = ratesHistory.createTemporalTableFunction($"r_proctime", $"r_currency
 // join with "Orders" based on the time attribute and key
 val orders = tableEnv.from("Orders")
 val result = orders
-    .joinLateral(rates($"o_rowtime"), $"r_currency" === $"o_currency")
+    .joinLateral(rates($"o_proctime"), $"r_currency" === $"o_currency")
 ```
+{{< /tab >}}
+{{< tab "Python" >}}
+Currently not supported in Python Table API.
+{{< /tab >}}
+{{< /tabs >}}
+
+#### Lateral Snapshot Join
+
+{{< label "Batch" >}} {{< label "Streaming" >}}
+
+Enriches an append-only table with the current state of an updating table by calling the built-in `SNAPSHOT` [process table function]({{< ref "docs/sql/built-in-functions/process-table-functions" >}}) as the build (right) side of a `LATERAL` join. Each probe-side row is joined with the build-side state that is current when the row is processed. Both inner and left outer joins are supported. An equality predicate is recommended but not required.
+
+See [LATERAL SNAPSHOT join]({{< ref "docs/sql/reference/queries/joins" >}}#lateral-snapshot-join) for the full list of `SNAPSHOT` arguments and the join semantics.
+
+{{< tabs "snapshotjoin" >}}
+{{< tab "Java" >}}
+```java
+Table orders = tableEnv.from("Orders");
+Table currencyRates = tableEnv.from("CurrencyRates");
+
+// inner join: enrich every order with the current conversion rate
+Table result = orders
+    .joinLateral(
+        call(
+            "SNAPSHOT",
+            currencyRates.asArgument("input"),
+            descriptor("update_time").asArgument("on_time")),
+        $("currency").isEqual($("r_currency")));
+
+// left outer join: unmatched orders are preserved and padded with nulls
+Table leftResult = orders
+    .leftOuterJoinLateral(
+        call(
+            "SNAPSHOT",
+            currencyRates.asArgument("input"),
+            descriptor("update_time").asArgument("on_time")),
+        $("currency").isEqual($("r_currency")));
+```
+{{< /tab >}}
+{{< tab "Scala" >}}
+Currently not supported in Scala Table API.
 {{< /tab >}}
 {{< tab "Python" >}}
 Currently not supported in Python Table API.
@@ -1157,7 +1199,7 @@ Currently not supported in Python Table API.
 
 #### Union
 
-{{< label Batch >}}
+{{< label Batch >}} {{< label Streaming >}}
 
 Similar to a SQL `UNION` clause. Unions two tables with duplicate records removed. Both tables must have identical field types.
 
@@ -1187,6 +1229,8 @@ left.union(right)
 ```
 {{< /tab >}}
 {{< /tabs >}}
+
+{{< query_state_warning >}}
 
 #### UnionAll
 
@@ -1225,7 +1269,7 @@ left.union_all(right)
 
 #### Intersect 
 
-{{< label Batch >}}
+{{< label Batch >}} {{< label Streaming >}}
 
 Similar to a SQL `INTERSECT` clause. Intersect returns records that exist in both tables. If a record is present one or both tables more than once, it is returned just once, i.e., the resulting table has no duplicate records. Both tables must have identical field types.
 
@@ -1256,9 +1300,11 @@ left.intersect(right)
 {{< /tab >}}
 {{< /tabs >}}
 
+{{< query_state_warning >}}
+
 #### IntersectAll
 
-{{< label Batch >}}
+{{< label Batch >}} {{< label Streaming >}}
 
 Similar to a SQL `INTERSECT ALL` clause. IntersectAll returns records that exist in both tables. If a record is present in both tables more than once, it is returned as many times as it is present in both tables, i.e., the resulting table might have duplicate records. Both tables must have identical field types.
 
@@ -1289,9 +1335,11 @@ left.intersect_all(right)
 {{< /tab >}}
 {{< /tabs >}}
 
+{{< query_state_warning >}}
+
 #### Minus 
 
-{{< label Batch  >}}
+{{< label Batch >}} {{< label Streaming >}}
 
 Similar to a SQL `EXCEPT` clause. Minus returns records from the left table that do not exist in the right table. Duplicate records in the left table are returned exactly once, i.e., duplicates are removed. Both tables must have identical field types.
 
@@ -1322,8 +1370,10 @@ left.minus(right)
 {{< /tab >}}
 {{< /tabs >}}
 
+{{< query_state_warning >}}
+
 #### MinusAll
-{{< label Batch >}}
+{{< label Batch >}} {{< label Streaming >}}
 
 Similar to a SQL EXCEPT ALL clause. MinusAll returns the records that do not exist in the right table. A record that is present n times in the left table and m times in the right table is returned (n - m) times, i.e., as many duplicates as are present in the right table are removed. Both tables must have identical field types.
 
@@ -1353,6 +1403,8 @@ left.minus_all(right)
 ```
 {{< /tab >}}
 {{< /tabs >}}
+
+{{< query_state_warning >}}
 
 #### In 
 
@@ -2067,7 +2119,7 @@ Note: Currently, all aggregation functions in the same select() call must be com
 .window(Over.partitionBy($("a")).orderBy($("rowtime")).preceding(UNBOUNDED_RANGE).as("w"));
 
 // Unbounded Processing-time over window (assuming a processing-time attribute "proctime")
-.window(Over.partitionBy($("a")).orderBy("proctime").preceding(UNBOUNDED_RANGE).as("w"));
+.window(Over.partitionBy($("a")).orderBy($("proctime")).preceding(UNBOUNDED_RANGE).as("w"));
 
 // Unbounded Event-time Row-count over window (assuming an event-time attribute "rowtime")
 .window(Over.partitionBy($("a")).orderBy($("rowtime")).preceding(UNBOUNDED_ROW).as("w"));
@@ -2359,7 +2411,7 @@ public class MyMinMax extends AggregateFunction<Row, MyMinMaxAcc> {
     @Override
     public TypeInference getTypeInference(DataTypeFactory typeFactory) {
         return TypeInference.newBuilder()
-                .typedArguments(DataTypes.INT())
+                .staticArguments(StaticArgument.scalar("value", DataTypes.INT(), false))
                 .accumulatorTypeStrategy(
                         TypeStrategies.explicit(
                                 DataTypes.STRUCTURED(
@@ -2409,7 +2461,7 @@ class MyMinMax extends AggregateFunction[Row, MyMinMaxAcc] {
 
   override def getTypeInference(typeFactory: DataTypeFactory): TypeInference =
     TypeInference.newBuilder
-      .typedArguments(DataTypes.INT)
+      .staticArguments(StaticArgument.scalar("value", DataTypes.INT, false))
       .accumulatorTypeStrategy(
         TypeStrategies.explicit(
           DataTypes.STRUCTURED(
@@ -2435,6 +2487,7 @@ Performs an aggregate operation with a python [general aggregate function]({{< r
 from pyflink.common import Row
 from pyflink.table import DataTypes
 from pyflink.table.udf import AggregateFunction, udaf
+from pyflink.table.expressions import col
 
 class CountAndSumAggregateFunction(AggregateFunction):
 
@@ -2856,7 +2909,7 @@ Please see the dedicated page about [data types]({{< ref "docs/sql/reference/dat
 
 Generic types and (nested) composite types (e.g., POJOs, tuples, rows, Scala case classes) can be fields of a row as well.
 
-Fields of composite types with arbitrary nesting can be accessed with [value access functions]({{< ref "docs/sql/functions/built-in-functions" >}}#value-access-functions).
+Fields of composite types with arbitrary nesting can be accessed with [value access functions]({{< ref "docs/sql/built-in-functions/row-and-structured-types" >}}).
 
 Generic types are treated as a black box and can be passed on or processed by [user-defined functions]({{< ref "docs/dev/table/functions/udfs" >}}).
 

@@ -20,6 +20,7 @@ package org.apache.flink.fs.s3native;
 
 import org.apache.flink.fs.s3native.token.DynamicTemporaryAWSCredentialsProvider;
 
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import software.amazon.awssdk.auth.credentials.AnonymousCredentialsProvider;
 import software.amazon.awssdk.auth.credentials.AwsBasicCredentials;
@@ -27,11 +28,16 @@ import software.amazon.awssdk.auth.credentials.AwsCredentials;
 import software.amazon.awssdk.auth.credentials.AwsCredentialsProvider;
 import software.amazon.awssdk.auth.credentials.AwsCredentialsProviderChain;
 import software.amazon.awssdk.auth.credentials.DefaultCredentialsProvider;
+import software.amazon.awssdk.retries.AdaptiveRetryStrategy;
+import software.amazon.awssdk.retries.StandardRetryStrategy;
+import software.amazon.awssdk.retries.api.RetryStrategy;
 import software.amazon.awssdk.services.sts.auth.StsAssumeRoleCredentialsProvider;
 
 import java.lang.reflect.Field;
 import java.time.Duration;
+import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.TimeUnit;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -41,6 +47,25 @@ class S3ClientProviderTest {
 
     private static final String DUMMY_ENDPOINT = "http://localhost:9000";
     private static final String DUMMY_REGION = "us-east-1";
+
+    private final List<S3ClientProvider> providers = new ArrayList<>();
+
+    /** Tracks a provider so it is closed after the test, releasing its SDK/CRT resources. */
+    private S3ClientProvider track(S3ClientProvider provider) {
+        providers.add(provider);
+        return provider;
+    }
+
+    @AfterEach
+    void closeProviders() {
+        for (S3ClientProvider provider : providers) {
+            try {
+                provider.closeAsync().get(10, TimeUnit.SECONDS);
+            } catch (Exception ignored) {
+            }
+        }
+        providers.clear();
+    }
 
     @Test
     void testMinimalChainWithoutStaticOrCustom() throws Exception {
@@ -215,6 +240,68 @@ class S3ClientProviderTest {
                 .isEqualTo(NativeS3FileSystemFactory.RETRY_THROTTLE_BASE_DELAY.defaultValue());
         assertThat(provider.getRetryMaxBackoff())
                 .isEqualTo(NativeS3FileSystemFactory.RETRY_MAX_BACKOFF.defaultValue());
+        assertThat(provider.isRetryCircuitBreakerEnabled())
+                .isEqualTo(NativeS3FileSystemFactory.RETRY_CIRCUIT_BREAKER_ENABLED.defaultValue());
+        assertThat(provider.getRetryMode())
+                .isEqualTo(NativeS3FileSystemFactory.RETRY_MODE.defaultValue());
+    }
+
+    @Test
+    void testRetryModeOverride() {
+        S3ClientProvider provider =
+                S3ClientProvider.builder()
+                        .endpoint(DUMMY_ENDPOINT)
+                        .region(DUMMY_REGION)
+                        .retryMode(NativeS3FileSystemFactory.RetryMode.ADAPTIVE)
+                        .build();
+
+        assertThat(provider.getRetryMode()).isEqualTo(NativeS3FileSystemFactory.RetryMode.ADAPTIVE);
+    }
+
+    @Test
+    void testStandardModeBuildsAClientWithTheStandardStrategy() {
+        S3ClientProvider provider =
+                track(
+                        S3ClientProvider.builder()
+                                .endpoint(DUMMY_ENDPOINT)
+                                .region(DUMMY_REGION)
+                                .retryMode(NativeS3FileSystemFactory.RetryMode.STANDARD)
+                                .maxRetries(5)
+                                .build());
+
+        RetryStrategy strategy = retryStrategyOf(provider);
+
+        assertThat(strategy).isInstanceOf(StandardRetryStrategy.class);
+        assertThat(strategy.maxAttempts()).isEqualTo(6);
+    }
+
+    @Test
+    void testAdaptiveModeBuildsAClientWithTheAdaptiveStrategy() {
+        S3ClientProvider provider =
+                track(
+                        S3ClientProvider.builder()
+                                .endpoint(DUMMY_ENDPOINT)
+                                .region(DUMMY_REGION)
+                                .retryMode(NativeS3FileSystemFactory.RetryMode.ADAPTIVE)
+                                .maxRetries(5)
+                                .build());
+
+        RetryStrategy strategy = retryStrategyOf(provider);
+
+        assertThat(strategy).isInstanceOf(AdaptiveRetryStrategy.class);
+        assertThat(strategy.maxAttempts()).isEqualTo(6);
+    }
+
+    @Test
+    void testRetryCircuitBreakerEnabledOverride() {
+        S3ClientProvider provider =
+                S3ClientProvider.builder()
+                        .endpoint(DUMMY_ENDPOINT)
+                        .region(DUMMY_REGION)
+                        .retryCircuitBreakerEnabled(true)
+                        .build();
+
+        assertThat(provider.isRetryCircuitBreakerEnabled()).isTrue();
     }
 
     @Test
@@ -271,6 +358,73 @@ class S3ClientProviderTest {
                 .hasMessageContaining("retryThrottleBaseDelay");
     }
 
+    @Test
+    void testCrtDisabledByDefault() {
+        S3ClientProvider provider =
+                track(
+                        S3ClientProvider.builder()
+                                .endpoint(DUMMY_ENDPOINT)
+                                .region(DUMMY_REGION)
+                                .build());
+        assertThat(provider.isUseCrt()).isFalse();
+        // When CRT is disabled the async client must NOT be a CRT-backed implementation.
+        assertThat(provider.getAsyncClient().getClass().getName()).doesNotContain("Crt");
+        // No Flink-level default applied; getter returns null when user did not set the value.
+        assertThat(provider.getCrtTargetThroughputGbps()).isNull();
+        assertThat(provider.getCrtReadBufferSizeInBytes()).isNull();
+        assertThat(provider.getCrtMaxNativeMemoryLimitInBytes()).isNull();
+        // CRT max concurrency keeps its builder default (independent of s3.connection.max).
+        assertThat(provider.getCrtMaxConcurrency())
+                .isEqualTo(NativeS3FileSystemFactory.CRT_MAX_CONCURRENCY.defaultValue());
+    }
+
+    @Test
+    void testCrtFlagIsRecordedAndCrtBranchIsTaken() {
+        S3ClientProvider provider =
+                track(
+                        S3ClientProvider.builder()
+                                .endpoint(DUMMY_ENDPOINT)
+                                .region(DUMMY_REGION)
+                                .useCrt(true)
+                                .crtTargetThroughputGbps(20.0)
+                                .build());
+
+        assertThat(provider.isUseCrt()).isTrue();
+        assertThat(provider.getCrtTargetThroughputGbps()).isEqualTo(20.0);
+        assertThat(provider.getAsyncClient().getClass().getName()).contains("Crt");
+    }
+
+    @Test
+    void testCrtEnabledWithoutThroughputOverrideStillBuildsCrtClient() {
+        S3ClientProvider provider =
+                track(
+                        S3ClientProvider.builder()
+                                .endpoint(DUMMY_ENDPOINT)
+                                .region(DUMMY_REGION)
+                                .useCrt(true)
+                                .build());
+
+        assertThat(provider.isUseCrt()).isTrue();
+        assertThat(provider.getCrtTargetThroughputGbps()).isNull();
+        assertThat(provider.getAsyncClient().getClass().getName()).contains("Crt");
+    }
+
+    @Test
+    void testCrtMissingJarsMessageIsActionable() {
+        // Contract test: if CRT classes are missing at runtime the user must get a message
+        // that names the responsible config key, the missing JAR coordinates, and a setup
+        // pointer. A full classloader-isolation test would require multi-classloader infra
+        // disproportionate to the value; assert the message contract instead.
+        String msg = S3ClientProvider.Builder.crtMissingJarsMessage();
+        assertThat(msg).contains("s3.crt.enabled=true");
+        // aws-crt-client is now bundled in the fat JAR; only aws-crt (JNI) is external
+        assertThat(msg).doesNotContain("aws-crt-client");
+        assertThat(msg).contains("aws-crt");
+        assertThat(msg).contains("tools/download-crt-jars.sh");
+        assertThat(msg).contains("plugin");
+        assertThat(msg).contains("README");
+    }
+
     @SuppressWarnings("unchecked")
     private static List<AwsCredentialsProvider> extractChain(AwsCredentialsProvider provider)
             throws Exception {
@@ -278,5 +432,14 @@ class S3ClientProviderTest {
         Field field = AwsCredentialsProviderChain.class.getDeclaredField("credentialsProviders");
         field.setAccessible(true);
         return (List<AwsCredentialsProvider>) field.get(provider);
+    }
+
+    /** The retry strategy the SDK client of the provider was built with. */
+    private static RetryStrategy retryStrategyOf(S3ClientProvider provider) {
+        return provider.getS3Client()
+                .serviceClientConfiguration()
+                .overrideConfiguration()
+                .retryStrategy()
+                .orElseThrow(() -> new AssertionError("The client has no retry strategy"));
     }
 }

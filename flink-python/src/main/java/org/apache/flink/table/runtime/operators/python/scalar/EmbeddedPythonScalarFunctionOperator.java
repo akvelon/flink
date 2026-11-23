@@ -36,9 +36,12 @@ import org.apache.flink.util.Preconditions;
 
 import javax.annotation.Nullable;
 
+import java.util.Arrays;
+
 import static org.apache.flink.python.PythonOptions.PYTHON_METRIC_ENABLED;
 import static org.apache.flink.python.PythonOptions.PYTHON_PROFILE_ENABLED;
 import static org.apache.flink.python.util.ProtoUtils.createFlattenRowTypeCoderInfoDescriptorProto;
+import static org.apache.flink.python.util.ProtoUtils.createRowTypeCoderInfoDescriptorProto;
 
 /** The Python {@link ScalarFunction} operator in embedded Python environment. */
 @Internal
@@ -50,13 +53,25 @@ public class EmbeddedPythonScalarFunctionOperator
     /** The Python {@link ScalarFunction}s to be executed. */
     private final PythonFunctionInfo[] scalarFunctions;
 
+    /**
+     * The positions of the projected results within {@link #scalarFunctions}, or {@code null} when
+     * the functions are exactly the operator output in order.
+     */
+    @Nullable private final int[] udfOutputIndices;
+
     @Nullable private GeneratedProjection forwardedFieldGeneratedProjection;
 
     /** Whether there is only one input argument. */
     private transient boolean hasOnlyOneInputArgument;
 
+    /** Whether any UDF expects the full input row. */
+    private transient boolean takesRowAsInput;
+
     /** Whether is only one user-defined function. */
     private transient boolean hasOnlyOneUserDefinedFunction;
+
+    /** Reusable external row container for takes-row-as-input UDFs. */
+    private transient Object[] rowInputArgument;
 
     /** The Projection which projects the forwarded fields from the input row. */
     private transient Projection<RowData, BinaryRowData> forwardedFieldProjection;
@@ -69,15 +84,41 @@ public class EmbeddedPythonScalarFunctionOperator
             RowType udfOutputType,
             int[] udfInputOffsets,
             @Nullable GeneratedProjection forwardedFieldGeneratedProjection) {
+        this(
+                config,
+                scalarFunctions,
+                null,
+                inputType,
+                udfInputType,
+                udfOutputType,
+                udfInputOffsets,
+                forwardedFieldGeneratedProjection);
+    }
+
+    public EmbeddedPythonScalarFunctionOperator(
+            Configuration config,
+            PythonFunctionInfo[] scalarFunctions,
+            @Nullable int[] udfOutputIndices,
+            RowType inputType,
+            RowType udfInputType,
+            RowType udfOutputType,
+            int[] udfInputOffsets,
+            @Nullable GeneratedProjection forwardedFieldGeneratedProjection) {
         super(config, inputType, udfInputType, udfOutputType, udfInputOffsets);
         this.scalarFunctions = Preconditions.checkNotNull(scalarFunctions);
+        this.udfOutputIndices = udfOutputIndices;
         this.forwardedFieldGeneratedProjection = forwardedFieldGeneratedProjection;
     }
 
     @SuppressWarnings("unchecked")
     @Override
     public void open() throws Exception {
-        hasOnlyOneInputArgument = udfInputOffsets.length == 1;
+        takesRowAsInput =
+                Arrays.stream(scalarFunctions)
+                        .anyMatch(
+                                pythonFunctionInfo ->
+                                        pythonFunctionInfo.getPythonFunction().takesRowAsInput());
+        hasOnlyOneInputArgument = !takesRowAsInput && udfInputOffsets.length == 1;
         hasOnlyOneUserDefinedFunction = udfOutputType.getFieldCount() == 1;
 
         if (forwardedFieldGeneratedProjection != null) {
@@ -85,8 +126,11 @@ public class EmbeddedPythonScalarFunctionOperator
                     forwardedFieldGeneratedProjection.newInstance(
                             Thread.currentThread().getContextClassLoader());
         }
-
         super.open();
+        if (takesRowAsInput) {
+            rowInputArgument = new Object[2];
+            rowInputArgument[1] = userDefinedFunctionInputArgs;
+        }
     }
 
     @Override
@@ -105,8 +149,15 @@ public class EmbeddedPythonScalarFunctionOperator
 
         interpreter.set(
                 "input_coder_proto",
-                createFlattenRowTypeCoderInfoDescriptorProto(
-                                udfInputType, FlinkFnApi.CoderInfoDescriptor.Mode.MULTIPLE, false)
+                (takesRowAsInput
+                                ? createRowTypeCoderInfoDescriptorProto(
+                                        udfInputType,
+                                        FlinkFnApi.CoderInfoDescriptor.Mode.MULTIPLE,
+                                        false)
+                                : createFlattenRowTypeCoderInfoDescriptorProto(
+                                        udfInputType,
+                                        FlinkFnApi.CoderInfoDescriptor.Mode.MULTIPLE,
+                                        false))
                         .toByteArray());
 
         interpreter.set(
@@ -121,6 +172,7 @@ public class EmbeddedPythonScalarFunctionOperator
                 ProtoUtils.createUserDefinedFunctionsProto(
                                 getRuntimeContext(),
                                 scalarFunctions,
+                                udfOutputIndices,
                                 config.get(PYTHON_METRIC_ENABLED),
                                 config.get(PYTHON_PROFILE_ENABLED))
                         .toByteArray());
@@ -155,7 +207,14 @@ public class EmbeddedPythonScalarFunctionOperator
         RowData value = element.getValue();
 
         Object udfArgs = null;
-        if (userDefinedFunctionInputArgs.length > 1) {
+        if (takesRowAsInput) {
+            for (int i = 0; i < userDefinedFunctionInputArgs.length; i++) {
+                userDefinedFunctionInputArgs[i] =
+                        userDefinedFunctionInputConverters[i].toExternal(value, udfInputOffsets[i]);
+            }
+            rowInputArgument[0] = (long) value.getRowKind().toByteValue();
+            udfArgs = rowInputArgument;
+        } else if (userDefinedFunctionInputArgs.length > 1) {
             for (int i = 0; i < userDefinedFunctionInputArgs.length; i++) {
                 userDefinedFunctionInputArgs[i] =
                         userDefinedFunctionInputConverters[i].toExternal(value, udfInputOffsets[i]);

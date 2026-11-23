@@ -23,6 +23,7 @@ import org.apache.flink.core.memory.MemorySegment;
 import org.apache.flink.core.memory.MemorySegmentFactory;
 import org.apache.flink.table.api.DataTypes;
 import org.apache.flink.table.data.binary.BinaryArrayData;
+import org.apache.flink.table.data.binary.BinaryGeographyData;
 import org.apache.flink.table.data.binary.BinaryMapData;
 import org.apache.flink.table.data.binary.BinaryRowData;
 import org.apache.flink.table.data.binary.BinarySegmentUtils;
@@ -45,12 +46,42 @@ import java.sql.Timestamp;
 import java.time.LocalDateTime;
 
 import static org.apache.flink.table.data.StringData.fromString;
+import static org.apache.flink.table.data.util.DataFormatTestUtil.nonCompactBoundaryDecimals;
+import static org.apache.flink.table.data.util.DataFormatTestUtil.toSegments;
 import static org.apache.flink.table.utils.RawValueDataAsserter.equivalent;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.HamcrestCondition.matching;
 
 /** Test of {@link BinaryArrayData} and {@link BinaryArrayWriter}. */
 class BinaryArrayDataTest {
+
+    private static final byte[] BIG_ENDIAN_POINT_WKB =
+            new byte[] {
+                0,
+                0,
+                0,
+                0,
+                1,
+                0x3F,
+                (byte) 0xF0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0x40,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0
+            };
 
     @Test
     void testArray() {
@@ -398,6 +429,63 @@ class BinaryArrayDataTest {
     }
 
     @Test
+    void testGeographyFastPathForArrayWriter() {
+        BinaryGeographyData geography =
+                BinaryGeographyData.fromAddress(
+                        splitBytes(BIG_ENDIAN_POINT_WKB, 2), 2, BIG_ENDIAN_POINT_WKB.length);
+        int expectedSubtype = geography.subtypeId();
+
+        BinaryArrayData array = new BinaryArrayData();
+        BinaryArrayWriter writer = new BinaryArrayWriter(array, 2, 8);
+        writer.setNullAt(0);
+        writer.writeGeography(1, geography);
+        writer.complete();
+
+        geography.getSegments()[0].put(geography.getOffset(), (byte) 0x7F);
+
+        assertThat(array.isNullAt(0)).isTrue();
+        assertThat(array.getGeography(1).toBytes()).isEqualTo(BIG_ENDIAN_POINT_WKB);
+        assertThat(array.getGeography(1).subtypeId()).isEqualTo(expectedSubtype);
+
+        BinaryArrayData splitArray = splitArray(array);
+        assertThat(splitArray.isNullAt(0)).isTrue();
+        assertThat(splitArray.getGeography(1).toBytes()).isEqualTo(BIG_ENDIAN_POINT_WKB);
+        assertThat(splitArray.getGeography(1).subtypeId()).isEqualTo(expectedSubtype);
+    }
+
+    @Test
+    void testGeographyFallbackForArrayWriter() {
+        int[] toBytesCalls = new int[1];
+        GeographyData geography =
+                new GeographyData() {
+                    @Override
+                    public int subtypeId() {
+                        return GeographyData.POINT;
+                    }
+
+                    @Override
+                    public int sizeInBytes() {
+                        return BIG_ENDIAN_POINT_WKB.length;
+                    }
+
+                    @Override
+                    public byte[] toBytes() {
+                        toBytesCalls[0]++;
+                        return BIG_ENDIAN_POINT_WKB.clone();
+                    }
+                };
+
+        BinaryArrayData array = new BinaryArrayData();
+        BinaryArrayWriter writer = new BinaryArrayWriter(array, 1, 8);
+        writer.writeGeography(0, geography);
+        writer.complete();
+
+        assertThat(toBytesCalls[0]).isEqualTo(1);
+        assertThat(array.getGeography(0).toBytes()).isEqualTo(BIG_ENDIAN_POINT_WKB);
+        assertThat(array.getGeography(0).subtypeId()).isEqualTo(GeographyData.POINT);
+    }
+
+    @Test
     void testMap() {
         BinaryArrayData array1 = new BinaryArrayData();
         BinaryArrayWriter writer1 = new BinaryArrayWriter(array1, 3, 4);
@@ -522,6 +610,36 @@ class BinaryArrayDataTest {
             assertThat(array.isNullAt(1)).isTrue();
             array.setDecimal(0, decimal2, precision);
             assertThat(array.getDecimal(0, precision, scale).toString()).isEqualTo("6.55000");
+        }
+
+        // 3.not compact, values around the 8-byte boundary, non-zero offset and across segments
+        {
+            int precision = 38;
+            int scale = 2;
+            DecimalData[] decimals = nonCompactBoundaryDecimals(precision, scale);
+            BinaryArrayData nonCompactArray = new BinaryArrayData();
+            BinaryArrayWriter nonCompactWriter =
+                    new BinaryArrayWriter(nonCompactArray, decimals.length, 8);
+            for (int i = 0; i < decimals.length; i++) {
+                nonCompactWriter.writeDecimal(i, decimals[i], precision);
+            }
+            nonCompactWriter.complete();
+
+            int size = nonCompactArray.getSizeInBytes();
+            byte[] bytes =
+                    BinarySegmentUtils.copyToBytes(
+                            nonCompactArray.getSegments(), nonCompactArray.getOffset(), size);
+            int baseOffset = 3;
+            for (int segmentSize = 1; segmentSize <= baseOffset + size; segmentSize++) {
+                BinaryArrayData splitArray = new BinaryArrayData();
+                splitArray.pointTo(toSegments(bytes, baseOffset, segmentSize), baseOffset, size);
+                for (int i = 0; i < decimals.length; i++) {
+                    DecimalData decimal = splitArray.getDecimal(i, precision, scale);
+                    assertThat(decimal.toBigDecimal()).isEqualTo(decimals[i].toBigDecimal());
+                    assertThat(decimal.longBacked)
+                            .isEqualTo(decimals[i].toUnscaledBytes().length <= 8);
+                }
+            }
         }
     }
 

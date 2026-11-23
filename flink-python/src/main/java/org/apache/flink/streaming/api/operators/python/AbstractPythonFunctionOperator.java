@@ -219,6 +219,12 @@ public abstract class AbstractPythonFunctionOperator<OUT> extends AbstractStream
         super.setCurrentKey(key);
     }
 
+    @Override
+    public void moveToNextKey(Object key) {
+        processElementsOfCurrentKeyIfNeeded(key);
+        super.moveToNextKey(key);
+    }
+
     private void processElementsOfCurrentKeyIfNeeded(Object newKey) {
         // process all the elements belonging to the current key when encountering a new key
         // for batch operator
@@ -228,6 +234,9 @@ public abstract class AbstractPythonFunctionOperator<OUT> extends AbstractStream
             while (!isBundleFinished()) {
                 try {
                     invokeFinishBundle();
+                    // register the timers of the bundle while the current key is still set, as
+                    // they must not switch the key back once it has moved on
+                    drainUnregisteredTimers();
                     fireAllRegisteredTimers(newKey);
                 } catch (Exception e) {
                     throw new WrappingRuntimeException(e);
