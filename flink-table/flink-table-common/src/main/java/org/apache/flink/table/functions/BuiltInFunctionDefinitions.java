@@ -58,11 +58,9 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.EnumSet;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
-import java.util.Set;
 import java.util.stream.Collectors;
 
 import static org.apache.flink.table.api.DataTypes.BIGINT;
@@ -109,16 +107,19 @@ import static org.apache.flink.table.types.inference.TypeStrategies.nullableIfAr
 import static org.apache.flink.table.types.inference.TypeStrategies.varyingString;
 import static org.apache.flink.table.types.inference.strategies.SpecificInputTypeStrategies.ARRAY_ELEMENT_ARG;
 import static org.apache.flink.table.types.inference.strategies.SpecificInputTypeStrategies.ARRAY_FULLY_COMPARABLE;
+import static org.apache.flink.table.types.inference.strategies.SpecificInputTypeStrategies.ARRAY_OF_ENTRIES_ARG;
 import static org.apache.flink.table.types.inference.strategies.SpecificInputTypeStrategies.FROM_CHANGELOG_INPUT_TYPE_STRATEGY;
 import static org.apache.flink.table.types.inference.strategies.SpecificInputTypeStrategies.INDEX;
 import static org.apache.flink.table.types.inference.strategies.SpecificInputTypeStrategies.JSON_ARGUMENT;
 import static org.apache.flink.table.types.inference.strategies.SpecificInputTypeStrategies.LATERAL_SNAPSHOT_INPUT_TYPE_STRATEGY;
+import static org.apache.flink.table.types.inference.strategies.SpecificInputTypeStrategies.MAP_KEY_ARG;
 import static org.apache.flink.table.types.inference.strategies.SpecificInputTypeStrategies.ML_PREDICT_INPUT_TYPE_STRATEGY;
 import static org.apache.flink.table.types.inference.strategies.SpecificInputTypeStrategies.TO_CHANGELOG_INPUT_TYPE_STRATEGY;
 import static org.apache.flink.table.types.inference.strategies.SpecificInputTypeStrategies.TWO_EQUALS_COMPARABLE;
 import static org.apache.flink.table.types.inference.strategies.SpecificInputTypeStrategies.TWO_FULLY_COMPARABLE;
 import static org.apache.flink.table.types.inference.strategies.SpecificInputTypeStrategies.percentage;
 import static org.apache.flink.table.types.inference.strategies.SpecificInputTypeStrategies.percentageArray;
+import static org.apache.flink.table.types.inference.strategies.SpecificInputTypeStrategies.plainJsonPath;
 import static org.apache.flink.table.types.inference.strategies.SpecificTypeStrategies.ARRAY_APPEND_PREPEND;
 import static org.apache.flink.table.types.inference.strategies.SpecificTypeStrategies.FROM_CHANGELOG_OUTPUT_TYPE_STRATEGY;
 import static org.apache.flink.table.types.inference.strategies.SpecificTypeStrategies.LATERAL_SNAPSHOT_OUTPUT_TYPE_STRATEGY;
@@ -211,6 +212,21 @@ public final class BuiltInFunctionDefinitions {
                             "org.apache.flink.table.runtime.functions.scalar.MapEntriesFunction")
                     .build();
 
+    public static final BuiltInFunctionDefinition MAP_CONTAINS_KEY =
+            BuiltInFunctionDefinition.newBuilder()
+                    .name("MAP_CONTAINS_KEY")
+                    .kind(SCALAR)
+                    .inputTypeStrategy(
+                            sequence(
+                                    List.of("map", "key"),
+                                    List.of(logical(LogicalTypeRoot.MAP), MAP_KEY_ARG)))
+                    .outputTypeStrategy(
+                            nullableIfArgs(
+                                    ConstantArgumentCount.of(0), explicit(DataTypes.BOOLEAN())))
+                    .runtimeClass(
+                            "org.apache.flink.table.runtime.functions.scalar.MapContainsKeyFunction")
+                    .build();
+
     public static final BuiltInFunctionDefinition MAP_FROM_ARRAYS =
             BuiltInFunctionDefinition.newBuilder()
                     .name("MAP_FROM_ARRAYS")
@@ -225,6 +241,19 @@ public final class BuiltInFunctionDefinitions {
                     .outputTypeStrategy(nullableIfArgs(SpecificTypeStrategies.MAP_FROM_ARRAYS))
                     .runtimeClass(
                             "org.apache.flink.table.runtime.functions.scalar.MapFromArraysFunction")
+                    .build();
+
+    public static final BuiltInFunctionDefinition MAP_FROM_ENTRIES =
+            BuiltInFunctionDefinition.newBuilder()
+                    .name("MAP_FROM_ENTRIES")
+                    .kind(SCALAR)
+                    .inputTypeStrategy(
+                            sequence(
+                                    new String[] {"input"},
+                                    new ArgumentTypeStrategy[] {ARRAY_OF_ENTRIES_ARG}))
+                    .outputTypeStrategy(SpecificTypeStrategies.MAP_FROM_ENTRIES)
+                    .runtimeClass(
+                            "org.apache.flink.table.runtime.functions.scalar.MapFromEntriesFunction")
                     .build();
 
     public static final BuiltInFunctionDefinition SOURCE_WATERMARK =
@@ -790,7 +819,9 @@ public final class BuiltInFunctionDefinitions {
                                     "INPUT",
                                     Row.class,
                                     false,
-                                    EnumSet.of(StaticArgumentTrait.TABLE)),
+                                    EnumSet.of(
+                                            StaticArgumentTrait.TABLE,
+                                            StaticArgumentTrait.PRESERVE_TIME_ATTRIBUTES)),
                             StaticArgument.model(
                                     "MODEL", false, EnumSet.of(StaticArgumentTrait.MODEL)),
                             StaticArgument.scalar("ARGS", DataTypes.DESCRIPTOR(), false),
@@ -868,7 +899,18 @@ public final class BuiltInFunctionDefinitions {
                                                                                                     String,
                                                                                                     String>)
                                                                                             mapping,
-                                                                                    "DELETE"))))),
+                                                                                    "DELETE")))))
+                                    .withConditionalTrait(
+                                            StaticArgumentTrait.PRESERVE_TIME_ATTRIBUTES,
+                                            // Retractions carry old timestamps, only inserts and
+                                            // updates carry the current one
+                                            TraitCondition.argMatches(
+                                                    "op_mapping",
+                                                    Map.class,
+                                                    mapping ->
+                                                            forwardsOnlyInsertsAndUpdates(
+                                                                    (Map<String, String>)
+                                                                            mapping))),
                             StaticArgument.scalar("op", DataTypes.DESCRIPTOR(), true),
                             StaticArgument.scalar(
                                     "op_mapping",
@@ -910,6 +952,24 @@ public final class BuiltInFunctionDefinitions {
                             "org.apache.flink.table.runtime.functions.ptf.FromChangelogFunction")
                     .build();
 
+    public static final BuiltInFunctionDefinition TO_APPEND =
+            BuiltInFunctionDefinition.newBuilder()
+                    .name("TO_APPEND")
+                    .kind(PROCESS_TABLE)
+                    .staticArguments(
+                            StaticArgument.table(
+                                    "input",
+                                    Row.class,
+                                    false,
+                                    EnumSet.of(
+                                            StaticArgumentTrait.TABLE,
+                                            StaticArgumentTrait.ROW_SEMANTIC_TABLE,
+                                            StaticArgumentTrait.SUPPORT_UPDATES,
+                                            StaticArgumentTrait.PRESERVE_TIME_ATTRIBUTES)))
+                    .outputTypeStrategy(argument(0))
+                    .runtimeClass("org.apache.flink.table.runtime.functions.ptf.ToAppendFunction")
+                    .build();
+
     /**
      * Built-in proxy function for the LATERAL SNAPSHOT temporal join.
      *
@@ -933,8 +993,7 @@ public final class BuiltInFunctionDefinitions {
                                             StaticArgumentTrait.SUPPORT_UPDATES,
                                             StaticArgumentTrait.REQUIRE_UPDATE_BEFORE,
                                             StaticArgumentTrait.REQUIRE_FULL_DELETE)),
-                            StaticArgument.scalar(
-                                    "load_completed_condition", DataTypes.STRING(), true),
+                            StaticArgument.scalar("on_time", DataTypes.DESCRIPTOR(), true),
                             StaticArgument.scalar(
                                     "load_completed_time", DataTypes.TIMESTAMP_LTZ(3), true),
                             StaticArgument.scalar(
@@ -946,7 +1005,8 @@ public final class BuiltInFunctionDefinitions {
                     .inputTypeStrategy(LATERAL_SNAPSHOT_INPUT_TYPE_STRATEGY)
                     .outputTypeStrategy(LATERAL_SNAPSHOT_OUTPUT_TYPE_STRATEGY)
                     .runtimeProvided()
-                    // TODO: disableSystemArguments(true), once we have a dedicated translation rule
+                    // SNAPSHOT does not support the implicit PTF system argument (uid)
+                    .disableSystemArguments(true)
                     .notDeterministic()
                     .build();
 
@@ -1698,6 +1758,26 @@ public final class BuiltInFunctionDefinitions {
                     .outputTypeStrategy(explicit(DataTypes.CHAR(36).notNull()))
                     .build();
 
+    public static final BuiltInFunctionDefinition UUID_V4 =
+            BuiltInFunctionDefinition.newBuilder()
+                    .name("UUID_V4")
+                    .kind(SCALAR)
+                    .notDeterministic()
+                    .inputTypeStrategy(NO_ARGS)
+                    .outputTypeStrategy(explicit(DataTypes.UUID().notNull()))
+                    .runtimeClass("org.apache.flink.table.runtime.functions.scalar.UuidV4Function")
+                    .build();
+
+    public static final BuiltInFunctionDefinition UUID_V7 =
+            BuiltInFunctionDefinition.newBuilder()
+                    .name("UUID_V7")
+                    .kind(SCALAR)
+                    .notDeterministic()
+                    .inputTypeStrategy(NO_ARGS)
+                    .outputTypeStrategy(explicit(DataTypes.UUID().notNull()))
+                    .runtimeClass("org.apache.flink.table.runtime.functions.scalar.UuidV7Function")
+                    .build();
+
     public static final BuiltInFunctionDefinition LTRIM =
             BuiltInFunctionDefinition.newBuilder()
                     .name("ltrim")
@@ -2377,6 +2457,16 @@ public final class BuiltInFunctionDefinitions {
                     .build();
 
     // --------------------------------------------------------------------------------------------
+
+    public static final BuiltInFunctionDefinition IS_NAN =
+            BuiltInFunctionDefinition.newBuilder()
+                    .name("IS_NAN")
+                    .kind(SCALAR)
+                    .inputTypeStrategy(sequence(logical(LogicalTypeFamily.NUMERIC)))
+                    .outputTypeStrategy(nullableIfArgs(explicit(DataTypes.BOOLEAN())))
+                    .runtimeClass("org.apache.flink.table.runtime.functions.scalar.IsNanFunction")
+                    .build();
+
     // Catalog functions
     // --------------------------------------------------------------------------------------------
 
@@ -2929,7 +3019,7 @@ public final class BuiltInFunctionDefinitions {
                                     sequence(
                                             logical(LogicalTypeFamily.CHARACTER_STRING),
                                             symbol(JsonType.class))))
-                    .outputTypeStrategy(explicit(BOOLEAN().notNull()))
+                    .outputTypeStrategy(nullableIfArgs(explicit(BOOLEAN())))
                     .runtimeDeferred()
                     .build();
 
@@ -3081,6 +3171,52 @@ public final class BuiltInFunctionDefinitions {
                     .runtimeProvided()
                     .build();
 
+    public static final BuiltInFunctionDefinition JSON_LENGTH =
+            BuiltInFunctionDefinition.newBuilder()
+                    .name("JSON_LENGTH")
+                    .kind(SCALAR)
+                    .inputTypeStrategy(
+                            plainJsonPath(
+                                    or(
+                                            sequence(logical(LogicalTypeFamily.CHARACTER_STRING)),
+                                            sequence(logical(LogicalTypeRoot.VARIANT)),
+                                            sequence(
+                                                    logical(LogicalTypeFamily.CHARACTER_STRING),
+                                                    and(
+                                                            logical(
+                                                                    LogicalTypeFamily
+                                                                            .CHARACTER_STRING),
+                                                            LITERAL)),
+                                            sequence(
+                                                    logical(LogicalTypeRoot.VARIANT),
+                                                    and(
+                                                            logical(
+                                                                    LogicalTypeFamily
+                                                                            .CHARACTER_STRING),
+                                                            LITERAL)))))
+                    .outputTypeStrategy(explicit(DataTypes.INT().nullable()))
+                    .runtimeProvided()
+                    .build();
+
+    public static final BuiltInFunctionDefinition JSON_TYPE =
+            BuiltInFunctionDefinition.newBuilder()
+                    .name("JSON_TYPE")
+                    .kind(SCALAR)
+                    .inputTypeStrategy(
+                            plainJsonPath(
+                                    or(
+                                            sequence(logical(LogicalTypeFamily.CHARACTER_STRING)),
+                                            sequence(
+                                                    logical(LogicalTypeFamily.CHARACTER_STRING),
+                                                    and(
+                                                            logical(
+                                                                    LogicalTypeFamily
+                                                                            .CHARACTER_STRING),
+                                                            LITERAL)))))
+                    .outputTypeStrategy(explicit(DataTypes.STRING()))
+                    .runtimeProvided()
+                    .build();
+
     // --------------------------------------------------------------------------------------------
     // Variant functions
     // --------------------------------------------------------------------------------------------
@@ -3095,9 +3231,10 @@ public final class BuiltInFunctionDefinitions {
                                     sequence(
                                             logical(LogicalTypeFamily.CHARACTER_STRING),
                                             logical(LogicalTypeRoot.BOOLEAN))))
-                    .outputTypeStrategy(nullableIfArgs(explicit(DataTypes.VARIANT())))
-                    .runtimeClass(
-                            "org.apache.flink.table.runtime.functions.scalar.ParseJsonFunction")
+                    .outputTypeStrategy(
+                            nullableIfArgs(
+                                    ConstantArgumentCount.of(0), explicit(DataTypes.VARIANT())))
+                    .runtimeProvided()
                     .build();
 
     public static final BuiltInFunctionDefinition TRY_PARSE_JSON =
@@ -3111,8 +3248,126 @@ public final class BuiltInFunctionDefinitions {
                                             logical(LogicalTypeFamily.CHARACTER_STRING),
                                             logical(LogicalTypeRoot.BOOLEAN))))
                     .outputTypeStrategy(forceNullable(explicit(DataTypes.VARIANT())))
+                    .runtimeProvided()
+                    .build();
+
+    public static final BuiltInFunctionDefinition PARSE_XML =
+            BuiltInFunctionDefinition.newBuilder()
+                    .name("PARSE_XML")
+                    .kind(SCALAR)
+                    .inputTypeStrategy(
+                            or(
+                                    sequence(logical(LogicalTypeFamily.CHARACTER_STRING)),
+                                    sequence(
+                                            logical(LogicalTypeFamily.CHARACTER_STRING),
+                                            logical(LogicalTypeRoot.BOOLEAN))))
+                    // A NULL force_array is treated as false, so only the xml makes the result
+                    // NULL.
+                    .outputTypeStrategy(
+                            nullableIfArgs(
+                                    ConstantArgumentCount.of(0), explicit(DataTypes.VARIANT())))
+                    .runtimeProvided()
+                    .build();
+
+    public static final BuiltInFunctionDefinition TRY_PARSE_XML =
+            BuiltInFunctionDefinition.newBuilder()
+                    .name("TRY_PARSE_XML")
+                    .kind(SCALAR)
+                    .inputTypeStrategy(
+                            or(
+                                    sequence(logical(LogicalTypeFamily.CHARACTER_STRING)),
+                                    sequence(
+                                            logical(LogicalTypeFamily.CHARACTER_STRING),
+                                            logical(LogicalTypeRoot.BOOLEAN))))
+                    .outputTypeStrategy(forceNullable(explicit(DataTypes.VARIANT())))
+                    .runtimeProvided()
+                    .build();
+
+    public static final BuiltInFunctionDefinition VARIANT_GET =
+            BuiltInFunctionDefinition.newBuilder()
+                    .name("VARIANT_GET")
+                    .kind(SCALAR)
+                    .inputTypeStrategy(SpecificInputTypeStrategies.VARIANT_GET)
+                    .outputTypeStrategy(SpecificTypeStrategies.VARIANT_GET)
                     .runtimeClass(
-                            "org.apache.flink.table.runtime.functions.scalar.TryParseJsonFunction")
+                            "org.apache.flink.table.runtime.functions.scalar.VariantGetFunction")
+                    .build();
+
+    public static final BuiltInFunctionDefinition TRY_VARIANT_GET =
+            BuiltInFunctionDefinition.newBuilder()
+                    .name("TRY_VARIANT_GET")
+                    .kind(SCALAR)
+                    .inputTypeStrategy(SpecificInputTypeStrategies.VARIANT_GET)
+                    .outputTypeStrategy(SpecificTypeStrategies.VARIANT_GET)
+                    .runtimeClass(
+                            "org.apache.flink.table.runtime.functions.scalar.TryVariantGetFunction")
+                    .build();
+
+    public static final BuiltInFunctionDefinition XML_STRING =
+            BuiltInFunctionDefinition.newBuilder()
+                    .name("XML_STRING")
+                    .kind(SCALAR)
+                    .inputTypeStrategy(sequence(logical(LogicalTypeRoot.VARIANT)))
+                    .outputTypeStrategy(nullableIfArgs(explicit(DataTypes.STRING())))
+                    .runtimeClass(
+                            "org.apache.flink.table.runtime.functions.scalar.XmlStringFunction")
+                    .build();
+
+    // --------------------------------------------------------------------------------------------
+    // Geography functions
+    // --------------------------------------------------------------------------------------------
+
+    public static final BuiltInFunctionDefinition ST_GEOGFROMTEXT =
+            BuiltInFunctionDefinition.newBuilder()
+                    .name("ST_GEOGFROMTEXT")
+                    .kind(SCALAR)
+                    .inputTypeStrategy(
+                            sequence(
+                                    Collections.singletonList("text"),
+                                    Collections.singletonList(
+                                            logical(LogicalTypeFamily.CHARACTER_STRING))))
+                    .outputTypeStrategy(nullableIfArgs(explicit(DataTypes.GEOGRAPHY())))
+                    .runtimeClass(
+                            "org.apache.flink.table.runtime.functions.scalar.StGeogFromTextFunction")
+                    .build();
+
+    public static final BuiltInFunctionDefinition ST_GEOGFROMWKB =
+            BuiltInFunctionDefinition.newBuilder()
+                    .name("ST_GEOGFROMWKB")
+                    .kind(SCALAR)
+                    .inputTypeStrategy(
+                            sequence(
+                                    Collections.singletonList("bytes"),
+                                    Collections.singletonList(
+                                            logical(LogicalTypeFamily.BINARY_STRING))))
+                    .outputTypeStrategy(nullableIfArgs(explicit(DataTypes.GEOGRAPHY())))
+                    .runtimeClass(
+                            "org.apache.flink.table.runtime.functions.scalar.StGeogFromWkbFunction")
+                    .build();
+
+    public static final BuiltInFunctionDefinition ST_ASTEXT =
+            BuiltInFunctionDefinition.newBuilder()
+                    .name("ST_ASTEXT")
+                    .kind(SCALAR)
+                    .inputTypeStrategy(
+                            sequence(
+                                    Collections.singletonList("geography"),
+                                    Collections.singletonList(logical(LogicalTypeRoot.GEOGRAPHY))))
+                    .outputTypeStrategy(nullableIfArgs(explicit(DataTypes.STRING())))
+                    .runtimeClass(
+                            "org.apache.flink.table.runtime.functions.scalar.StAsTextFunction")
+                    .build();
+
+    public static final BuiltInFunctionDefinition ST_ASWKB =
+            BuiltInFunctionDefinition.newBuilder()
+                    .name("ST_ASWKB")
+                    .kind(SCALAR)
+                    .inputTypeStrategy(
+                            sequence(
+                                    Collections.singletonList("geography"),
+                                    Collections.singletonList(logical(LogicalTypeRoot.GEOGRAPHY))))
+                    .outputTypeStrategy(nullableIfArgs(explicit(DataTypes.BYTES())))
+                    .runtimeClass("org.apache.flink.table.runtime.functions.scalar.StAsWkbFunction")
                     .build();
 
     // --------------------------------------------------------------------------------------------
@@ -3382,8 +3637,7 @@ public final class BuiltInFunctionDefinitions {
                     .callSyntax("CAST", SqlCallSyntax.CAST)
                     .kind(SCALAR)
                     .inputTypeStrategy(SpecificInputTypeStrategies.CAST)
-                    .outputTypeStrategy(
-                            nullableIfArgs(ConstantArgumentCount.to(0), TypeStrategies.argument(1)))
+                    .outputTypeStrategy(SpecificTypeStrategies.CAST)
                     .build();
 
     public static final BuiltInFunctionDefinition TRY_CAST =
@@ -3452,14 +3706,6 @@ public final class BuiltInFunctionDefinitions {
                     .outputTypeStrategy(TypeStrategies.MISSING)
                     .build();
 
-    public static final Set<FunctionDefinition> WINDOW_PROPERTIES =
-            new HashSet<>(Arrays.asList(WINDOW_START, WINDOW_END, PROCTIME, ROWTIME));
-
-    public static final Set<FunctionDefinition> TIME_ATTRIBUTES =
-            new HashSet<>(Arrays.asList(PROCTIME, ROWTIME));
-
-    public static final List<FunctionDefinition> ORDERING = Arrays.asList(ORDER_ASC, ORDER_DESC);
-
     /**
      * True when {@code key} appears among the {@code op_mapping} keys. Each map key may itself be a
      * comma-separated list (e.g. {@code "INSERT,UPDATE_AFTER"}) - each part is trimmed and compared
@@ -3468,6 +3714,11 @@ public final class BuiltInFunctionDefinitions {
      * <p>Used by {@code TO_CHANGELOG} conditional traits to inspect the user-provided {@code
      * op_mapping} argument.
      */
+    private static boolean forwardsOnlyInsertsAndUpdates(final Map<String, String> opMapping) {
+        return !opMappingContainsKey(opMapping, "UPDATE_BEFORE")
+                && !opMappingContainsKey(opMapping, "DELETE");
+    }
+
     private static boolean opMappingContainsKey(
             final Map<String, String> opMapping, final String key) {
         return opMapping.keySet().stream()

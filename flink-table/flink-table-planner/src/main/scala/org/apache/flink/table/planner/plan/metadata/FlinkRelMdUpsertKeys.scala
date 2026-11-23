@@ -24,7 +24,8 @@ import org.apache.flink.table.planner.plan.nodes.physical.batch.{BatchPhysicalGr
 import org.apache.flink.table.planner.plan.nodes.physical.common.CommonPhysicalLookupJoin
 import org.apache.flink.table.planner.plan.nodes.physical.stream._
 import org.apache.flink.table.planner.plan.schema.IntermediateRelTable
-import org.apache.flink.table.planner.plan.utils.{FlinkRexUtil, RankUtil}
+import org.apache.flink.table.planner.plan.utils.{FlinkRexUtil, RankUtil, UpsertKeyUtil}
+import org.apache.flink.table.runtime.operators.rank.AbstractTopNFunction
 
 import com.google.common.collect.ImmutableSet
 import org.apache.calcite.plan.hep.HepRelVertex
@@ -32,7 +33,7 @@ import org.apache.calcite.plan.volcano.RelSubset
 import org.apache.calcite.rel.{RelDistribution, RelNode, SingleRel}
 import org.apache.calcite.rel.core._
 import org.apache.calcite.rel.metadata._
-import org.apache.calcite.rex.{RexNode, RexUtil}
+import org.apache.calcite.rex.{RexInputRef, RexNode, RexUtil}
 import org.apache.calcite.util.{Bug, ImmutableBitSet, Util}
 
 import java.util
@@ -75,7 +76,12 @@ class FlinkRelMdUpsertKeys private extends MetadataHandler[UpsertKeys] {
     FlinkRelMdUniqueKeys.INSTANCE.getProjectUniqueKeys(
       projects,
       input,
-      () => FlinkRelMetadataQuery.reuseOrCreate(mq).getUpsertKeys(input),
+      // a key survives the projection if each column it drops has an equal column that is kept
+      () =>
+        UpsertKeyUtil.getUpsertKeysUsingEqualColumns(
+          input,
+          ImmutableBitSet.of(projects.collect { case ref: RexInputRef => ref.getIndex }: _*),
+          mq),
       ignoreNulls = false
     )
 
@@ -92,6 +98,9 @@ class FlinkRelMdUpsertKeys private extends MetadataHandler[UpsertKeys] {
       case RelDistribution.Type.HASH_DISTRIBUTED =>
         filterKeys(upsertKeys, ImmutableBitSet.of(rel.getDistribution.getKeys), immutableColumns)
       case RelDistribution.Type.SINGLETON => upsertKeys
+      // Broadcast replicates rows to all instances but preserves the stream's keys (e.g. a
+      // broadcast side input of a process table function).
+      case RelDistribution.Type.BROADCAST_DISTRIBUTED => upsertKeys
       case t => throw new UnsupportedOperationException("Unsupported distribution type: " + t)
     }
   }
@@ -104,8 +113,38 @@ class FlinkRelMdUpsertKeys private extends MetadataHandler[UpsertKeys] {
         val fmq = FlinkRelMetadataQuery.reuseOrCreate(mq)
         val inputUpsertKeys = fmq.getUpsertKeys(rel.getInput)
         val inputImmutableColumns = fmq.getImmutableColumns(rel.getInput)
-        val inputKeys = filterKeys(inputUpsertKeys, rel.partitionKey, inputImmutableColumns)
-        FlinkRelMdUniqueKeys.INSTANCE.getRankUniqueKeys(rel, inputKeys)
+        val inputUpsertKeysWithPartitionKey =
+          filterKeys(inputUpsertKeys, rel.partitionKey, inputImmutableColumns)
+        // Also adds the (partition key, rank number) key when the rank number is in the output
+        FlinkRelMdUniqueKeys.INSTANCE.getRankUniqueKeys(
+          rel,
+          inputUpsertKeysKeptByRank(rel, inputUpsertKeysWithPartitionKey))
+    }
+  }
+
+  /**
+   * Returns the input upsert keys that stay upsert keys of the Top-N output. This depends on how
+   * the Top-N emits its changes, see [[AbstractTopNFunction.emitsChangelogPerRow]]:
+   *   - Per row: a row that enters gets an INSERT. A row that drops out gets a DELETE. All input
+   *     upsert keys stay valid.
+   *   - Per rank: each change says which row now holds a rank. The changes of one input key such as
+   *     `id` are spread over several ranks. Only the input upsert keys that are part of the
+   *     partition key stay valid, because each of these partitions holds a single row.
+   */
+  private def inputUpsertKeysKeptByRank(
+      rel: Rank,
+      inputUpsertKeys: JSet[ImmutableBitSet]): JSet[ImmutableBitSet] = {
+    val emitsChangelogPerRow =
+      AbstractTopNFunction.emitsChangelogPerRow(rel.rankRange, rel.outputRankNumber)
+    rel match {
+      case _: StreamPhysicalWindowRank =>
+        // Window Top-N is insert-only and keeps all input upsert keys
+        inputUpsertKeys
+      case _ if inputUpsertKeys != null && !emitsChangelogPerRow =>
+        // The Top-N emits per-rank changes. Remove all upsert keys that are not a subset of the
+        // partition key
+        inputUpsertKeys.filter(rel.partitionKey.contains)
+      case _ => inputUpsertKeys
     }
   }
 
@@ -319,13 +358,13 @@ class FlinkRelMdUpsertKeys private extends MetadataHandler[UpsertKeys] {
     var leftFieldCount = inputs.get(0).getRowType.getFieldCount
     var leftUpsertKeys = fmq.getUpsertKeys(inputs.get(0))
 
-    val leftJoinKeyIndices = ImmutableBitSet.of(multiJoin.getJoinKeyIndices(0): _*)
-
     // Process each subsequent input as right side of join
     for (i <- 1 until inputs.size) {
       val rightInput = inputs.get(i)
       val rightUpsertKeys = fmq.getUpsertKeys(rightInput)
       val joinType = joinTypes.get(i)
+      // Only the left columns that input i's own condition references, not every previous join column.
+      val leftJoinKeyIndices = ImmutableBitSet.of(multiJoin.getLeftSideJoinKeyIndices(i): _*)
       val rightJoinKeyIndices = ImmutableBitSet.of(multiJoin.getJoinKeyIndices(i): _*)
 
       // We compute candidate unique keys that qualify as upsert keys if they include

@@ -70,7 +70,7 @@ from pyflink.table import EnvironmentSettings, TableEnvironment
 
 # create a streaming TableEnvironment
 config = Configuration()
-config.set_string('execution.buffer-timeout', '1 min')
+config.set_string('execution.buffer-timeout.interval', '1 min')
 env_settings = EnvironmentSettings \
     .new_instance() \
     .in_streaming_mode() \
@@ -93,16 +93,6 @@ import org.apache.flink.table.api.bridge.java.StreamTableEnvironment;
 // create a streaming TableEnvironment from a StreamExecutionEnvironment
 StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
 StreamTableEnvironment tableEnv = StreamTableEnvironment.create(env);
-```
-{{< /tab >}}
-{{< tab "Scala" >}}
-```scala
-import org.apache.flink.streaming.api.scala.StreamExecutionEnvironment
-import org.apache.flink.table.api.bridge.scala.StreamTableEnvironment
-
-// create a streaming TableEnvironment from a StreamExecutionEnvironment
-val env = StreamExecutionEnvironment.getExecutionEnvironment
-val tableEnv = StreamTableEnvironment.create(env)
 ```
 {{< /tab >}}
 {{< tab "Python" >}}
@@ -138,7 +128,7 @@ These APIs are used to create/remove Table API/SQL Tables and write queries:
 | `executeSql(stmt)` | `execute_sql(stmt)` | Executes the given SQL statement and returns the execution result. Supports DDL/DML/DQL/SHOW/DESCRIBE/EXPLAIN/USE statements. |
 | `sqlQuery(query)` | `sql_query(query)` | Evaluates a SQL query and retrieves the result as a Table. |
 
-See the [Java API docs](https://nightlies.apache.org/flink/flink-docs-master/api/java/org/apache/flink/table/api/TableEnvironment.html) and [Python API docs](https://nightlies.apache.org/flink/flink-docs-master/api/python/reference/pyflink.table/api/pyflink.table.TableEnvironment.html) for complete API reference.
+See the [Java API docs](https://nightlies.apache.org/flink/flink-docs-master/api/java/org/apache/flink/table/api/TableEnvironment.html) and [Python API docs](https://nightlies.apache.org/flink/flink-docs-master/api/python/reference/pyflink.table/table_environment.html) for complete API reference.
 
 <big><strong>Deprecated APIs</strong></big>
 

@@ -183,7 +183,7 @@ public class StreamPhysicalProcessTableFunction extends AbstractRelNode
                         .collect(Collectors.toList());
         return new StreamExecProcessTableFunction(
                 unwrapTableConfig(this),
-                getInputs().stream().map(i -> InputProperty.DEFAULT).collect(Collectors.toList()),
+                deriveInputProperties(call),
                 FlinkTypeFactory.toLogicalRowType(rowType),
                 getRelDetailedDescription(),
                 uid,
@@ -231,9 +231,9 @@ public class StreamPhysicalProcessTableFunction extends AbstractRelNode
         // Type inference ensures that uid is always added at the end
         final RexNode uidRexNode = operands.get(operands.size() - 1);
         if (uidRexNode.getKind() == SqlKind.DEFAULT) {
-            // Optional for constant or row semantics functions
-            if (staticArgs.stream()
-                    .noneMatch(arg -> arg.is(StaticArgumentTrait.SET_SEMANTIC_TABLE))) {
+            // Optional for constant or row semantics functions, others might use state
+            if (staticArgs.stream().noneMatch(arg -> arg.is(StaticArgumentTrait.SET_SEMANTIC_TABLE))
+                    && !hasBroadcastTables(staticArgs)) {
                 return null;
             }
             final String uid =
@@ -372,6 +372,48 @@ public class StreamPhysicalProcessTableFunction extends AbstractRelNode
     // --------------------------------------------------------------------------------------------
 
     /**
+     * Derives per-input {@link InputProperty}s. Table arguments with set or broadcast semantics
+     * request a distribution from their input, table arguments with row semantics don't.
+     */
+    private List<InputProperty> deriveInputProperties(RexCall call) {
+        final InputProperty[] inputProperties = new InputProperty[getInputs().size()];
+        Arrays.fill(inputProperties, InputProperty.DEFAULT);
+        for (Ord<StaticArgument> tableArg : getProvidedInputArgs(call)) {
+            final boolean requestsDistribution =
+                    tableArg.e.is(StaticArgumentTrait.SET_SEMANTIC_TABLE)
+                            || tableArg.e.is(StaticArgumentTrait.BROADCAST_SEMANTIC_TABLE);
+            if (requestsDistribution) {
+                final int inputIndex =
+                        ((RexTableArgCall) call.getOperands().get(tableArg.i)).getInputIndex();
+                inputProperties[inputIndex] = InputProperty.fromInput(getInput(inputIndex));
+            }
+        }
+        return List.of(inputProperties);
+    }
+
+    /** Returns whether the given signature declares a table argument with broadcast semantics. */
+    public static boolean hasBroadcastTables(List<StaticArgument> staticArgs) {
+        return staticArgs.stream()
+                .anyMatch(arg -> arg.is(StaticArgumentTrait.BROADCAST_SEMANTIC_TABLE));
+    }
+
+    /**
+     * Returns a flag per input indicating whether it is a table argument with broadcast semantics.
+     */
+    public static boolean[] broadcastByInput(RexCall call, int inputCount) {
+        final List<RexNode> operands = call.getOperands();
+        final boolean[] broadcastByInput = new boolean[inputCount];
+        for (Ord<StaticArgument> providedInputArg : getProvidedInputArgs(call)) {
+            if (providedInputArg.e.is(StaticArgumentTrait.BROADCAST_SEMANTIC_TABLE)) {
+                final RexTableArgCall tableArgCall =
+                        (RexTableArgCall) operands.get(providedInputArg.i);
+                broadcastByInput[tableArgCall.getInputIndex()] = true;
+            }
+        }
+        return broadcastByInput;
+    }
+
+    /**
      * Returns a list of table arguments (and their position) that have been provided in the call
      * and thus correspond to the {@link StreamPhysicalRel}'s input.
      */
@@ -497,6 +539,12 @@ public class StreamPhysicalProcessTableFunction extends AbstractRelNode
         int pos = 0;
         for (Ord<StaticArgument> providedInputArg : providedInputArgs) {
             final RexTableArgCall tableArgCall = (RexTableArgCall) operands.get(providedInputArg.i);
+            if (providedInputArg.e.is(StaticArgumentTrait.BROADCAST_SEMANTIC_TABLE)) {
+                // Broadcast tables don't contribute columns to the output. They must not be
+                // considered, otherwise an empty set of partition columns would declare the
+                // output as unique.
+                continue;
+            }
             if (providedInputArg.e.is(StaticArgumentTrait.PASS_COLUMNS_THROUGH)) {
                 // System type inference ensures that at most one table
                 // argument can pass columns through. In that case, the
@@ -515,7 +563,7 @@ public class StreamPhysicalProcessTableFunction extends AbstractRelNode
                 // f(t1 PARTITION BY (k1, k2), t2 PARTITION BY (k3, k4))
                 // -> [k1, k2, k3, k4, function out...]
                 final List<Integer> partitionColumns =
-                        IntStream.range(pos, partitionKeyCount)
+                        IntStream.range(pos, pos + partitionKeyCount)
                                 .boxed()
                                 .collect(Collectors.toList());
                 pos += partitionKeyCount;

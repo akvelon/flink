@@ -30,8 +30,104 @@ Flink SQL provides built-in process table functions (PTFs) for working with chan
 
 | Function | Description |
 |:---------|:------------|
+| [TO_APPEND](#to_append) | Converts an updating table into an append-only table: new rows and updates are appended, deletes are dropped |
 | [FROM_CHANGELOG](#from_changelog) | Converts an append-only table with operation codes into a (potentially updating) dynamic table |
 | [TO_CHANGELOG](#to_changelog) | Converts a dynamic table into an append-only table with explicit operation codes |
+
+## TO_APPEND
+
+The `TO_APPEND` PTF converts an updating table into an append-only table. Every new row and every update is appended as a new row, and deletes are dropped. The output has the same columns as the input.
+
+### Syntax
+
+```sql
+SELECT * FROM TO_APPEND(input => TABLE source_table)
+```
+
+{{< hint warning >}}
+`TO_APPEND` is deliberately lossy: deletes are dropped, so a consumer cannot tell that a row was deleted. To keep deletes, use an upsert sink or [TO_CHANGELOG](#to_changelog).
+{{< /hint >}}
+
+### Examples
+
+#### A table that changes
+
+`customers` is a table with primary key `id`. A row is inserted, updated and finally deleted:
+
+| Change   | `customers`         |
+|:---------|:--------------------|
+| Inserted | `(1, Berlin)`       |
+| Updated  | `(1, Munich)`       |
+| Deleted  | *(empty)*           |
+
+`TO_APPEND` keeps every inserted and updated version as a new row and ignores deletes:
+
+```sql
+SELECT * FROM TO_APPEND(input => TABLE customers)
+```
+
+| Result        |
+|:--------------|
+| `(1, Berlin)` |
+| `(1, Munich)` |
+
+{{< hint info >}}
+Flink represents these changes as a changelog: an insert (`+I`), an update (`+U`, optionally preceded by `-U` with the previous version) and a delete (`-D`). `TO_APPEND` emits inserts and updates as inserts and drops `-U` and `-D`. To keep the change operation, use [TO_CHANGELOG](#to_changelog).
+{{< /hint >}}
+
+#### From a changing table to stream processing
+
+`TO_APPEND` turns a table that changes into a stream of insert-only changes. On that stream, you can use stream processing operations that only accept append-only tables, such as windows, `OVER` aggregations, and interval joins. For example, count the order changes per hour:
+
+| Change   | `orders` (with event-time attribute `ts`) |
+|:---------|:------------------------------------------|
+| Inserted | `(1, CREATED, 10:05)`                     |
+| Inserted | `(2, CREATED, 10:20)`                     |
+| Updated  | `(1, PAID, 10:40)`                        |
+| Updated  | `(1, SHIPPED, 11:10)`                     |
+
+```sql
+WITH order_changes AS (
+  SELECT * FROM TO_APPEND(input => TABLE orders)
+)
+SELECT window_start, window_end, COUNT(*) AS changes
+FROM TUMBLE(TABLE order_changes, DESCRIPTOR(ts), INTERVAL '1' HOUR)
+GROUP BY window_start, window_end
+```
+
+| Result                |
+|:----------------------|
+| `(10:00, 11:00, 3)`   |
+| `(11:00, 12:00, 1)`   |
+
+A window emits each result once, when the window closes, and then frees its state.
+
+#### Marking a query as append-only
+
+Some queries are derived as updating by the planner although they never change a row they have emitted, for example a deduplication over all columns. Here `TO_APPEND` does not change the result: it only marks the query as append-only, so its result can be used where an append-only table is required:
+
+| Change   | `orders`       |
+|:---------|:---------------|
+| Inserted | `(1, 10.50)`   |
+| Inserted | `(1, 10.50)` - retried delivery |
+
+```sql
+WITH deduplicated AS (
+  SELECT * FROM orders
+  QUALIFY ROW_NUMBER() OVER (PARTITION BY id, amount ORDER BY id) = 1
+)
+SELECT * FROM TO_APPEND(input => TABLE deduplicated)
+```
+
+| Result        |
+|:--------------|
+| `(1, 10.50)`  |
+
+#### Table API
+
+```java
+Table result = myTable.toAppend();
+```
 
 ## FROM_CHANGELOG
 
@@ -53,7 +149,8 @@ SELECT * FROM FROM_CHANGELOG(
       'ua', 'UPDATE_AFTER',
       'd', 'DELETE'
   ],]
-  [error_handling => 'FAIL' | 'SKIP']
+  [error_handling => 'FAIL' | 'SKIP',]
+  [uid => 'my-id']
 )
 ```
 
@@ -65,6 +162,7 @@ SELECT * FROM FROM_CHANGELOG(
 | `op`         | No       | A `DESCRIPTOR` with a single column name for the operation code column. Defaults to `op`. The column must exist in the input table and be of type STRING.                                                                                                                                                                                                                                                                                                                                       |
 | `op_mapping` | No       | A `MAP<STRING, STRING>` mapping user-defined codes to Flink change operation names. Keys are user-defined codes (e.g., `'c'`, `'u'`, `'d'`), values are Flink change operation names (`INSERT`, `UPDATE_BEFORE`, `UPDATE_AFTER`, `DELETE`). Keys can contain comma-separated codes to map multiple codes to the same operation (e.g., `'c, r'`). Each change operation may appear at most once across all entries. |
 | `error_handling` | No | Controls behavior when an input row's operation code is `NULL` or not present in the `op_mapping`. Valid values: `FAIL` (default) — throw a `TableRuntimeException`, `SKIP` — silently drop the row. |
+| `uid` | No | A unique identifier for the PTF invocation. With `PARTITION BY`, defaults to `FROM_CHANGELOG`. Can be omitted if the PTF is invoked only once per job. See [Multiple Invocations](#multiple-invocations) for more details. |
 
 #### Default op_mapping
 
@@ -241,13 +339,13 @@ Two `error_handling` modes are supported. The job can either fail upon an invali
 -- Fail on unknown op codes (default behavior)
 SELECT * FROM FROM_CHANGELOG(
   input => TABLE cdc_stream
-)
+);
 
 -- Silently skip rows with NULL or unknown op codes
 SELECT * FROM FROM_CHANGELOG(
   input => TABLE cdc_stream,
   error_handling => 'SKIP'
-)
+);
 ```
 
 #### Table API
@@ -297,7 +395,8 @@ SELECT * FROM TO_CHANGELOG(
   input => TABLE source_table [PARTITION BY key_col],
   [op => DESCRIPTOR(op_column_name),]
   [op_mapping => MAP['INSERT', 'I', 'DELETE', 'D', ...],]
-  [produces_full_deletes => BOOLEAN]
+  [produces_full_deletes => BOOLEAN,]
+  [uid => 'my-id']
 )
 ```
 
@@ -309,6 +408,7 @@ SELECT * FROM TO_CHANGELOG(
 | `op`                    | No       | A `DESCRIPTOR` with a single column name for the operation code column. Defaults to `op`.                                                                                                                                                                                                                                                                |
 | `op_mapping`            | No       | A `MAP<STRING, STRING>` mapping change operation names to custom output codes. Keys can contain comma-separated names to map multiple operations to the same code (e.g., `'INSERT, UPDATE_AFTER'`). When provided, only mapped operations are forwarded - unmapped events are dropped. Each change operation may appear at most once across all entries. |
 | `produces_full_deletes` | No       | A `BOOLEAN` literal that controls how DELETE rows are emitted. When `true` (default), DELETE rows carry all columns, the full image. When `false`, only the identifying key columns are preserved and the rest are nulled. See [Full vs partial deletes](#full-vs-partial-deletes) for more details.                                                     |
+| `uid` | No | A unique identifier for the PTF invocation. With `PARTITION BY`, defaults to `TO_CHANGELOG`. Can be omitted if the PTF is invoked only once per job. See [Multiple Invocations](#multiple-invocations) for more details. |
 
 #### Default op_mapping
 
@@ -330,6 +430,10 @@ The output schema is:
 ```
 
 All output rows have `INSERT` - the table is always append-only.
+
+### Time Attributes
+
+Time attributes of the input, such as a watermarked `ts`, stay time attributes in the output only if `op_mapping` forwards just `INSERT` and `UPDATE_AFTER`. Update-before and delete rows carry the timestamp of the previous version of the row, so with any other `op_mapping`, including the default, time columns become regular timestamps. To use event-time operations such as windows, `OVER ... ORDER BY ts` or interval joins on the output, use `op_mapping => MAP['INSERT', 'INSERT', 'UPDATE_AFTER', 'UPDATE_AFTER']` instead of filtering with `WHERE`, or use [TO_APPEND](#to_append) if you don't need the op column.
 
 ### Examples
 
@@ -423,12 +527,12 @@ The planner requires fully-populated DELETE rows on the input. For upsert source
 -- Upsert source: -D[id:5, name: null] (key-only).
 -- ChangelogNormalize calculates the full pre-image from state.
 -- Output: +I[op:'DELETE', id:5, name:'Alice']
-SELECT * FROM TO_CHANGELOG(input => TABLE upsert_source)
+SELECT * FROM TO_CHANGELOG(input => TABLE upsert_source);
 
 -- Retract source: -D[id:5, name:'Alice'] (full pre-image).
 -- No ChangelogNormalize inserted; the input row is passed through unchanged.
 -- Output: +I[op:'DELETE', id:5, name:'Alice']
-SELECT * FROM TO_CHANGELOG(input => TABLE retract_source)
+SELECT * FROM TO_CHANGELOG(input => TABLE retract_source);
 ```
 
 **Set semantics** (`PARTITION BY`):
@@ -437,12 +541,12 @@ SELECT * FROM TO_CHANGELOG(input => TABLE retract_source)
 -- Upsert source: -D[id:5, name: null] (key-only).
 -- ChangelogNormalize calculates the full pre-image from state.
 -- Output: +I[id:5, op:'DELETE', name:'Alice']
-SELECT * FROM TO_CHANGELOG(input => TABLE upsert_source PARTITION BY id)
+SELECT * FROM TO_CHANGELOG(input => TABLE upsert_source PARTITION BY id);
 
 -- Retract source: -D[id:5, name:'Alice'] (full pre-image).
 -- No ChangelogNormalize inserted; the input row is passed through unchanged.
 -- Output: +I[id:5, op:'DELETE', name:'Alice']
-SELECT * FROM TO_CHANGELOG(input => TABLE retract_source PARTITION BY id)
+SELECT * FROM TO_CHANGELOG(input => TABLE retract_source PARTITION BY id);
 ```
 
 ##### `produces_full_deletes => false`
@@ -458,11 +562,11 @@ The planner skips `ChangelogNormalize` and the function emits partial DELETE row
 ```sql
 -- Upsert source with PRIMARY KEY (id): -D[id:5] (key-only).
 -- Output: +I[op:'DELETE', id:5, name:null]
-SELECT * FROM TO_CHANGELOG(input => TABLE upsert_source, produces_full_deletes => false)
+SELECT * FROM TO_CHANGELOG(input => TABLE upsert_source, produces_full_deletes => false);
 
 -- Retract source with PRIMARY KEY (id): -D[id:5, name:'Alice'] (full pre-image).
 -- Output: +I[op:'DELETE', id:5, name:null]
-SELECT * FROM TO_CHANGELOG(input => TABLE retract_source, produces_full_deletes => false)
+SELECT * FROM TO_CHANGELOG(input => TABLE retract_source, produces_full_deletes => false);
 ```
 
 **Set semantics** (`PARTITION BY`): the function preserves the partition key and nulls every non-partition-key column on DELETE rows. The key used as the partition-key column should be the unique key that will be used as the record identifier. This matches the shape expected by upsert sinks such as Kafka compacted topics.
@@ -473,14 +577,14 @@ SELECT * FROM TO_CHANGELOG(input => TABLE retract_source, produces_full_deletes 
 SELECT * FROM TO_CHANGELOG(
   input => TABLE upsert_source PARTITION BY id,
   produces_full_deletes => false
-)
+);
 
 -- Retract source: -D[id:5, name:'Alice'] (full pre-image).
 -- Output: +I[id:5, op:'DELETE', name:null]
 SELECT * FROM TO_CHANGELOG(
   input => TABLE retract_source PARTITION BY id,
   produces_full_deletes => false
-)
+);
 ```
 
 #### Partitioning by a key
@@ -531,5 +635,22 @@ Table result = myTable.toChangelog(
 // Equivalent to PARTITION BY in SQL. The partition keys are prepended to the output columns.
 Table result = myTable.partitionBy($("id")).toChangelog();
 ```
+
+## Multiple Invocations
+
+With `PARTITION BY`, the function name is used as the default unique identifier (UID). If the same PTF is invoked multiple times, for example within a `STATEMENT SET`, each invocation requires a `uid` that is unique across the entire Flink job:
+
+```sql
+EXECUTE STATEMENT SET
+BEGIN
+  INSERT INTO orders_sink
+    SELECT * FROM FROM_CHANGELOG(input => TABLE orders_cdc PARTITION BY id, uid => 'orders-changelog');
+
+  INSERT INTO customers_sink
+    SELECT * FROM FROM_CHANGELOG(input => TABLE customers_cdc PARTITION BY id, uid => 'customers-changelog');
+END;
+```
+
+See [Query Evolution with UIDs]({{< ref "docs/dev/table/functions/ptfs" >}}#query-evolution-with-uids) for more details.
 
 {{< top >}}

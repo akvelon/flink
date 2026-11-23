@@ -22,13 +22,19 @@ import org.apache.flink.table.api.JsonOnNull;
 import org.apache.flink.table.functions.BuiltInFunctionDefinitions;
 import org.apache.flink.types.Row;
 
+import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.time.LocalTime;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.stream.Stream;
 
+import static org.apache.flink.table.api.DataTypes.DATE;
 import static org.apache.flink.table.api.DataTypes.INT;
 import static org.apache.flink.table.api.DataTypes.ROW;
 import static org.apache.flink.table.api.DataTypes.STRING;
+import static org.apache.flink.table.api.DataTypes.TIME;
+import static org.apache.flink.table.api.DataTypes.TIMESTAMP;
 import static org.apache.flink.table.api.DataTypes.VARCHAR;
 import static org.apache.flink.table.api.Expressions.$;
 import static org.apache.flink.table.api.Expressions.jsonArrayAgg;
@@ -58,6 +64,15 @@ class JsonAggregationFunctionsITCase extends BuiltInAggregateFunctionTestBase {
                                 ROW(VARCHAR(2000).notNull()),
                                 ROW(STRING().notNull()),
                                 Collections.singletonList(Row.of("{\"A\":1,\"B\":null,\"C\":3}"))),
+                TestSpec.forFunction(BuiltInFunctionDefinitions.JSON_OBJECTAGG_NULL_ON_NULL)
+                        .withDescription("Aggregation With Same Key And Value")
+                        .withSource(
+                                ROW(STRING()),
+                                Arrays.asList(Row.ofKind(INSERT, "A"), Row.ofKind(INSERT, "B")))
+                        .testSqlResult(
+                                source -> "SELECT JSON_OBJECTAGG(f0 VALUE f0) FROM " + source,
+                                ROW(VARCHAR(2000).notNull()),
+                                Collections.singletonList(Row.of("{\"A\":\"A\",\"B\":\"B\"}"))),
                 TestSpec.forFunction(BuiltInFunctionDefinitions.JSON_OBJECTAGG_ABSENT_ON_NULL)
                         .withDescription("Omits NULLs")
                         .withSource(
@@ -157,6 +172,33 @@ class JsonAggregationFunctionsITCase extends BuiltInAggregateFunctionTestBase {
                                 Arrays.asList(
                                         Row.of(1, "{\"A\":1,\"B\":3}", 3),
                                         Row.of(2, "{\"A\":2,\"C\":5}", 5))),
+                TestSpec.forFunction(BuiltInFunctionDefinitions.JSON_OBJECTAGG_NULL_ON_NULL)
+                        .withDescription("DATE and TIME Values")
+                        .withSource(
+                                ROW(STRING(), DATE(), TIME()),
+                                Arrays.asList(
+                                        Row.ofKind(
+                                                INSERT,
+                                                "A",
+                                                LocalDate.parse("1990-06-02"),
+                                                LocalTime.parse("13:37:42")),
+                                        Row.ofKind(INSERT, "B", null, null)))
+                        .testResult(
+                                source -> "SELECT JSON_OBJECTAGG(f0 VALUE f1) FROM " + source,
+                                TableApiAggSpec.select(
+                                        jsonObjectAgg(JsonOnNull.NULL, $("f0"), $("f1"))),
+                                ROW(VARCHAR(2000).notNull()),
+                                ROW(STRING().notNull()),
+                                Collections.singletonList(
+                                        Row.of("{\"A\":\"1990-06-02\",\"B\":null}")))
+                        .testResult(
+                                source -> "SELECT JSON_OBJECTAGG(f0 VALUE f2) FROM " + source,
+                                TableApiAggSpec.select(
+                                        jsonObjectAgg(JsonOnNull.NULL, $("f0"), $("f2"))),
+                                ROW(VARCHAR(2000).notNull()),
+                                ROW(STRING().notNull()),
+                                Collections.singletonList(
+                                        Row.of("{\"A\":\"13:37:42\",\"B\":null}"))),
 
                 // JSON_ARRAYAGG
                 TestSpec.forFunction(BuiltInFunctionDefinitions.JSON_ARRAYAGG_ABSENT_ON_NULL)
@@ -240,6 +282,150 @@ class JsonAggregationFunctionsITCase extends BuiltInAggregateFunctionTestBase {
                                 ROW(INT(), STRING(), STRING().notNull()),
                                 Arrays.asList(
                                         Row.of(1, "A", "[\"A\"]"),
-                                        Row.of(2, "D", "[\"C\",\"D\"]"))));
+                                        Row.of(2, "D", "[\"C\",\"D\"]"))),
+                TestSpec.forFunction(BuiltInFunctionDefinitions.JSON_ARRAYAGG_ABSENT_ON_NULL)
+                        .withDescription("DATE and TIME Values")
+                        .withSource(
+                                ROW(DATE(), TIME()),
+                                Arrays.asList(
+                                        Row.ofKind(
+                                                INSERT,
+                                                LocalDate.parse("1990-06-02"),
+                                                LocalTime.parse("13:37:42")),
+                                        Row.ofKind(INSERT, null, null),
+                                        Row.ofKind(
+                                                INSERT,
+                                                LocalDate.parse("2000-01-01"),
+                                                LocalTime.parse("00:00:01"))))
+                        .testResult(
+                                source -> "SELECT JSON_ARRAYAGG(f0) FROM " + source,
+                                TableApiAggSpec.select(jsonArrayAgg(JsonOnNull.ABSENT, $("f0"))),
+                                ROW(VARCHAR(2000).notNull()),
+                                ROW(STRING().notNull()),
+                                Collections.singletonList(
+                                        Row.of("[\"1990-06-02\",\"2000-01-01\"]")))
+                        .testResult(
+                                source -> "SELECT JSON_ARRAYAGG(f1) FROM " + source,
+                                TableApiAggSpec.select(jsonArrayAgg(JsonOnNull.ABSENT, $("f1"))),
+                                ROW(VARCHAR(2000).notNull()),
+                                ROW(STRING().notNull()),
+                                Collections.singletonList(Row.of("[\"13:37:42\",\"00:00:01\"]"))),
+
+                // JSON_OBJECTAGG - Window (group window) Aggregation
+                TestSpec.forFunction(BuiltInFunctionDefinitions.JSON_OBJECTAGG_NULL_ON_NULL)
+                        .withDescription("Window Aggregation")
+                        .withSource(
+                                ROW(STRING(), INT(), TIMESTAMP(3)),
+                                Arrays.asList(
+                                        Row.ofKind(
+                                                INSERT,
+                                                "A",
+                                                1,
+                                                LocalDateTime.parse("2020-01-01T00:00:01")),
+                                        Row.ofKind(
+                                                INSERT,
+                                                "B",
+                                                2,
+                                                LocalDateTime.parse("2020-01-01T00:00:02")),
+                                        Row.ofKind(
+                                                INSERT,
+                                                "C",
+                                                3,
+                                                LocalDateTime.parse("2020-01-01T00:00:06"))))
+                        .withWatermark("f2", "f2 - INTERVAL '1' SECOND")
+                        .testSqlResult(
+                                source ->
+                                        "SELECT JSON_OBJECTAGG(f0 VALUE f1) FROM "
+                                                + source
+                                                + " GROUP BY TUMBLE(f2, INTERVAL '5' SECOND)",
+                                ROW(VARCHAR(2000).notNull()),
+                                Arrays.asList(Row.of("{\"A\":1,\"B\":2}"), Row.of("{\"C\":3}"))),
+                TestSpec.forFunction(BuiltInFunctionDefinitions.JSON_OBJECTAGG_NULL_ON_NULL)
+                        .withDescription("Window Aggregation With Same Key And Value")
+                        .withSource(
+                                ROW(STRING(), TIMESTAMP(3)),
+                                Arrays.asList(
+                                        Row.ofKind(
+                                                INSERT,
+                                                "A",
+                                                LocalDateTime.parse("2020-01-01T00:00:01")),
+                                        Row.ofKind(
+                                                INSERT,
+                                                "B",
+                                                LocalDateTime.parse("2020-01-01T00:00:02"))))
+                        .withWatermark("f1", "f1 - INTERVAL '1' SECOND")
+                        .testSqlResult(
+                                source ->
+                                        "SELECT JSON_OBJECTAGG(f0 VALUE f0) FROM "
+                                                + source
+                                                + " GROUP BY TUMBLE(f1, INTERVAL '5' SECOND)",
+                                ROW(VARCHAR(2000).notNull()),
+                                Collections.singletonList(Row.of("{\"A\":\"A\",\"B\":\"B\"}"))),
+                TestSpec.forFunction(BuiltInFunctionDefinitions.JSON_OBJECTAGG_NULL_ON_NULL)
+                        .withDescription("Window Group Aggregation With Other Aggs")
+                        .withSource(
+                                ROW(INT(), STRING(), INT(), TIMESTAMP(3)),
+                                Arrays.asList(
+                                        Row.ofKind(
+                                                INSERT,
+                                                1,
+                                                "A",
+                                                1,
+                                                LocalDateTime.parse("2020-01-01T00:00:01")),
+                                        Row.ofKind(
+                                                INSERT,
+                                                1,
+                                                "B",
+                                                3,
+                                                LocalDateTime.parse("2020-01-01T00:00:02")),
+                                        Row.ofKind(
+                                                INSERT,
+                                                2,
+                                                "A",
+                                                2,
+                                                LocalDateTime.parse("2020-01-01T00:00:06")),
+                                        Row.ofKind(
+                                                INSERT,
+                                                2,
+                                                "C",
+                                                5,
+                                                LocalDateTime.parse("2020-01-01T00:00:07"))))
+                        .withWatermark("f3", "f3 - INTERVAL '1' SECOND")
+                        .testSqlResult(
+                                source ->
+                                        "SELECT f0, JSON_OBJECTAGG(f1 VALUE f2), max(f2) FROM "
+                                                + source
+                                                + " GROUP BY f0, TUMBLE(f3, INTERVAL '5' SECOND)",
+                                ROW(INT(), VARCHAR(2000).notNull(), INT()),
+                                Arrays.asList(
+                                        Row.of(1, "{\"A\":1,\"B\":3}", 3),
+                                        Row.of(2, "{\"A\":2,\"C\":5}", 5))),
+
+                // JSON_ARRAYAGG - Window (group window) Aggregation
+                TestSpec.forFunction(BuiltInFunctionDefinitions.JSON_ARRAYAGG_ABSENT_ON_NULL)
+                        .withDescription("Window Aggregation")
+                        .withSource(
+                                ROW(STRING(), TIMESTAMP(3)),
+                                Arrays.asList(
+                                        Row.ofKind(
+                                                INSERT,
+                                                "A",
+                                                LocalDateTime.parse("2020-01-01T00:00:01")),
+                                        Row.ofKind(
+                                                INSERT,
+                                                "B",
+                                                LocalDateTime.parse("2020-01-01T00:00:02")),
+                                        Row.ofKind(
+                                                INSERT,
+                                                "C",
+                                                LocalDateTime.parse("2020-01-01T00:00:06"))))
+                        .withWatermark("f1", "f1 - INTERVAL '1' SECOND")
+                        .testSqlResult(
+                                source ->
+                                        "SELECT JSON_ARRAYAGG(f0) FROM "
+                                                + source
+                                                + " GROUP BY TUMBLE(f1, INTERVAL '5' SECOND)",
+                                ROW(VARCHAR(2000).notNull()),
+                                Arrays.asList(Row.of("[\"A\",\"B\"]"), Row.of("[\"C\"]"))));
     }
 }

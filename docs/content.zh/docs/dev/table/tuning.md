@@ -175,9 +175,9 @@ Local-Global 优化可有效消除常规聚合的数据倾斜，例如 SUM、COU
 例如，如果我们要分析今天有多少唯一用户登录。我们可能有以下查询：
 
 ```sql
-SELECT day, COUNT(DISTINCT user_id)
+SELECT `day`, COUNT(DISTINCT user_id)
 FROM T
-GROUP BY day
+GROUP BY `day`
 ```
 
 如果 distinct key （即 user_id）的值分布稀疏，则 COUNT DISTINCT 不适合减少数据。即使启用了 local-global 优化也没有太大帮助。因为累加器仍然包含几乎所有原始记录，并且全局聚合将成为瓶颈（大多数繁重的累加器由一个任务处理，即同一天）。
@@ -187,13 +187,13 @@ GROUP BY day
 拆分 distinct 聚合后，以上查询将被自动改写为以下查询：
 
 ```sql
-SELECT day, SUM(cnt)
+SELECT `day`, SUM(cnt)
 FROM (
-    SELECT day, COUNT(DISTINCT user_id) as cnt
+    SELECT `day`, COUNT(DISTINCT user_id) as cnt
     FROM T
-    GROUP BY day, MOD(HASH_CODE(user_id), 1024)
+    GROUP BY `day`, MOD(HASH_CODE(user_id), 1024)
 )
-GROUP BY day
+GROUP BY `day`
 ```
 
 
@@ -247,24 +247,24 @@ t_env.get_config().set("table.optimizer.distinct-agg.split.enabled", "true") # e
 
 ```sql
 SELECT
- day,
+ `day`,
  COUNT(DISTINCT user_id) AS total_uv,
  COUNT(DISTINCT CASE WHEN flag IN ('android', 'iphone') THEN user_id ELSE NULL END) AS app_uv,
  COUNT(DISTINCT CASE WHEN flag IN ('wap', 'other') THEN user_id ELSE NULL END) AS web_uv
 FROM T
-GROUP BY day
+GROUP BY `day`
 ```
 
 但是，在这种情况下，建议使用 `FILTER` 语法而不是 CASE WHEN。因为 `FILTER` 更符合 SQL 标准，并且能获得更多的性能提升。`FILTER` 是用于聚合函数的修饰符，用于限制聚合中使用的值。将上面的示例替换为 `FILTER` 修饰符，如下所示：
 
 ```sql
 SELECT
- day,
+ `day`,
  COUNT(DISTINCT user_id) AS total_uv,
  COUNT(DISTINCT user_id) FILTER (WHERE flag IN ('android', 'iphone')) AS app_uv,
  COUNT(DISTINCT user_id) FILTER (WHERE flag IN ('wap', 'other')) AS web_uv
 FROM T
-GROUP BY day
+GROUP BY `day`
 ```
 
 Flink SQL 优化器可以识别相同的 distinct key 上的不同过滤器参数。例如，在上面的示例中，三个 COUNT DISTINCT 都在 `user_id` 一列上。Flink 可以只使用一个共享状态实例，而不是三个状态实例，以减少状态访问和状态大小。在某些工作负载下，可以获得显著的性能提升。
@@ -405,7 +405,7 @@ FROM TenantKafka t
 该功能默认启用。当满足以下所有条件时， regular join 将自动优化为 delta join。
 
 1. 作业拓扑结构满足优化条件。具体可以查看[支持的功能和限制]({{< ref "docs/dev/table/tuning" >}}#supported-features-and-limitations)。
-2. 源表所在的外部存储系统提供了可供 delta join 快速查询的索引信息。目前 [Apache Fluss (Incubating)](https://fluss.apache.org/blog/fluss-open-source/) 已支持在 Flink 中提供表级别的索引信息，其上的表可作为 delta join 的源表。具体可参考 [Fluss 文档](https://fluss.apache.org/docs/engine-flink/delta-joins/#flink-version-support)。
+2. 源表所在的外部存储系统提供了可供 delta join 快速查询的索引信息。目前 [Apache Fluss](https://fluss.apache.org/blog/fluss-open-source/) 已支持在 Flink 中提供表级别的索引信息，其上的表可作为 delta join 的源表。具体可参考 [Fluss 文档](https://fluss.apache.org/docs/engine-flink/delta-joins/#flink-version-support)。
 
 <a name="working-principle"></a>
 
@@ -461,7 +461,7 @@ SET 'table.optimizer.delta-join.strategy' = 'NONE';
 6. 源表和 delta join 之间的 projection 或 filter 不能包含**非确定性函数**。
 
 {{< hint info >}}
-[1] Flink 支持定义表级别的**不可变列**（immutable columns）约束来丰富 upsert key，从而使更多场景能够被优化为 delta join。不可变列约束声明某些列一旦为给定主键设置后便不可修改，不可变列会联合主键，作为一组新的 upsert key 传播给下游。该信息由外部存储系统提供。[Apache Fluss (Incubating)](https://fluss.apache.org/) 已在未来计划支持表级别的不可变列约束。
+[1] Flink 支持定义表级别的**不可变列**（immutable columns）约束来丰富 upsert key，从而使更多场景能够被优化为 delta join。不可变列约束声明某些列一旦为给定主键设置后便不可修改，不可变列会联合主键，作为一组新的 upsert key 传播给下游。该信息由外部存储系统提供。[Apache Fluss](https://fluss.apache.org/) 已在未来计划支持表级别的不可变列约束。
 {{< /hint >}}
 
 {{< top >}}

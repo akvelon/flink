@@ -42,6 +42,51 @@ class JavaCodeSplitterTest {
     }
 
     @Test
+    void testSplitIsDeterministic() throws Exception {
+        String code =
+                FileUtils.readFileUtf8(
+                        new File(
+                                JavaCodeSplitterTest.class
+                                        .getClassLoader()
+                                        .getResource("splitter/code/TestSplitJavaCode.java")
+                                        .toURI()));
+
+        try {
+            // call splitImpl directly to bypass the result cache and actually re-run the splitter
+            String first = JavaCodeSplitter.splitImpl(code, 100, 3);
+            String second = JavaCodeSplitter.splitImpl(code, 100, 3);
+
+            assertThat(second).isEqualTo(first);
+        } finally {
+            CodeSplitUtil.getCounter().set(0L);
+        }
+    }
+
+    @Test
+    void testMultiLineStringKeepsItsLineBreaks() {
+        final String literal = "\"first\\n\\nsecond\\n\\n\\nthird\"";
+        final String code =
+                "public class TestMultiLineString {\n"
+                        + "    public void myFun(int a) {\n"
+                        + "        String s = "
+                        + literal
+                        + ";\n\n\n"
+                        + "        System.out.println(s);\n\n"
+                        + "        a += 1;\n"
+                        + "        System.out.println(a);\n"
+                        + "        a += 2;\n"
+                        + "        System.out.println(a);\n"
+                        + "    }\n"
+                        + "}\n";
+        try {
+            final String split = JavaCodeSplitter.splitImpl(code, 100, 3);
+            assertThat(split).contains(literal).doesNotContain("\n\n");
+        } finally {
+            CodeSplitUtil.getCounter().set(0L);
+        }
+    }
+
+    @Test
     @Disabled("Disabled in because of https://issues.apache.org/jira/browse/FLINK-27702")
     void testInvalidJavaCode() {
         assertThatThrownBy(
@@ -55,14 +100,12 @@ class JavaCodeSplitterTest {
     @Test
     public void testNullCode() {
         assertThatThrownBy(() -> JavaCodeSplitter.split(null, 4000, 10000))
-                .cause()
                 .hasMessage("code cannot be empty");
     }
 
     @Test
     public void testEmptyCode() {
         assertThatThrownBy(() -> JavaCodeSplitter.split("", 4000, 10000))
-                .cause()
                 .hasMessage("code cannot be empty");
     }
 
@@ -72,7 +115,6 @@ class JavaCodeSplitterTest {
                         () ->
                                 JavaCodeSplitter.split(
                                         "public interface DummyInterface {}", 0, 10000))
-                .cause()
                 .hasMessage("maxMethodLength must be greater than 0");
     }
 
@@ -80,7 +122,6 @@ class JavaCodeSplitterTest {
     public void testWrongMaxClassMemberCount() {
         assertThatThrownBy(
                         () -> JavaCodeSplitter.split("public interface DummyInterface {}", 10, 0))
-                .cause()
                 .hasMessage("maxClassMemberCount must be greater than 0");
     }
 

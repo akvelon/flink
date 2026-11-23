@@ -18,33 +18,42 @@
 package org.apache.flink.table.planner.plan.rules.logical;
 
 import org.apache.flink.table.api.TableException;
-import org.apache.flink.table.catalog.Column;
-import org.apache.flink.table.catalog.ResolvedSchema;
+import org.apache.flink.table.connector.ChangelogMode;
 import org.apache.flink.table.connector.source.DynamicTableSource;
+import org.apache.flink.table.connector.source.ScanTableSource;
 import org.apache.flink.table.connector.source.abilities.SupportsFilterPushDown;
 import org.apache.flink.table.connector.source.abilities.SupportsReadingMetadata;
 import org.apache.flink.table.connector.source.abilities.SupportsReadingMetadata.MetadataFilterResult;
 import org.apache.flink.table.expressions.ResolvedExpression;
+import org.apache.flink.table.planner.connectors.DynamicSourceUtils;
 import org.apache.flink.table.planner.expressions.converter.ExpressionConverter;
 import org.apache.flink.table.planner.plan.abilities.source.FilterPushDownSpec;
 import org.apache.flink.table.planner.plan.abilities.source.MetadataFilterPushDownSpec;
+import org.apache.flink.table.planner.plan.abilities.source.ReadingMetadataSpec;
 import org.apache.flink.table.planner.plan.abilities.source.SourceAbilityContext;
 import org.apache.flink.table.planner.plan.abilities.source.SourceAbilitySpec;
+import org.apache.flink.table.planner.plan.metadata.FlinkRelMetadataQuery;
+import org.apache.flink.table.planner.plan.reuse.ScanReuserUtils;
 import org.apache.flink.table.planner.plan.schema.TableSourceTable;
+import org.apache.flink.table.planner.utils.ShortcutUtils;
 import org.apache.flink.table.types.logical.RowType;
 import org.apache.flink.table.types.logical.RowType.RowField;
+import org.apache.flink.types.RowKind;
 
 import org.apache.flink.shaded.guava33.com.google.common.collect.Iterables;
 import org.apache.flink.shaded.guava33.com.google.common.collect.Sets;
 
 import org.apache.calcite.plan.RelOptRule;
 import org.apache.calcite.plan.RelOptRuleOperand;
+import org.apache.calcite.plan.RelOptUtil;
 import org.apache.calcite.rel.core.TableScan;
 import org.apache.calcite.rex.RexInputRef;
 import org.apache.calcite.rex.RexNode;
 import org.apache.calcite.rex.RexShuttle;
-import org.apache.calcite.rex.RexVisitorImpl;
 import org.apache.calcite.tools.RelBuilder;
+import org.apache.calcite.util.ImmutableBitSet;
+
+import javax.annotation.Nullable;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -68,13 +77,104 @@ public abstract class PushFilterIntoSourceScanRuleBase extends RelOptRule {
         return expressions.stream().map(e -> e.accept(exprConverter)).collect(Collectors.toList());
     }
 
-    protected RexNode createRemainingCondition(
-            RelBuilder relBuilder,
-            List<ResolvedExpression> expressions,
-            RexNode[] unconvertedPredicates) {
-        List<RexNode> remainingPredicates = convertExpressionToRexNode(expressions, relBuilder);
-        remainingPredicates.addAll(Arrays.asList(unconvertedPredicates));
-        return relBuilder.and(remainingPredicates);
+    /**
+     * Pushes physical-only and metadata-only predicates to their own abilities and keeps mixed ones
+     * as runtime filters, so per FLIP-574 {@code applyFilters} never sees a metadata column.
+     * Non-key predicates of an updating source stay as runtime filters. Returns {@code null} if
+     * nothing can be pushed.
+     */
+    @Nullable
+    protected FilterPushDownResult classifyAndPushFilters(
+            RexNode[] convertiblePredicates,
+            RexNode[] unconvertedPredicates,
+            TableSourceTable tableSourceTable,
+            TableScan scan,
+            RelBuilder relBuilder) {
+        boolean supportsPhysicalFilter = canPushdownFilter(tableSourceTable);
+        boolean supportsMetadataFilter = canPushdownMetadataFilter(tableSourceTable);
+        List<String> metadataKeys = getReadMetadataKeys(tableSourceTable);
+        int firstMetadataIndex = scan.getRowType().getFieldCount() - metadataKeys.size();
+        boolean sendsUpdates = sendsUpdatesOrDeletesByKey(tableSourceTable.tableSource());
+        Set<ImmutableBitSet> upsertKeys =
+                FlinkRelMetadataQuery.reuseOrCreate(scan.getCluster().getMetadataQuery())
+                        .getUpsertKeys(scan);
+        // eventTimeSnapshotRequired is only set after filter push-down
+        boolean changelogNormalized =
+                DynamicSourceUtils.changelogNormalizeEnabled(
+                        false,
+                        tableSourceTable.contextResolvedTable().getResolvedSchema(),
+                        tableSourceTable.tableSource(),
+                        ShortcutUtils.unwrapTableConfig(scan));
+
+        List<RexNode> allRemainingRexNodes = new ArrayList<>();
+        List<RexNode> physicalPredicates = new ArrayList<>();
+        List<RexNode> metadataPredicates = new ArrayList<>();
+        for (RexNode predicate : convertiblePredicates) {
+            ImmutableBitSet columns = RelOptUtil.InputFinder.bits(predicate);
+            FilterColumnKind kind = classifyColumns(columns, firstMetadataIndex);
+            boolean onUpsertKey =
+                    upsertKeys != null
+                            && upsertKeys.stream().anyMatch(key -> key.contains(columns));
+            if (sendsUpdates && !onUpsertKey) {
+                // as a runtime filter it makes the planner keep UPDATE_BEFORE
+                allRemainingRexNodes.add(predicate);
+                // ChangelogNormalize must see every update
+                if (changelogNormalized) {
+                    continue;
+                }
+            }
+            if (kind == FilterColumnKind.PHYSICAL_ONLY && supportsPhysicalFilter) {
+                physicalPredicates.add(predicate);
+            } else if (kind == FilterColumnKind.METADATA_ONLY && supportsMetadataFilter) {
+                metadataPredicates.add(predicate);
+            } else {
+                allRemainingRexNodes.add(predicate);
+            }
+        }
+
+        if (physicalPredicates.isEmpty() && metadataPredicates.isEmpty()) {
+            return null;
+        }
+
+        TableSourceTable currentTable = tableSourceTable;
+        if (!physicalPredicates.isEmpty()) {
+            Tuple2<SupportsFilterPushDown.Result, TableSourceTable> physicalResult =
+                    resolveFiltersAndCreateTableSourceTable(
+                            physicalPredicates.toArray(new RexNode[0]),
+                            currentTable,
+                            scan,
+                            relBuilder);
+            currentTable = physicalResult._2;
+            List<RexNode> physicalRemaining =
+                    convertExpressionToRexNode(physicalResult._1.getRemainingFilters(), relBuilder);
+            allRemainingRexNodes.addAll(physicalRemaining);
+        }
+
+        if (!metadataPredicates.isEmpty()) {
+            FilterPushDownResult metadataResult =
+                    resolveMetadataFiltersAndCreateTableSourceTable(
+                            metadataPredicates.toArray(new RexNode[0]),
+                            currentTable,
+                            scan,
+                            metadataKeys);
+            currentTable = metadataResult.newTableSourceTable;
+            allRemainingRexNodes.addAll(metadataResult.remainingRexNodes);
+        }
+
+        allRemainingRexNodes.addAll(Arrays.asList(unconvertedPredicates));
+        return new FilterPushDownResult(currentTable, allRemainingRexNodes);
+    }
+
+    /** Updated table and the predicates that must remain as runtime filters. */
+    protected static final class FilterPushDownResult {
+        final TableSourceTable newTableSourceTable;
+        final List<RexNode> remainingRexNodes;
+
+        FilterPushDownResult(
+                TableSourceTable newTableSourceTable, List<RexNode> remainingRexNodes) {
+            this.newTableSourceTable = newTableSourceTable;
+            this.remainingRexNodes = remainingRexNodes;
+        }
     }
 
     /**
@@ -137,72 +237,52 @@ public abstract class PushFilterIntoSourceScanRuleBase extends RelOptRule {
                 .noneMatch(spec -> spec instanceof MetadataFilterPushDownSpec);
     }
 
-    /**
-     * True if predicate references metadata columns exclusively (no physical columns).
-     *
-     * <p>A predicate like {@code OR(physical_pred, metadata_pred)} returns false because it
-     * references both physical and metadata columns. Mixed predicates remain as runtime filters.
-     */
-    protected boolean referencesOnlyMetadataColumns(RexNode predicate, int physicalColumnCount) {
-        boolean[] saw = new boolean[2]; // [0] = sawPhysical, [1] = sawMetadata
-        predicate.accept(
-                new RexVisitorImpl<Void>(true) {
-                    @Override
-                    public Void visitInputRef(RexInputRef inputRef) {
-                        if (inputRef.getIndex() >= physicalColumnCount) {
-                            saw[1] = true;
-                        } else {
-                            saw[0] = true;
-                        }
-                        return null;
-                    }
-                });
-        return saw[1] && !saw[0];
+    private enum FilterColumnKind {
+        PHYSICAL_ONLY,
+        METADATA_ONLY,
+        MIXED
     }
 
-    /** Number of physical columns in the scan's schema. */
-    protected int getPhysicalColumnCount(TableSourceTable tableSourceTable) {
-        ResolvedSchema schema = tableSourceTable.contextResolvedTable().getResolvedSchema();
-        return (int) schema.getColumns().stream().filter(Column::isPhysical).count();
-    }
-
-    /** Maps SQL column names to metadata keys for metadata columns. */
-    protected Map<String, String> buildColumnToMetadataKeyMap(TableSourceTable tableSourceTable) {
-        ResolvedSchema schema = tableSourceTable.contextResolvedTable().getResolvedSchema();
-        Map<String, String> mapping = new HashMap<>();
-        for (Column col : schema.getColumns()) {
-            if (col instanceof Column.MetadataColumn) {
-                Column.MetadataColumn metaCol = (Column.MetadataColumn) col;
-                String sqlName = metaCol.getName();
-                String metadataKey = metaCol.getMetadataKey().orElse(sqlName);
-                mapping.put(sqlName, metadataKey);
-            }
+    private static boolean sendsUpdatesOrDeletesByKey(DynamicTableSource source) {
+        if (!(source instanceof ScanTableSource)) {
+            return false;
         }
-        return mapping;
+        ChangelogMode changelogMode = ((ScanTableSource) source).getChangelogMode();
+        return changelogMode.contains(RowKind.UPDATE_AFTER) || changelogMode.keyOnlyDeletes();
     }
 
-    /** Outcome of metadata filter push-down: updated table and runtime-Calc predicates. */
-    protected static final class MetadataPushDownOutcome {
-        final TableSourceTable newTableSourceTable;
-        final List<RexNode> remainingInputRexNodes;
-
-        MetadataPushDownOutcome(
-                TableSourceTable newTableSourceTable, List<RexNode> remainingInputRexNodes) {
-            this.newTableSourceTable = newTableSourceTable;
-            this.remainingInputRexNodes = remainingInputRexNodes;
+    private static FilterColumnKind classifyColumns(
+            ImmutableBitSet columns, int firstMetadataIndex) {
+        boolean referencesMetadata = columns.nextSetBit(firstMetadataIndex) >= 0;
+        int lowestColumn = columns.nextSetBit(0);
+        boolean referencesPhysical = lowestColumn >= 0 && lowestColumn < firstMetadataIndex;
+        if (referencesMetadata && referencesPhysical) {
+            return FilterColumnKind.MIXED;
         }
+        return referencesMetadata ? FilterColumnKind.METADATA_ONLY : FilterColumnKind.PHYSICAL_ONLY;
+    }
+
+    /** Keys of the {@link ReadingMetadataSpec}, in the order of the scan's trailing fields. */
+    private static List<String> getReadMetadataKeys(TableSourceTable tableSourceTable) {
+        ReadingMetadataSpec spec =
+                ScanReuserUtils.getAbilitySpec(
+                        tableSourceTable.abilitySpecs(), ReadingMetadataSpec.class);
+        return spec == null ? List.of() : spec.getMetadataKeys();
     }
 
     /** Resolves metadata filters and creates a new {@link TableSourceTable}. */
-    protected MetadataPushDownOutcome resolveMetadataFiltersAndCreateTableSourceTable(
-            RexNode[] metadataPredicates, TableSourceTable oldTableSourceTable, TableScan scan) {
+    private FilterPushDownResult resolveMetadataFiltersAndCreateTableSourceTable(
+            RexNode[] metadataPredicates,
+            TableSourceTable oldTableSourceTable,
+            TableScan scan,
+            List<String> metadataKeys) {
         DynamicTableSource newTableSource = oldTableSourceTable.tableSource().copy();
         SourceAbilityContext abilityContext = SourceAbilityContext.from(scan);
 
         // Field names are metadata keys, not SQL aliases, to avoid physical/metadata collisions
         // (e.g. `offset INT, msg_offset INT METADATA FROM 'offset'`).
         MetadataRowInfo metadataRowInfo =
-                buildMetadataRowInfo(oldTableSourceTable, abilityContext.getSourceRowType());
+                buildMetadataRowInfo(abilityContext.getSourceRowType(), metadataKeys);
         RexNode[] remappedPredicates =
                 remapPredicates(metadataPredicates, metadataRowInfo.oldIndexToNewIndex);
 
@@ -263,7 +343,7 @@ public abstract class PushFilterIntoSourceScanRuleBase extends RelOptRule {
                         oldTableSourceTable.getStatistic(),
                         new SourceAbilitySpec[] {metadataSpec});
 
-        return new MetadataPushDownOutcome(newTableSourceTable, remainingInputRexNodes);
+        return new FilterPushDownResult(newTableSourceTable, remainingInputRexNodes);
     }
 
     /**
@@ -271,18 +351,15 @@ public abstract class PushFilterIntoSourceScanRuleBase extends RelOptRule {
      * with an old-index-to-new-index mapping from the scan's source row type. Non-metadata
      * positions are absent from the mapping.
      */
-    private MetadataRowInfo buildMetadataRowInfo(
-            TableSourceTable tableSourceTable, RowType sourceRowType) {
-        Map<String, String> columnToMetadataKey = buildColumnToMetadataKeyMap(tableSourceTable);
+    private MetadataRowInfo buildMetadataRowInfo(RowType sourceRowType, List<String> metadataKeys) {
+        int firstMetadataIndex = sourceRowType.getFieldCount() - metadataKeys.size();
         List<RowField> metadataFields = new ArrayList<>();
         Map<Integer, Integer> oldToNewIndex = new HashMap<>();
-        for (int i = 0; i < sourceRowType.getFieldCount(); i++) {
-            String sqlName = sourceRowType.getFieldNames().get(i);
-            String metadataKey = columnToMetadataKey.get(sqlName);
-            if (metadataKey != null) {
-                oldToNewIndex.put(i, metadataFields.size());
-                metadataFields.add(new RowField(metadataKey, sourceRowType.getTypeAt(i)));
-            }
+        for (int i = firstMetadataIndex; i < sourceRowType.getFieldCount(); i++) {
+            oldToNewIndex.put(i, metadataFields.size());
+            metadataFields.add(
+                    new RowField(
+                            metadataKeys.get(i - firstMetadataIndex), sourceRowType.getTypeAt(i)));
         }
         return new MetadataRowInfo(new RowType(false, metadataFields), oldToNewIndex);
     }
@@ -290,7 +367,7 @@ public abstract class PushFilterIntoSourceScanRuleBase extends RelOptRule {
     /**
      * Rewrites {@link RexInputRef}s in each predicate using the supplied old->new index map. Throws
      * if a predicate references an index not in the map (would indicate a non-metadata reference
-     * slipped past {@link #referencesOnlyMetadataColumns}).
+     * slipped past {@link #classifyColumns}).
      */
     private RexNode[] remapPredicates(
             RexNode[] predicates, Map<Integer, Integer> oldIndexToNewIndex) {

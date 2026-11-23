@@ -31,6 +31,7 @@ import org.apache.flink.api.common.typeutils.base.LocalDateTimeSerializer;
 import org.apache.flink.api.common.typeutils.base.LocalTimeSerializer;
 import org.apache.flink.api.common.typeutils.base.NullValueSerializer;
 import org.apache.flink.api.common.typeutils.base.SetSerializer;
+import org.apache.flink.api.common.typeutils.base.UuidSerializer;
 import org.apache.flink.api.common.typeutils.base.VoidSerializer;
 import org.apache.flink.api.common.typeutils.base.array.BooleanPrimitiveArraySerializer;
 import org.apache.flink.api.common.typeutils.base.array.BytePrimitiveArraySerializer;
@@ -43,6 +44,7 @@ import org.apache.flink.api.common.typeutils.base.array.ShortPrimitiveArraySeria
 import org.apache.flink.api.common.typeutils.base.array.StringArraySerializer;
 import org.apache.flink.api.java.typeutils.runtime.CopyableValueSerializer;
 import org.apache.flink.api.java.typeutils.runtime.EitherSerializer;
+import org.apache.flink.api.java.typeutils.runtime.NullableSerializer;
 import org.apache.flink.api.java.typeutils.runtime.RowSerializer;
 import org.apache.flink.api.java.typeutils.runtime.Tuple0Serializer;
 import org.apache.flink.api.java.typeutils.runtime.TupleSerializer;
@@ -83,6 +85,7 @@ import org.apache.flink.table.runtime.typeutils.ArrayDataSerializer;
 import org.apache.flink.table.runtime.typeutils.BinaryRowDataSerializer;
 import org.apache.flink.table.runtime.typeutils.DecimalDataSerializer;
 import org.apache.flink.table.runtime.typeutils.ExternalSerializer;
+import org.apache.flink.table.runtime.typeutils.GeographyTypeSerializer;
 import org.apache.flink.table.runtime.typeutils.LinkedListSerializer;
 import org.apache.flink.table.runtime.typeutils.MapDataSerializer;
 import org.apache.flink.table.runtime.typeutils.RawValueDataSerializer;
@@ -140,6 +143,7 @@ class TypeSerializerTestCoverageTest {
                         SingleThreadAccessCheckingTypeSerializer.class.getName(),
                         GenericArraySerializer.class.getName(),
                         NullValueSerializer.class.getName(),
+                        NullableSerializer.class.getName(),
                         Tuple0Serializer.class.getName(),
                         CopyableValueSerializer.class.getName(),
                         VoidSerializer.class.getName(),
@@ -196,6 +200,7 @@ class TypeSerializerTestCoverageTest {
                         SharedBufferEdge.SharedBufferEdgeSerializer.class.getName(),
                         RowDataSerializer.class.getName(),
                         DecimalDataSerializer.class.getName(),
+                        GeographyTypeSerializer.class.getName(),
                         AvroSerializer.class.getName());
 
         //  type serializer whitelist for TypeSerializerUpgradeTestBase test coverage
@@ -258,6 +263,7 @@ class TypeSerializerTestCoverageTest {
                         SharedBufferEdge.SharedBufferEdgeSerializer.class.getName(),
                         RowDataSerializer.class.getName(),
                         DecimalDataSerializer.class.getName(),
+                        GeographyTypeSerializer.class.getName(),
                         AvroSerializer.class.getName(),
                         // KeyAndValueSerializer shouldn't be used to serialize data to state and
                         // doesn't need to ensure upgrade compatibility.
@@ -267,7 +273,8 @@ class TypeSerializerTestCoverageTest {
                         RowSqnInfoSerializer.class.getName(),
                         MetaSqnInfoSerializer.class.getName(),
                         SetSerializer.class.getName(),
-                        SortedLongSerializer.class.getName());
+                        SortedLongSerializer.class.getName(),
+                        UuidSerializer.class.getName());
 
         // check if a test exists for each type serializer
         for (Class<? extends TypeSerializer> typeSerializer : typeSerializers) {

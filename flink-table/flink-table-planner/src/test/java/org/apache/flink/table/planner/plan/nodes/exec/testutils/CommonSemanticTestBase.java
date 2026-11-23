@@ -22,6 +22,7 @@ import org.apache.flink.table.api.EnvironmentSettings;
 import org.apache.flink.table.api.TableConfig;
 import org.apache.flink.table.api.TableEnvironment;
 import org.apache.flink.table.api.config.OptimizerConfigOptions;
+import org.apache.flink.table.api.config.TableConfigOptions;
 import org.apache.flink.table.planner.factories.TestValuesModelFactory;
 import org.apache.flink.table.planner.factories.TestValuesTableFactory;
 import org.apache.flink.table.test.program.ConfigOptionTestStep;
@@ -48,6 +49,7 @@ import org.junit.jupiter.params.provider.MethodSource;
 import java.util.EnumSet;
 import java.util.HashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -192,6 +194,7 @@ public abstract class CommonSemanticTestBase implements TableTestProgramRunner {
         config.set(
                 OptimizerConfigOptions.TABLE_OPTIMIZER_NONDETERMINISTIC_UPDATE_STRATEGY,
                 OptimizerConfigOptions.NonDeterministicUpdateStrategy.TRY_RESOLVE);
+        config.set(TableConfigOptions.LOCAL_TIME_ZONE, "UTC");
     }
 
     private Map<String, String> createSourceOptions(SourceTestStep sourceTestStep, String id) {
@@ -203,7 +206,8 @@ public abstract class CommonSemanticTestBase implements TableTestProgramRunner {
             options.put("bounded", "true");
         }
         // Enforce per-record watermarks for testing
-        if (sourceTestStep.schemaComponents.stream().anyMatch(c -> c.startsWith("WATERMARK FOR"))) {
+        if (sourceTestStep.schemaComponents.stream()
+                .anyMatch(c -> c.toUpperCase(Locale.ROOT).startsWith("WATERMARK FOR"))) {
             options.put("disable-lookup", "true");
             options.put("enable-watermark-push-down", "true");
             options.put("scan.watermark.emit.strategy", "on-event");

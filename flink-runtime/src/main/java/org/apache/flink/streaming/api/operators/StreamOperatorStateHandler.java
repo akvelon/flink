@@ -154,15 +154,8 @@ public class StreamOperatorStateHandler {
 
     public void dispose() throws Exception {
         try (Closer closer = Closer.create()) {
-            if (closeableRegistry.unregisterCloseable(operatorStateBackend)) {
-                closer.register(operatorStateBackend);
-            }
-            if (closeableRegistry.unregisterCloseable(keyedStateBackend)) {
-                closer.register(keyedStateBackend);
-            }
-            if (closeableRegistry.unregisterCloseable(asyncKeyedStateBackend)) {
-                closer.register(asyncKeyedStateBackend);
-            }
+            // The guava's closer will invoke these registered methods in reverse order of
+            // registration, so we register dispose before close here.
             if (operatorStateBackend != null) {
                 closer.register(operatorStateBackend::dispose);
             }
@@ -171,6 +164,15 @@ public class StreamOperatorStateHandler {
             }
             if (asyncKeyedStateBackend != null) {
                 closer.register(asyncKeyedStateBackend::dispose);
+            }
+            if (closeableRegistry.unregisterCloseable(operatorStateBackend)) {
+                closer.register(operatorStateBackend);
+            }
+            if (closeableRegistry.unregisterCloseable(keyedStateBackend)) {
+                closer.register(keyedStateBackend);
+            }
+            if (closeableRegistry.unregisterCloseable(asyncKeyedStateBackend)) {
+                closer.register(asyncKeyedStateBackend);
             }
         }
     }
@@ -455,6 +457,22 @@ public class StreamOperatorStateHandler {
                 CheckpointableKeyedStateBackend rawBackend = keyedStateBackend;
 
                 rawBackend.setCurrentKey(key);
+            } catch (Exception e) {
+                throw new RuntimeException(
+                        "Exception occurred while setting the current key context.", e);
+            }
+        }
+    }
+
+    /** See {@link KeyedStateBackend#moveToNextKey}. */
+    @SuppressWarnings({"unchecked"})
+    public void moveToNextKey(Object key) {
+        if (keyedStateBackend != null) {
+            try {
+                @SuppressWarnings("rawtypes")
+                CheckpointableKeyedStateBackend rawBackend = keyedStateBackend;
+
+                rawBackend.moveToNextKey(key);
             } catch (Exception e) {
                 throw new RuntimeException(
                         "Exception occurred while setting the current key context.", e);

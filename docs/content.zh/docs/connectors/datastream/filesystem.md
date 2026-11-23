@@ -1,5 +1,6 @@
 ---
 title: 文件系统
+linkTitle: FileSystem
 weight: 6
 type: docs
 aliases:
@@ -105,7 +106,7 @@ final FileSource<String> source =
 {{< tab "Python" >}}
 ```python
 source = FileSource.for_record_stream_format(...) \
-    .monitor_continously(Duration.of_millis(5)) \
+    .monitor_continuously(Duration.of_millis(5)) \
     .build()
 ```
 {{< /tab >}}

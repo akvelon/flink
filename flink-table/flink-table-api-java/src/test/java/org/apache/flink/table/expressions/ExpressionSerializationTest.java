@@ -58,6 +58,8 @@ public class ExpressionSerializationTest {
     public static Stream<TestSpec> testData() {
         return Stream.of(
                 TestSpec.forExpr(Expressions.uuid()).expectStr("UUID()"),
+                TestSpec.forExpr(Expressions.uuidV4()).expectStr("UUID_V4()"),
+                TestSpec.forExpr(Expressions.uuidV7()).expectStr("UUID_V7()"),
                 TestSpec.forExpr($("f0").abs())
                         .withField("f0", DataTypes.BIGINT())
                         .expectStr("ABS(`f0`)"),
@@ -85,6 +87,9 @@ public class ExpressionSerializationTest {
                 TestSpec.forExpr($("f0").isNotNull())
                         .withField("f0", DataTypes.BOOLEAN())
                         .expectStr("`f0` IS NOT NULL"),
+                TestSpec.forExpr($("f0").isNan())
+                        .withField("f0", DataTypes.DOUBLE())
+                        .expectStr("IS_NAN(`f0`)"),
                 TestSpec.forExpr($("f0").isTrue())
                         .withField("f0", DataTypes.BOOLEAN())
                         .expectStr("`f0` IS TRUE"),
