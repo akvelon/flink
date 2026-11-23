@@ -19,11 +19,18 @@
 package org.apache.flink.table.planner.expressions.converter;
 
 import org.apache.flink.table.api.DataTypes;
+import org.apache.flink.table.api.ValidationException;
+import org.apache.flink.table.data.GeographyData;
+import org.apache.flink.table.expressions.CallExpression;
+import org.apache.flink.table.expressions.ResolvedExpression;
 import org.apache.flink.table.expressions.TimePointUnit;
+import org.apache.flink.table.functions.BuiltInFunctionDefinitions;
 import org.apache.flink.table.planner.delegation.PlannerContext;
 import org.apache.flink.table.planner.utils.PlannerMocks;
+import org.apache.flink.table.types.DataType;
 
 import org.apache.calcite.avatica.util.TimeUnit;
+import org.apache.calcite.rex.RexCall;
 import org.apache.calcite.rex.RexLiteral;
 import org.apache.calcite.rex.RexNode;
 import org.apache.calcite.sql.type.SqlTypeName;
@@ -33,18 +40,28 @@ import org.apache.calcite.util.TimestampString;
 import org.junit.jupiter.api.Test;
 
 import java.math.BigDecimal;
+import java.nio.ByteBuffer;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.time.Period;
+import java.util.List;
+import java.util.UUID;
 
+import static org.apache.flink.table.expressions.ApiExpressionUtils.typeLiteral;
 import static org.apache.flink.table.expressions.ApiExpressionUtils.valueLiteral;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /** Test for {@link ExpressionConverter}. */
 class ExpressionConverterTest {
+
+    private static final byte[] POINT_WKB =
+            new byte[] {
+                1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, (byte) 0xF0, 0x3F, 0, 0, 0, 0, 0, 0, 0, 0x40
+            };
 
     private final PlannerContext plannerContext = PlannerMocks.create().getPlannerContext();
     private final ExpressionConverter converter =
@@ -193,5 +210,91 @@ class ExpressionConverterTest {
         RexNode rex = converter.visit(valueLiteral(TimePointUnit.MICROSECOND));
         assertThat(((RexLiteral) rex).getValueAs(TimeUnit.class)).isEqualTo(TimeUnit.MICROSECOND);
         assertThat(rex.getType().getSqlTypeName()).isEqualTo(SqlTypeName.SYMBOL);
+    }
+
+    @Test
+    void testUuidLiteral() {
+        UUID uuid = UUID.fromString("550e8400-e29b-41d4-a716-446655440000");
+        RexNode rex = converter.visit(valueLiteral(uuid));
+        assertThat(((RexLiteral) rex).getValueAs(UUID.class)).isEqualTo(uuid);
+        assertThat(rex.getType().getSqlTypeName()).isEqualTo(SqlTypeName.UUID);
+    }
+
+    @Test
+    void testUuidLiteralFromBytes() {
+        UUID uuid = UUID.fromString("550e8400-e29b-41d4-a716-446655440000");
+        byte[] uuidBytes =
+                ByteBuffer.allocate(16)
+                        .putLong(uuid.getMostSignificantBits())
+                        .putLong(uuid.getLeastSignificantBits())
+                        .array();
+        RexNode rex =
+                converter.visit(
+                        valueLiteral(
+                                uuidBytes, DataTypes.UUID().notNull().bridgedTo(byte[].class)));
+        assertThat(((RexLiteral) rex).getValueAs(UUID.class)).isEqualTo(uuid);
+        assertThat(rex.getType().getSqlTypeName()).isEqualTo(SqlTypeName.UUID);
+    }
+
+    @Test
+    void testCastToNotNullTypeFromNullableInput() {
+        final RexNode rex =
+                convertCast(
+                        valueLiteral(null, DataTypes.INT()),
+                        DataTypes.BIGINT().notNull(),
+                        DataTypes.BIGINT());
+        assertThat(rex.getType().isNullable()).isTrue();
+    }
+
+    @Test
+    void testCastToNullableTypeFromNotNullInput() {
+        final RexNode rex =
+                convertCast(valueLiteral(1), DataTypes.BIGINT(), DataTypes.BIGINT().notNull());
+        assertThat(rex.getType().isNullable()).isFalse();
+    }
+
+    /** The output type is the one the CAST type strategy derives; the RexNode must follow it. */
+    private RexNode convertCast(
+            ResolvedExpression input, DataType targetType, DataType outputType) {
+        return converter.visit(
+                CallExpression.permanent(
+                        BuiltInFunctionDefinitions.CAST,
+                        List.of(input, typeLiteral(targetType)),
+                        outputType));
+    }
+
+    @Test
+    void testGeographyLiteralUsesConstructorCall() {
+        RexNode rex =
+                converter.visit(
+                        valueLiteral(
+                                GeographyData.fromBytes(POINT_WKB),
+                                DataTypes.GEOGRAPHY().notNull()));
+
+        assertThat(rex).isInstanceOf(RexCall.class);
+        assertThat(rex.getType().getSqlTypeName()).isEqualTo(SqlTypeName.OTHER);
+        assertThat(rex.getType().isNullable()).isFalse();
+
+        RexCall call = (RexCall) rex;
+        assertThat(call.getOperator().getName()).isEqualTo("ST_GEOGFROMWKB");
+        assertThat(((RexLiteral) call.getOperands().get(0)).getValueAs(byte[].class))
+                .isEqualTo(POINT_WKB);
+    }
+
+    @Test
+    void testNullableGeographyLiteral() {
+        RexNode rex = converter.visit(valueLiteral(null, DataTypes.GEOGRAPHY()));
+
+        assertThat(rex).isInstanceOf(RexLiteral.class);
+        assertThat(rex.getType().getSqlTypeName()).isEqualTo(SqlTypeName.OTHER);
+        assertThat(rex.getType().isNullable()).isTrue();
+        assertThat(((RexLiteral) rex).getValue()).isNull();
+    }
+
+    @Test
+    void testInvalidGeographyLiteralFailsValidation() {
+        assertThatThrownBy(() -> valueLiteral("POINT (1 2)", DataTypes.GEOGRAPHY().notNull()))
+                .isInstanceOf(ValidationException.class)
+                .hasMessageContaining("does not support a value literal");
     }
 }

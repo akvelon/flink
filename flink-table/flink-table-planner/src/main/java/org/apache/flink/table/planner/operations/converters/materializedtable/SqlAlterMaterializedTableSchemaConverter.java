@@ -57,6 +57,7 @@ import java.util.function.Function;
 public abstract class SqlAlterMaterializedTableSchemaConverter<
                 T extends SqlAlterMaterializedTableSchema>
         extends AbstractAlterMaterializedTableConverter<T> {
+
     @Override
     protected Operation convertToOperation(
             T alterTableSchema, ResolvedCatalogMaterializedTable oldTable, ConvertContext context) {
@@ -69,9 +70,10 @@ public abstract class SqlAlterMaterializedTableSchemaConverter<
     @Override
     protected Function<ResolvedCatalogMaterializedTable, List<TableChange>> gatherTableChanges(
             T alterTableSchema, ConvertContext context) {
+
         return oldTable -> {
             MaterializedTableUtils.validatePersistedColumnsUsedByQuery(
-                    oldTable, alterTableSchema, context);
+                    oldTable, alterTableSchema, context, alterTableSchema.getOperator().getName());
 
             SchemaConverter converter = createSchemaConverter(oldTable, context);
             converter.updateColumn(alterTableSchema.getColumnPositions().getList());
@@ -146,7 +148,7 @@ public abstract class SqlAlterMaterializedTableSchemaConverter<
                         createDataType(context.getCatalogManager().getDataTypeFactory(), col);
                 LogicalType oldDataType = map.get(col.getName()).getDataType().getLogicalType();
                 // The check is similar to the one in
-                // SchemaBuilderUtil#validateImplicitCastCompatibility
+                // AsQuerySchemaMerger#addDeclaredColumn
                 // which is used while merging schemas (CREATE [MATERIALIZED ]TABLE operation)
                 if (!LogicalTypeCasts.supportsImplicitCast(oldDataType, dataType)) {
                     throw new ValidationException(

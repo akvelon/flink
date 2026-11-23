@@ -26,7 +26,10 @@ import org.apache.flink.table.api.Schema;
 import org.apache.flink.table.api.ValidationException;
 import org.apache.flink.table.functions.ScalarFunction;
 import org.apache.flink.table.planner.utils.PlannerMocks;
+import org.apache.flink.table.types.logical.LogicalType;
 
+import org.apache.calcite.rel.RelRoot;
+import org.apache.calcite.sql.SqlNode;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
@@ -156,6 +159,68 @@ class FlinkCalciteSqlValidatorTest {
                         () -> plannerMocks.getParser().parse("SELECT myFunc(1, in2 => 2) FROM t1"))
                 .isInstanceOf(ValidationException.class)
                 .hasMessageContaining("Cannot mix positional and named arguments");
+    }
+
+    @ParameterizedTest
+    @ValueSource(
+            strings = {
+                "SELECT a, ARRAY_AGG(b ORDER BY b) FROM t2 GROUP BY a",
+                "SELECT a, ARRAY_AGG(DISTINCT b ORDER BY b) FROM t2 GROUP BY a",
+                "SELECT a, ARRAY_AGG(b RESPECT NULLS ORDER BY b) FROM t2 GROUP BY a",
+                "SELECT * FROM (SELECT a, ARRAY_AGG(b ORDER BY b) AS bs FROM t2 GROUP BY a)"
+            })
+    void testArrayAggWithOrderBy(String sql) {
+        assertThatThrownBy(() -> plannerMocks.getParser().parse(sql))
+                .isInstanceOf(ValidationException.class)
+                .hasRootCauseMessage(
+                        "ARRAY_AGG with ORDER BY is not supported. "
+                                + "Remove the ORDER BY clause from the ARRAY_AGG call.");
+    }
+
+    @ParameterizedTest
+    @ValueSource(
+            strings = {
+                "SELECT a, ARRAY_AGG(b) FROM t2 GROUP BY a",
+                "SELECT a, ARRAY_AGG(DISTINCT b) FROM t2 GROUP BY a",
+                "SELECT a, ARRAY_AGG(b RESPECT NULLS) FROM t2 GROUP BY a"
+            })
+    void testArrayAggWithoutOrderBy(String sql) {
+        assertDoesNotThrow(() -> plannerMocks.getParser().parse(sql));
+    }
+
+    @ParameterizedTest
+    @ValueSource(
+            strings = {
+                "SELECT a, JSON_ARRAYAGG(b ORDER BY b) FROM t2 GROUP BY a",
+                "SELECT a, JSON_ARRAYAGG(b ORDER BY b NULL ON NULL) FROM t2 GROUP BY a",
+                "SELECT a, JSON_ARRAYAGG(b) WITHIN GROUP (ORDER BY b) FROM t2 GROUP BY a",
+                "SELECT a, JSON_ARRAYAGG(b ABSENT ON NULL) WITHIN GROUP (ORDER BY b) FROM t2 GROUP BY a",
+                "SELECT * FROM (SELECT a, JSON_ARRAYAGG(b ORDER BY b) AS bs FROM t2 GROUP BY a)"
+            })
+    void testJsonArrayAggWithOrderBy(String sql) {
+        assertThatThrownBy(() -> plannerMocks.getParser().parse(sql))
+                .isInstanceOf(ValidationException.class)
+                .hasRootCauseMessage(
+                        "JSON_ARRAYAGG with ORDER BY is not supported. "
+                                + "Remove the ORDER BY or WITHIN GROUP clause from the JSON_ARRAYAGG call.");
+    }
+
+    @ParameterizedTest
+    @ValueSource(
+            strings = {
+                "SELECT a, JSON_ARRAYAGG(b) FROM t2 GROUP BY a",
+                "SELECT a, JSON_ARRAYAGG(b NULL ON NULL) FROM t2 GROUP BY a"
+            })
+    void testJsonArrayAggWithoutOrderBy(String sql) {
+        assertDoesNotThrow(() -> plannerMocks.getParser().parse(sql));
+    }
+
+    private LogicalType projectedLogicalType(String expression) {
+        SqlNode parsed = plannerMocks.getPlanner().parser().parse("SELECT " + expression + " AS c");
+        SqlNode validated = plannerMocks.getPlanner().validate(parsed);
+        RelRoot relRoot = plannerMocks.getPlanner().rel(validated);
+        return FlinkTypeFactory.toLogicalType(
+                relRoot.rel.getRowType().getFieldList().get(0).getType());
     }
 
     /** Scalar function with named arguments for the mixed-argument validation test. */

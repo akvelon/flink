@@ -261,7 +261,7 @@ public class ExecutionConfigOptions {
     public static final ConfigOption<Boolean> TABLE_EXEC_SINK_REQUIRE_ON_CONFLICT =
             key("table.exec.sink.require-on-conflict")
                     .booleanType()
-                    .defaultValue(true)
+                    .defaultValue(false)
                     .withDescription(
                             Description.builder()
                                     .text(
@@ -272,9 +272,9 @@ public class ExecutionConfigOptions {
                                     .linebreak()
                                     .linebreak()
                                     .text(
-                                            "Set this to false to restore the old behavior where no ON CONFLICT clause "
-                                                    + "was required. Note that disabling this check may lead to non-deterministic "
-                                                    + "results in certain streaming scenarios.")
+                                            "When disabled, a missing ON CONFLICT clause behaves like ON CONFLICT DO DEDUPLICATE. "
+                                                    + "Note that this may lead to non-deterministic results in certain streaming "
+                                                    + "scenarios.")
                                     .build());
 
     // ------------------------------------------------------------------------
@@ -698,6 +698,29 @@ public class ExecutionConfigOptions {
                                     + "NOTE: MiniBatch only works for non-windowed aggregations currently. If "
                                     + TABLE_EXEC_MINIBATCH_ENABLED.key()
                                     + " is set true, its value must be positive.");
+
+    // ------------------------------------------------------------------------
+    //  UDF Options
+    // ------------------------------------------------------------------------
+    @Documentation.TableOption(execMode = Documentation.ExecMode.STREAMING)
+    public static final ConfigOption<Boolean> TABLE_EXEC_UDF_METRIC_ENABLED =
+            key("table.exec.udf-metric-enabled")
+                    .booleanType()
+                    .defaultValue(false)
+                    .withDescription(
+                            "When enabled, per-operator UDF metrics (udfProcessingTime, "
+                                    + "udfExceptionCount) are registered for SQL/Table user-defined functions. "
+                                    + "Disabled by default; nothing is registered and there is zero overhead when off.");
+
+    @Documentation.TableOption(execMode = Documentation.ExecMode.STREAMING)
+    public static final ConfigOption<Integer> TABLE_EXEC_UDF_METRIC_SAMPLE_INTERVAL =
+            key("table.exec.udf-metric.sample-interval")
+                    .intType()
+                    .defaultValue(100)
+                    .withDescription(
+                            "When UDF metrics are enabled, udfProcessingTime is measured once every N "
+                                    + "invocations (default 100). Must be at least 1; a value of 1 measures every "
+                                    + "invocation. The non-sampled fast path is a single integer increment.");
 
     // ------------------------------------------------------------------------
     //  Other Exec Options

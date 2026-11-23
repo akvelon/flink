@@ -36,11 +36,12 @@ from pyflink.common.typeinfo import TypeInformation, BasicTypeInfo, BasicType, D
     ExternalTypeInfo
 from pyflink.table.types import TinyIntType, SmallIntType, IntType, BigIntType, BooleanType, \
     FloatType, DoubleType, VarCharType, VarBinaryType, DecimalType, DateType, TimeType, \
-    LocalZonedTimestampType, RowType, RowField, to_arrow_type, TimestampType, ArrayType, MapType, \
-    BinaryType, NullType, CharType
+    LocalZonedTimestampType, RowType, RowField, create_arrow_schema, TimestampType, \
+    ArrayType, MapType, BinaryType, GeographyType, NullType, CharType
 
 __all__ = ['FlattenRowCoder', 'RowCoder', 'BigIntCoder', 'TinyIntCoder', 'BooleanCoder',
-           'SmallIntCoder', 'IntCoder', 'FloatCoder', 'DoubleCoder', 'BinaryCoder', 'CharCoder',
+           'SmallIntCoder', 'IntCoder', 'FloatCoder', 'DoubleCoder', 'BinaryCoder',
+           'GeographyCoder', 'CharCoder',
            'DateCoder', 'TimeCoder', 'TimestampCoder', 'LocalZonedTimestampCoder', 'InstantCoder',
            'GenericArrayCoder', 'PrimitiveArrayCoder', 'MapCoder', 'DecimalCoder',
            'BigDecimalCoder', 'TupleCoder', 'TimeWindowCoder', 'CountWindowCoder',
@@ -84,29 +85,36 @@ class LengthPrefixBaseCoder(ABC):
             field_names = [f.name for f in schema_proto.fields]
             return RowCoder(field_coders, field_names)
         elif coder_info_descriptor_proto.HasField('arrow_type'):
-            timezone = pytz.timezone(os.environ['TABLE_LOCAL_TIME_ZONE'])
             schema_proto = coder_info_descriptor_proto.arrow_type.schema
             row_type = cls._to_row_type(schema_proto)
-            return ArrowCoder(cls._to_arrow_schema(row_type), row_type, timezone)
+            batch_format = coder_info_descriptor_proto.arrow_type.BatchFormat.Name(
+                coder_info_descriptor_proto.arrow_type.batch_format)
+            # Native Arrow does not use pandas timezone conversion. Some valid JVM zone IDs
+            # are not recognized by pytz, so resolve the timezone only for pandas batches.
+            timezone = (None if batch_format == "ARROW"
+                        else pytz.timezone(os.environ['TABLE_LOCAL_TIME_ZONE']))
+            returns_table_row = coder_info_descriptor_proto.arrow_type.returns_table_row
+            if batch_format == "PANDAS" and returns_table_row:
+                from pyflink.table.utils import create_pandas_table_row_schema
+
+                schema = create_pandas_table_row_schema(row_type)
+            else:
+                schema = create_arrow_schema(row_type.field_names(), row_type.field_types(),
+                                             allow_nested=batch_format == "ARROW")
+            return ArrowCoder(schema, row_type, timezone, batch_format, returns_table_row)
         elif coder_info_descriptor_proto.HasField('over_window_arrow_type'):
             timezone = pytz.timezone(os.environ['TABLE_LOCAL_TIME_ZONE'])
             schema_proto = coder_info_descriptor_proto.over_window_arrow_type.schema
             row_type = cls._to_row_type(schema_proto)
             return OverWindowArrowCoder(
-                cls._to_arrow_schema(row_type), row_type, timezone)
+                create_arrow_schema(row_type.field_names(), row_type.field_types()),
+                row_type, timezone)
         elif coder_info_descriptor_proto.HasField('raw_type'):
             type_info_proto = coder_info_descriptor_proto.raw_type.type_info
             field_coder = from_type_info_proto(type_info_proto)
             return field_coder
         else:
             raise ValueError("Unexpected coder type %s" % coder_info_descriptor_proto)
-
-    @classmethod
-    def _to_arrow_schema(cls, row_type):
-        import pyarrow as pa
-
-        return pa.schema([pa.field(n, to_arrow_type(t), t._nullable)
-                          for n, t in zip(row_type.field_names(), row_type.field_types())])
 
     @classmethod
     def _to_data_type(cls, field_type):
@@ -134,6 +142,8 @@ class LengthPrefixBaseCoder(ABC):
             return BinaryType(field_type.binary_info.length, field_type.nullable)
         elif field_type.type_name == flink_fn_execution_pb2.Schema.VARBINARY:
             return VarBinaryType(field_type.var_binary_info.length, field_type.nullable)
+        elif field_type.type_name == flink_fn_execution_pb2.Schema.GEOGRAPHY:
+            return GeographyType(field_type.nullable)
         elif field_type.type_name == flink_fn_execution_pb2.Schema.DECIMAL:
             return DecimalType(field_type.decimal_info.precision,
                                field_type.decimal_info.scale,
@@ -242,13 +252,18 @@ class ArrowCoder(FieldCoder):
     Coder for Arrow.
     """
 
-    def __init__(self, schema, row_type, timezone):
+    def __init__(self, schema, row_type, timezone, batch_format="PANDAS",
+                 returns_table_row=False):
+        self._batch_format = batch_format
+        self._returns_table_row = returns_table_row
         self._schema = schema
         self._row_type = row_type
         self._timezone = timezone
 
     def get_impl(self):
-        return coder_impl.ArrowCoderImpl(self._schema, self._row_type, self._timezone)
+        return coder_impl.ArrowCoderImpl(
+            self._schema, self._row_type, self._timezone, self._batch_format,
+            self._returns_table_row)
 
     def __repr__(self):
         return 'ArrowCoder[%s]' % self._schema
@@ -476,6 +491,15 @@ class BinaryCoder(FieldCoder):
         return coder_impl.BinaryCoderImpl()
 
 
+class GeographyCoder(FieldCoder):
+    """
+    Coder for GEOGRAPHY values represented as WKB bytes.
+    """
+
+    def get_impl(self):
+        return coder_impl.GeographyCoderImpl()
+
+
 class CharCoder(FieldCoder):
     """
     Coder for Character String.
@@ -673,6 +697,7 @@ def from_proto(field_type):
         type_name.DOUBLE: DoubleCoder(),
         type_name.BINARY: BinaryCoder(),
         type_name.VARBINARY: BinaryCoder(),
+        type_name.GEOGRAPHY: GeographyCoder(),
         type_name.CHAR: CharCoder(),
         type_name.VARCHAR: CharCoder(),
         type_name.DATE: DateCoder(),

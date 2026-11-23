@@ -267,7 +267,7 @@ Mode "embedded" (default) submits Flink jobs from the local machine.
                                                 /usr/local/bin/python3). The
                                                 python UDF worker depends on
                                                 Python 3.9+, Apache Beam
-                                                (version >= 2.54.0, <= 2.61.0), Pip
+                                                (version >= 2.69.0, <= 2.75.0), Pip
                                                 (version >= 20.3) and SetupTools
                                                 (version >= 37.0.0). Please
                                                 ensure that the specified
@@ -405,7 +405,7 @@ R Refresh                                    - Dec Refresh
 ```
 
 The **tableau mode** is more like a traditional way which will display the results in the screen directly with a tableau format.
-The displaying content will be influenced by the query execution type (`execution.type`).
+The displaying content will be influenced by the query execution type (`execution.runtime-mode`).
 
 ```text
 SET 'sql-client.execution.result-mode' = 'tableau';
@@ -863,7 +863,7 @@ Flink SQL> STOP JOB '228d70913eab60dda85c5e7f78b5782c' WITH SAVEPOINT;
 +-----------------------------------------+
 ```
 
-The savepoint path could be specified with [execution.checkpointing.savepoint-dir]({{< ref "docs/deployment/config" >}}#state-savepoints-dir) 
+The savepoint path could be specified with [execution.checkpointing.savepoint-dir]({{< ref "docs/deployment/config" >}}#execution-checkpointing-savepoint-dir) 
 either in the cluster configuration or session configuration (the latter would take precedence).
 
 For more details about stopping jobs, please refer to [Job Statements]({{< ref "docs/sql/reference/utility/job" >}}#stop-job).

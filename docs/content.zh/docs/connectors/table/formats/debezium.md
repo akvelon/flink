@@ -32,6 +32,9 @@ under the License.
 
 [Debezium](https://debezium.io/) 是一个 CDC（Changelog Data Capture，变更数据捕获）的工具，可以把来自 MySQL、PostgreSQL、Oracle、Microsoft SQL Server 和许多其他数据库的更改实时流式传输到 Kafka 中。 Debezium 为变更日志提供了统一的格式结构，并支持使用 JSON 和 Apache Avro 序列化消息。
 
+This format reads change events that Debezium has already written to a system such as Kafka. To
+read changes directly from a database instead, see [Flink CDC](https://nightlies.apache.org/flink/flink-cdc-docs-stable/docs/connectors/flink-sources/overview/).
+
 Flink 支持将 Debezium JSON 和 Avro 消息解析为 INSERT / UPDATE / DELETE 消息到 Flink SQL 系统中。在很多情况下，利用这个特性非常的有用，例如
  - 将增量数据从数据库同步到其他系统
  - 日志审计
@@ -52,7 +55,7 @@ Flink 还支持将 Flink SQL 中的 INSERT / UPDATE / DELETE 消息编码为 Deb
 
 {{< sql_download_table "debezium-json" >}}
 
-*注意: 请参考 [Debezium 文档](https://debezium.io/documentation/reference/1.3/index.html)，了解如何设置 Debezium Kafka Connect 用来将变更日志同步到 Kafka 主题。*
+*注意: 请参考 [Debezium 文档](https://debezium.io/documentation/reference/stable/index.html)，了解如何设置 Debezium Kafka Connect 用来将变更日志同步到 Kafka 主题。*
 
 
 如何使用 Debezium Format
@@ -82,7 +85,7 @@ Debezium 为变更日志提供了统一的格式，这是一个 JSON 格式的�
 }
 ```
 
-*注意: 请参考 [Debezium 文档](https://debezium.io/documentation/reference/1.3/connectors/mysql.html#mysql-connector-events_debezium)，了解每个字段的含义。*
+*注意: 请参考 [Debezium 文档](https://debezium.io/documentation/reference/stable/connectors/mysql.html#mysql-events)，了解每个字段的含义。*
 
 MySQL 产品表有4列（`id`、`name`、`description`、`weight`）。上面的 JSON 消息是 `products` 表上的一条更新事件，其中 `id = 111` 的行的 `weight` 值从 `5.18` 更改为 `5.15`。假设此消息已同步到 Kafka 主题 `products_binlog`，则可以使用以下 DDL（用于 Debezium JSON 和 Debezium Confluent Avro）来消费此主题并解析更改事件。
 
@@ -476,12 +479,12 @@ Flink 提供了 `debezium-avro-confluent` 和 `debezium-json` 两种 format 来�
 
 ### 消费 Debezium Postgres Connector 产生的数据
 
-如果你正在使用 [Debezium PostgreSQL Connector](https://debezium.io/documentation/reference/1.2/connectors/postgresql.html) 捕获变更到 Kafka，请确保被监控表的 [REPLICA IDENTITY](https://www.postgresql.org/docs/current/sql-altertable.html#SQL-CREATETABLE-REPLICA-IDENTITY) 已经被配置成 `FULL` 了，默认值是 `DEFAULT`。
+如果你正在使用 [Debezium PostgreSQL Connector](https://debezium.io/documentation/reference/stable/connectors/postgresql.html) 捕获变更到 Kafka，请确保被监控表的 [REPLICA IDENTITY](https://www.postgresql.org/docs/current/sql-altertable.html#SQL-CREATETABLE-REPLICA-IDENTITY) 已经被配置成 `FULL` 了，默认值是 `DEFAULT`。
 否则，Flink SQL 将无法正确解析 Debezium 数据。
 
 当配置为 `FULL` 时，更新和删除事件将完整包含所有列的之前的值。当为其他配置时，更新和删除事件的 "before" 字段将只包含 primary key 字段的值，或者为 null（没有 primary key）。
 你可以通过运行 `ALTER TABLE <your-table-name> REPLICA IDENTITY FULL` 来更改 `REPLICA IDENTITY` 的配置。
-请阅读 [Debezium 关于 PostgreSQL REPLICA IDENTITY 的文档](https://debezium.io/documentation/reference/1.2/connectors/postgresql.html#postgresql-replica-identity) 了解更多。
+请阅读 [Debezium 关于 PostgreSQL REPLICA IDENTITY 的文档](https://debezium.io/documentation/reference/stable/connectors/postgresql.html#postgresql-replica-identity) 了解更多。
 
 数据类型映射
 ----------------

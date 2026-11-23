@@ -19,12 +19,14 @@
 package org.apache.flink.table.planner.functions.sql;
 
 import org.apache.flink.table.api.TableException;
+import org.apache.flink.table.functions.BuiltInFunctionDefinitions;
 import org.apache.flink.table.planner.calcite.FlinkTypeFactory;
 import org.apache.flink.table.planner.functions.sql.internal.SqlAuxiliaryGroupAggFunction;
 import org.apache.flink.table.planner.functions.sql.ml.SqlMLEvaluateTableFunction;
 import org.apache.flink.table.planner.functions.sql.ml.SqlVectorSearchTableFunction;
 import org.apache.flink.table.planner.plan.type.FlinkReturnTypes;
 import org.apache.flink.table.planner.plan.type.NumericExceptFirstOperandChecker;
+import org.apache.flink.table.types.logical.GeographyType;
 
 import org.apache.calcite.sql.SqlAggFunction;
 import org.apache.calcite.sql.SqlFunction;
@@ -71,6 +73,16 @@ public class FlinkSqlOperatorTable extends ReflectiveSqlOperatorTable {
 
     /** The table of contains Flink-specific operators. */
     private static final Map<Boolean, FlinkSqlOperatorTable> cachedInstances = new HashMap<>();
+
+    private static final SqlReturnTypeInference GEOGRAPHY_NULLABLE_IF_ARGS =
+            opBinding -> {
+                boolean nullable = false;
+                for (int i = 0; i < opBinding.getOperandCount(); i++) {
+                    nullable |= opBinding.getOperandType(i).isNullable();
+                }
+                return ((FlinkTypeFactory) opBinding.getTypeFactory())
+                        .createFieldTypeFromLogicalType(new GeographyType(nullable));
+            };
 
     /** Returns the Flink operator table, creating it if necessary. */
     public static synchronized FlinkSqlOperatorTable instance(boolean isBatchMode) {
@@ -867,6 +879,42 @@ public class FlinkSqlOperatorTable extends ReflectiveSqlOperatorTable {
                     OperandTypes.family(SqlTypeFamily.BINARY, SqlTypeFamily.CHARACTER),
                     SqlFunctionCategory.STRING);
 
+    // GEOGRAPHY FUNCTIONS
+    public static final SqlFunction ST_GEOGFROMTEXT =
+            BuiltInSqlFunction.newBuilder()
+                    .name(BuiltInFunctionDefinitions.ST_GEOGFROMTEXT.getName())
+                    .returnType(GEOGRAPHY_NULLABLE_IF_ARGS)
+                    .operandTypeChecker(OperandTypes.family(SqlTypeFamily.ANY))
+                    .category(SqlFunctionCategory.STRING)
+                    .build();
+
+    public static final SqlFunction ST_GEOGFROMWKB =
+            BuiltInSqlFunction.newBuilder()
+                    .name(BuiltInFunctionDefinitions.ST_GEOGFROMWKB.getName())
+                    .returnType(GEOGRAPHY_NULLABLE_IF_ARGS)
+                    .operandTypeChecker(OperandTypes.family(SqlTypeFamily.ANY))
+                    .category(SqlFunctionCategory.STRING)
+                    .build();
+
+    public static final SqlFunction ST_ASTEXT =
+            BuiltInSqlFunction.newBuilder()
+                    .name(BuiltInFunctionDefinitions.ST_ASTEXT.getName())
+                    .returnType(VARCHAR_FORCE_NULLABLE)
+                    .operandTypeChecker(OperandTypes.family(SqlTypeFamily.ANY))
+                    .category(SqlFunctionCategory.STRING)
+                    .build();
+
+    public static final SqlFunction ST_ASWKB =
+            BuiltInSqlFunction.newBuilder()
+                    .name(BuiltInFunctionDefinitions.ST_ASWKB.getName())
+                    .returnType(
+                            ReturnTypes.cascade(
+                                    ReturnTypes.explicit(SqlTypeName.VARBINARY),
+                                    SqlTypeTransforms.TO_NULLABLE))
+                    .operandTypeChecker(OperandTypes.family(SqlTypeFamily.ANY))
+                    .category(SqlFunctionCategory.STRING)
+                    .build();
+
     public static final SqlFunction INSTR =
             new SqlFunction(
                     "INSTR",
@@ -1267,20 +1315,6 @@ public class FlinkSqlOperatorTable extends ReflectiveSqlOperatorTable {
     public static final SqlPostfixOperator IS_NOT_JSON_SCALAR =
             SqlStdOperatorTable.IS_NOT_JSON_SCALAR;
 
-    // VARIANT FUNCTIONS
-    public static final SqlFunction TRY_PARSE_JSON =
-            new SqlFunction(
-                    "TRY_PARSE_JSON",
-                    SqlKind.OTHER_FUNCTION,
-                    ReturnTypes.cascade(
-                            ReturnTypes.explicit(SqlTypeName.VARIANT),
-                            SqlTypeTransforms.FORCE_NULLABLE),
-                    null,
-                    OperandTypes.or(
-                            OperandTypes.family(SqlTypeFamily.STRING),
-                            OperandTypes.family(SqlTypeFamily.STRING, SqlTypeFamily.BOOLEAN)),
-                    SqlFunctionCategory.SYSTEM);
-
     // WINDOW TABLE FUNCTIONS
     // use the definitions in Flink, because we have different return types
     // and special check on the time attribute.
@@ -1304,4 +1338,58 @@ public class FlinkSqlOperatorTable extends ReflectiveSqlOperatorTable {
                     .operandTypeChecker(OperandTypes.NILADIC)
                     .notDeterministic()
                     .build();
+
+    // --------------------------------------------------------------------------------------------
+    // VERSIONED OPERATORS
+    // --------------------------------------------------------------------------------------------
+
+    /**
+     * Maps operators that are not a {@link VersionedSqlOperator} to the {@link BuiltInSqlOperator}
+     * that defines their latest version in a compiled plan.
+     *
+     * <p>Use it for operators that cannot be replaced by a {@link BuiltInSqlFunction}, for example
+     * because Calcite references them directly in the parser or {@code RexBuilder}. When the
+     * runtime behavior of such an operator {@code OP} changes from version 1 to 2:
+     *
+     * <ul>
+     *   <li>Add a public constant {@code OP_V1} built with {@code
+     *       BuiltInSqlOperator.newBuilder(OP).version(1).internal().build()}. Its name {@code
+     *       $OP$1} registers it in this table for restoring compiled plans. It is internal to not
+     *       expose it when listing functions.
+     *   <li>Add a private constant {@code OP_V2} built with {@code
+     *       BuiltInSqlOperator.newBuilder(OP).version(2).build()}. It is private to not register
+     *       it, the planner keeps using {@code OP}.
+     *   <li>Add the entry {@code OP -> OP_V2}. Compiled plans then contain {@code $OP$2} for {@code
+     *       OP}. {@code OP_V1} needs no entry, it is versioned itself and restores {@code $OP$1} by
+     *       name.
+     *   <li>Match on both {@code OP} and {@code OP_V1} wherever the operator is compared by
+     *       identity, such as during code generation.
+     * </ul>
+     *
+     * <p>In summary:
+     *
+     * <pre>{@code
+     * FlinkSqlOperatorTable {
+     *   // used during planning, compiled as $OP$2
+     *   public static final SqlOperator OP = SqlStdOperatorTable.OP;
+     *
+     *   // registered as $OP$1 but not listed, restored from older compiled plans
+     *   public static final BuiltInSqlOperator OP_V1 =
+     *       BuiltInSqlOperator.newBuilder(OP).version(1).internal().build();
+     *
+     *   // not registered, only defines the version of OP
+     *   private static final BuiltInSqlOperator OP_V2 =
+     *       BuiltInSqlOperator.newBuilder(OP).version(2).build();
+     *
+     *   public static final Map<SqlOperator, BuiltInSqlOperator> VERSIONED_OPERATORS =
+     *       Map.of(OP, OP_V2);
+     * }
+     *
+     * ExprCodeGenerator {
+     *   case OP => // latest behavior
+     *   case OP_V1 => // behavior of version 1
+     * }
+     * }</pre>
+     */
+    public static final Map<SqlOperator, BuiltInSqlOperator> VERSIONED_OPERATORS = Map.of();
 }

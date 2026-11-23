@@ -337,6 +337,32 @@ public class RexNodeJsonSerdeTest {
                                 "Functions of the deprecated function stack are not supported."));
     }
 
+    @Test
+    public void testMissingVersionOfInternalFunction() throws IOException {
+        final SerdeContext serdeContext = JsonSerdeTestUtil.configuredSerdeContext();
+        final RexBuilder rexBuilder = serdeContext.getRexBuilder();
+        final RexNode lessThan =
+                rexBuilder.makeCall(
+                        SqlStdOperatorTable.LESS_THAN,
+                        rexBuilder.makeInputRef(FACTORY.createSqlType(SqlTypeName.INTEGER), 1),
+                        rexBuilder.makeExactLiteral(new BigDecimal(10)));
+        final String json = toJson(serdeContext, lessThan);
+        assertThat(json).contains("\"$<$1\"");
+
+        // A plan of a version that is neither the latest nor registered under its qualified name
+        assertThatThrownBy(
+                        () ->
+                                JsonSerdeTestUtil.toObject(
+                                        serdeContext,
+                                        json.replace("\"$<$1\"", "\"$<$2\""),
+                                        RexNode.class))
+                .satisfies(
+                        anyCauseMatches(
+                                TableException.class,
+                                "Could not resolve internal system function '$<$2'. "
+                                        + "Only the latest version '$<$1' is available."));
+    }
+
     @Nested
     @DisplayName("Test CatalogPlanCompilation == IDENTIFIER")
     class TestCompileIdentifier {
@@ -830,6 +856,12 @@ public class RexNodeJsonSerdeTest {
                 rexBuilder.makeCall(
                         FlinkSqlOperatorTable.HASH_CODE,
                         rexBuilder.makeInputRef(FACTORY.createSqlType(SqlTypeName.INTEGER), 1)),
+                rexBuilder.makeInputRef(FACTORY.createSqlType(SqlTypeName.VARIANT), 1),
+                // $1['f'] on a VARIANT, which also makes the call itself VARIANT-typed
+                rexBuilder.makeCall(
+                        FlinkSqlOperatorTable.ITEM,
+                        rexBuilder.makeInputRef(FACTORY.createSqlType(SqlTypeName.VARIANT), 1),
+                        rexBuilder.makeLiteral("f")),
                 rexBuilder.makePatternFieldRef(
                         "test", FACTORY.createSqlType(SqlTypeName.INTEGER), 0),
                 new RexTableArgCall(
