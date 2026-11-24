@@ -14,4 +14,4 @@
 -- See the License for the specific language governing permissions and
 -- limitations under the License.
 
-SELECT id, name, geos, nested FROM `healthy-skill-501608-t7.akvelon.g11_geography_20261123_130455` WHERE id IN (42,43,44,45,46,47) ORDER BY id;
+SELECT id, name, geos FROM `healthy-skill-501608-t7.akvelon.g11_geography_20261123_130455_merged` WHERE id BETWEEN 42 AND 45 ORDER BY id;

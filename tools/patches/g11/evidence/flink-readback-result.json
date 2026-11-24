@@ -2,20 +2,21 @@
   "_license": "Licensed to the Apache Software Foundation (ASF) under one\nor more contributor license agreements. See the NOTICE file\ndistributed with this work for additional information\nregarding copyright ownership. The ASF licenses this file\nto you under the Apache License, Version 2.0 (the\n\"License\"); you may not use this file except in compliance\nwith the License. You may obtain a copy of the License at\nhttp://www.apache.org/licenses/LICENSE-2.0\nUnless required by applicable law or agreed to in writing, software\ndistributed under the License is distributed on an \"AS IS\" BASIS,\nWITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.\nSee the License for the specific language governing permissions and\nlimitations under the License.",
   "status": "FLINK_ICEBERG_PASS_BIGQUERY_PENDING",
   "fixture_rows": 47,
-  "warehouse": "gs://healthy-skill-501608-t7-g11-geography-20261123/g11/20261123_130455/warehouse/attempt03",
+  "warehouse": "gs://healthy-skill-501608-t7-g11-geography-20261123/g11/20261123_130455/warehouse/attempt05",
   "calcite_dependency": "1.41.0",
   "calcite_type_class_source": "file:/C:/Users/garik/IdeaProjects/flink/flink-table/flink-table-planner/target/classes/",
   "calcite_parser_class_source": "file:/C:/Users/garik/.m2/repository/org/apache/calcite/calcite-core/1.41.0/calcite-core-1.41.0.jar",
   "iceberg_class_source": "file:/C:/Users/garik/IdeaProjects/flink/target/g11/iceberg/flink/v2.1/flink-runtime/build/libs/iceberg-flink-runtime-2.1-94de034.jar",
   "hadoop_class_source": "file:/C:/Users/garik/.m2/repository/org/apache/hadoop/hadoop-client-api/3.3.6/hadoop-client-api-3.3.6.jar",
-  "flink_insert": "REUSED_PREVIOUS_COMMITTED_SNAPSHOT",
-  "source_manifest": "C:\\Users\\garik\\IdeaProjects\\flink\\target\\g11\\runs\\attempt03\\flink-iceberg-result.json",
-  "snapshot_id": 1465060231437242140,
-  "metadata_location": "gs://healthy-skill-501608-t7-g11-geography-20261123/g11/20261123_130455/warehouse/attempt03/g11/fixture_matrix/metadata/v2.metadata.json",
+  "source_fixture": "file:/C:/Users/garik/IdeaProjects/flink/target/g11/runs/attempt05/fixture-source.parquet",
+  "iceberg_ddl": "CREATE TABLE g11.g11.fixture_matrix (id BIGINT NOT NULL, name STRING NOT NULL, geo GEOGRAPHY, geos ARRAY<GEOGRAPHY>, nested ROW<label STRING, geo GEOGRAPHY>) WITH ('format-version'='3','write.format.default'='parquet')",
+  "flink_insert": "COMPLETED",
+  "snapshot_id": 3137959442311624136,
+  "metadata_location": "gs://healthy-skill-501608-t7-g11-geography-20261123/g11/20261123_130455/warehouse/attempt05/g11/fixture_matrix/metadata/v2.metadata.json",
   "iceberg_schema": "{\"type\":\"struct\",\"schema-id\":0,\"fields\":[{\"id\":1,\"name\":\"id\",\"required\":true,\"type\":\"long\"},{\"id\":2,\"name\":\"name\",\"required\":true,\"type\":\"string\"},{\"id\":3,\"name\":\"geo\",\"required\":false,\"type\":\"geography\"},{\"id\":4,\"name\":\"geos\",\"required\":false,\"type\":{\"type\":\"list\",\"element-id\":6,\"element\":\"geography\",\"element-required\":false}},{\"id\":5,\"name\":\"nested\",\"required\":false,\"type\":{\"type\":\"struct\",\"fields\":[{\"id\":7,\"name\":\"label\",\"required\":false,\"type\":\"string\"},{\"id\":8,\"name\":\"geo\",\"required\":false,\"type\":\"geography\"}]}}]}",
   "snapshot_summary": {
     "flink.operator-id": "cf155f65686cb012844f7c745ec70a3c",
-    "flink.job-id": "fe5dc4b84f2fd1341e92d9d2c06582b0",
+    "flink.job-id": "4c1af7e8b19046bf5af68e6c56bc2899",
     "manifests-created": "1",
     "manifests-kept": "0",
     "manifests-replaced": "0",
@@ -36,7 +37,7 @@
   },
   "data_files": [
     {
-      "path": "gs://healthy-skill-501608-t7-g11-geography-20261123/g11/20261123_130455/warehouse/attempt03/g11/fixture_matrix/data/00000-0-56fdb1c5-742a-4ade-abff-cd2e3a015e76-00001.parquet",
+      "path": "gs://healthy-skill-501608-t7-g11-geography-20261123/g11/20261123_130455/warehouse/attempt05/g11/fixture_matrix/data/00000-0-274f4d93-740a-47c0-b9c3-bff931edb134-00001.parquet",
       "record_count": 47,
       "parquet_schema": "message table {\n  required int64 id = 1;\n  required binary name (STRING) = 2;\n  optional binary geo (GEOGRAPHY(OGC:CRS84,SPHERICAL)) = 3;\n  optional group geos (LIST) = 4 {\n    repeated group list {\n      optional binary element (GEOGRAPHY(OGC:CRS84,SPHERICAL)) = 6;\n    }\n  }\n  optional group nested = 5 {\n    optional binary label (STRING) = 7;\n    optional binary geo (GEOGRAPHY(OGC:CRS84,SPHERICAL)) = 8;\n  }\n}\n"
     }

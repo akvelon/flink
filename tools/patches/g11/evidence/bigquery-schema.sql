@@ -14,4 +14,4 @@
 -- See the License for the specific language governing permissions and
 -- limitations under the License.
 
-SELECT column_name, data_type, is_nullable FROM `healthy-skill-501608-t7.akvelon.INFORMATION_SCHEMA.COLUMNS` WHERE table_name = 'g11_geography_20261123_130455' ORDER BY ordinal_position;
+SELECT column_name, data_type, is_nullable FROM `healthy-skill-501608-t7.akvelon.INFORMATION_SCHEMA.COLUMNS` WHERE table_name='g11_geography_20261123_130455_merged' ORDER BY ordinal_position;

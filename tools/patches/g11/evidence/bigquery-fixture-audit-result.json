@@ -112,7 +112,7 @@
   },
   "jobReference": {
     "projectId": "healthy-skill-501608-t7",
-    "jobId": "job_O3-xGBBzZELH0RjcH5ikVvJqdi3h",
+    "jobId": "job_hLInlfQObTVeg07lQZoKK9tVPzmf",
     "location": "US"
   },
   "totalRows": "47",
@@ -3270,16 +3270,16 @@
   "totalBytesProcessed": "13530",
   "jobComplete": true,
   "cacheHit": false,
-  "queryId": "job_O3-xGBBzZELH0RjcH5ikVvJqdi3h",
+  "queryId": "job_hLInlfQObTVeg07lQZoKK9tVPzmf",
   "jobCreationReason": {
     "code": "REQUESTED"
   },
   "totalBytesBilled": "10485760",
-  "totalSlotMs": "411",
+  "totalSlotMs": "342",
   "location": "US",
-  "creationTime": "1795445796852",
-  "startTime": "1795445797605",
-  "endTime": "1795445798662",
+  "creationTime": "1795505995549",
+  "startTime": "1795505995912",
+  "endTime": "1795505996768",
   "pageRowCount": "47",
   "statementType": "SELECT"
 }

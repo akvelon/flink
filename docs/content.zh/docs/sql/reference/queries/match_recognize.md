@@ -219,7 +219,7 @@ Define & Measures
 
 ### Aggregations
 
-Aggregations 可以在 `DEFINE` 和 `MEASURES` 子句中使用。支持[内置函数]({{< ref "docs/sql/functions/built-in-functions" >}})和[用户自定义函数]({{< ref "docs/dev/table/functions/udfs" >}})。
+Aggregations 可以在 `DEFINE` 和 `MEASURES` 子句中使用。支持[内置函数]({{< ref "docs/sql/built-in-functions" >}})和[用户自定义函数]({{< ref "docs/dev/table/functions/udfs" >}})。
 
 对相应匹配项的行子集可以使用 Aggregate functions。请查看[事件流导航](#pattern-navigation)部分以了解如何计算这些子集。
 
@@ -980,7 +980,7 @@ DEFINE
   C as C.price > 20
 ```
 
-<span class="label label-danger">注意</span> 请注意，`MATCH_RECOGNIZE` 子句未使用配置的 [state retention time]({{< ref "docs/dev/table/config" >}}#idle-state-retention-time)。为此，可能需要使用 `WITHIN` [子句](#time-constraint)。
+<span class="label label-danger">注意</span> 请注意，`MATCH_RECOGNIZE` 子句未使用配置的 [state retention time]({{< ref "docs/dev/table/config" >}}#table-exec-state-ttl)。为此，可能需要使用 `WITHIN` [子句](#time-constraint)。
 
 <a name="known-limitations"></a>
 

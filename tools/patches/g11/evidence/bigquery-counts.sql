@@ -14,4 +14,4 @@
 -- See the License for the specific language governing permissions and
 -- limitations under the License.
 
-SELECT COUNT(*) AS row_count, COUNTIF(geo IS NULL) AS scalar_nulls, COUNTIF(ST_ISEMPTY(geo)) AS scalar_empties FROM `healthy-skill-501608-t7.akvelon.g11_geography_20261123_130455`;
+SELECT COUNT(*) AS row_count, COUNTIF(geo IS NULL) AS scalar_nulls, COUNTIF(ST_ISEMPTY(geo)) AS scalar_empties FROM `healthy-skill-501608-t7.akvelon.g11_geography_20261123_130455_merged`;

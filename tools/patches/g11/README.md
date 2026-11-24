@@ -18,7 +18,7 @@ limitations under the License.
 
 # G11 native geography cross-engine verification
 
-Verified on 2026-11-23: **47 fixtures passed Flink SQL → native Iceberg/Parquet
+Final verification on 2026-11-24: **47 fixtures passed Flink SQL → native Iceberg/Parquet
 in GCS → a fresh Flink session → native BigQuery Iceberg reads**. This result
 uses the two explicitly accepted BigQuery boundaries below. It does not certify
 general BigQuery Iceberg geography support, arbitrary versions, or other paths.
@@ -27,7 +27,7 @@ general BigQuery Iceberg geography support, arbitrary versions, or other paths.
 
 | Component | Tested source/configuration |
 | --- | --- |
-| Flink | 2.5-SNAPSHOT; G11 changes on `da55a4bf9e14322630fd559a850ef3dc94b6694b`, internal [PR #25](https://github.com/akvelon/flink/pull/25) |
+| Flink | 2.5-SNAPSHOT; G11 integration `f8b962dc1cf51a53ba35556258fbf453f0974216` merged with target `d0102d7b1838a0da2f85cf878ce3202ecc3135ac`, internal [PR #25](https://github.com/akvelon/flink/pull/25) |
 | Calcite contribution | [apache/calcite#5427](https://github.com/apache/calcite/pull/5427), `da1cb15d5f366d2466b88de84fbf8950495d434b`, OPEN and unmerged when tested |
 | Calcite dependency | Released **1.41.0**, with 37 source/resource overrides listed in [the copy inventory](calcite-copy-inventory.json); no patched SNAPSHOT dependency |
 | Iceberg | [akvelon/iceberg#1](https://github.com/akvelon/iceberg/pull/1), `94de0342ff408d591bcdf872bdfd430f431629a6`; connector module `v2.1`, compiled against stock Flink 2.1.0, exercised with this Flink 2.5-SNAPSHOT |
@@ -43,6 +43,9 @@ changes. Adaptations cover 1.41 APIs, Scala 2.12's Java annotation parser, and
 `Parser.jj` was not edited. Review fixes include ARRAY_MIN/MAX ordering rejection
 and collection equality/hash execution guards. RAW/BITMAP common-type handling
 continues to reject mixed opaque types before Calcite assignment-rule lookup.
+The final target merge retains CALCITE-7716's UUID literal representation and
+the target's time-attribute cache fix alongside native GEOGRAPHY. The five
+conflicting files were resolved and the combined code was rebuilt and retested.
 
 The community sequence supplied for this task is Calcite review/merge, followed
 by copying relevant files into Flink. This is **internal validation before that
@@ -65,10 +68,10 @@ if matching embedded Git metadata is required.
 
 - Project/dataset: `healthy-skill-501608-t7.akvelon`, location `US`.
 - Flink catalog: Hadoop catalog `g11`; table `g11.g11.fixture_matrix`, format v3.
-- Warehouse: `gs://healthy-skill-501608-t7-g11-geography-20261123/g11/20261123_130455/warehouse/attempt03`.
-- Snapshot: **1465060231437242140**, one Parquet file, **47 records**, 4,911 bytes.
+- Warehouse: `gs://healthy-skill-501608-t7-g11-geography-20261123/g11/20261123_130455/warehouse/attempt05`.
+- Snapshot: **3137959442311624136**, one Parquet file, **47 records**, 4,911 bytes.
 - Immutable registration URI: warehouse above + `/g11/fixture_matrix/metadata/v2.metadata.json`.
-- BigQuery table: `healthy-skill-501608-t7.akvelon.g11_geography_20261123_130455`.
+- BigQuery table: `healthy-skill-501608-t7.akvelon.g11_geography_20261123_130455_merged`.
 - Connection: `projects/347542310562/locations/us/connections/g11_geography_20261123_130316`.
 
 The connection has only `storage.objectViewer` on this bucket's `g11/` prefix,
@@ -128,7 +131,7 @@ SELECT id, name, geo, nested,
        ARRAY(SELECT AS STRUCT position, g AS geo
              FROM UNNEST(geos) g WITH OFFSET position
              ORDER BY position) AS geos_with_offsets
-FROM `healthy-skill-501608-t7.akvelon.g11_geography_20261123_130455`
+FROM `healthy-skill-501608-t7.akvelon.g11_geography_20261123_130455_merged`
 ORDER BY id;
 ```
 
@@ -148,13 +151,18 @@ and [geography representation](https://docs.cloud.google.com/bigquery/docs/refer
 
 ## Checks and historical attempts
 
-- Clean planner rebuild and focused Maven reactor: **40 FlinkTypeFactoryTest +
-  four Parquet geography tests passed**, zero failures/errors/skips. Spotless
+- Clean planner rebuild and focused Maven reactor: **71 tests passed**:
+  40 FlinkTypeFactoryTest, 25 BinaryGeographyDataTest, two GeographyTypeTest and
+  four Parquet geography tests, zero failures/errors/skips. Spotless
   and Checkstyle checks in that reactor passed. RAT was explicitly skipped.
 - Iceberg 2.1 connector compile and shaded runtime build passed: 34 tasks.
-- Attempt03: actual Flink insert, snapshot inspection, fresh-session readback.
-- Readback04: read-only rerun of that **same snapshot**, including explicit
-  derived/static type-nullability assertions; all 47 rows passed again.
+- Attempt03 and readback04 on 2026-11-23 passed the initial integration's 47-row
+  snapshot `1465060231437242140`. Those historical cloud objects and the original
+  BigQuery table without the `_merged` suffix remain retained separately.
+- Attempt05 on 2026-11-24 repeats the actual Flink insert, native snapshot
+  inspection and fresh-session readback **after merging the current PR target**.
+  All 47 rows and derived/static type-nullability assertions pass. The selected
+  evidence and BigQuery registration now reference this new snapshot.
 - Generated BigQuery audit and native projection were rerun from checked-in
   tooling and verified independently against saved fixtures/readback.
 - Attempt01 failed on stale planner output (`BuiltInMethod`/UUID signature).
@@ -188,7 +196,7 @@ checkout or clean the planner output; no local patched Calcite install is needed
 ```powershell
 $env:JAVA_HOME = 'C:\Program Files\Java\jdk-21.0.10'
 .\mvnw.cmd -pl flink-table/flink-table-planner clean
-.\mvnw.cmd -pl flink-table/flink-table-planner,flink-formats/flink-parquet -am -Djdk21 -Pjava21-target,intellij -Drat.skip=true '-Dtest=FlinkTypeFactoryTest,ParquetRowDataWriterTest#testGeography*+testNestedGeographyType' '-Dsurefire.failIfNoSpecifiedTests=false' test
+.\mvnw.cmd -pl flink-table/flink-table-planner,flink-formats/flink-parquet -am -Djdk21 -Pjava21-target,intellij '-Drat.skip=true' '-Dtest=FlinkTypeFactoryTest,BinaryGeographyDataTest,GeographyTypeTest,ParquetRowDataWriterTest#testGeography*+testNestedGeographyType' '-Dsurefire.failIfNoSpecifiedTests=false' test
 python tools/patches/g11/generate_fixtures.py target/g11/fixtures
 .\mvnw.cmd -f tools/patches/g11/runtime-deps/pom.xml dependency:build-classpath '-Dmdep.outputFile=C:/Users/garik/IdeaProjects/flink/target/g11/gcs-classpath.txt'
 ```

@@ -51,8 +51,8 @@ def main():
                           f"FROM `{table}` ORDER BY id;\n",
         "direct-arrays": f"SELECT id, name, geos FROM `{table}` WHERE id BETWEEN 42 AND 45 "
                          "ORDER BY id;\n",
-        "counts": "SELECT COUNT(*) AS rows, COUNTIF(geo IS NULL) AS nulls, "
-                  f"COUNTIF(ST_ISEMPTY(geo)) AS empties FROM `{table}`;\n",
+        "counts": "SELECT COUNT(*) AS row_count, COUNTIF(geo IS NULL) AS scalar_nulls, "
+                  f"COUNTIF(ST_ISEMPTY(geo)) AS scalar_empties FROM `{table}`;\n",
         "schema": f"SELECT column_name, data_type, is_nullable FROM "
                   f"`{cloud['project']}.{cloud['dataset']}.INFORMATION_SCHEMA.COLUMNS` "
                   f"WHERE table_name='{table.rsplit('.', 1)[1]}' ORDER BY ordinal_position;\n",

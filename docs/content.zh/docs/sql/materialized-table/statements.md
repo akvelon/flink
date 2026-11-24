@@ -81,6 +81,8 @@ AS <select_statement>
 }
 ```
 
+In continuous mode, if the refresh job starts but the catalog cannot record it, CREATE cancels the job and drops the table. If the job cannot be cancelled either, the error names it, so you can cancel it before you run CREATE again.
+
 ## PRIMARY KEY
 
 `PRIMARY KEY` 定义了一组可选的列，用于唯一标识表中的每一行。主键列必须非空。
@@ -214,14 +216,14 @@ CREATE MATERIALIZED TABLE my_materialized_table
     FRESHNESS = INTERVAL '1' HOUR
     REFRESH_MODE = CONTINUOUS
     AS SELECT
-       ...
+       ...;
 
 -- 创建的物化表的刷新模式为全量模式，作业的调度周期为 10 分钟。
 CREATE MATERIALIZED TABLE my_materialized_table
     FRESHNESS = INTERVAL '10' MINUTE
     REFRESH_MODE = FULL
     AS SELECT
-       ...
+       ...;
 ```
 
 ## AS <select_statement>
@@ -364,6 +366,10 @@ CREATE OR ALTER MATERIALIZED TABLE user_spending (
 ```
 
 Because the schema, primary key, and watermark all come from the statement and its query, not from the existing table, the result is fully defined by the DDL. The same statement always produces the same materialized table. Running it again after the conversion matches the now-existing materialized table and produces the same result.
+
+**Partition keys**
+
+A partitioned table keeps its partition keys, so the data it already holds still matches them. The statement must declare the same keys in `PARTITIONED BY`, in the same order, or the conversion fails. An unpartitioned table takes the partition keys from the statement's `PARTITIONED BY` clause.
 
 **Using the converted table**
 
@@ -673,6 +679,8 @@ ALTER MATERIALIZED TABLE my_materialized_table RESUME;
 ALTER MATERIALIZED TABLE my_materialized_table RESUME WITH ('sink.parallelism'='10');
 ```
 
+In continuous mode, if the refresh job starts but the catalog cannot record it, the job is cancelled. If the job cannot be cancelled either, the error names it, so you can cancel it before you retry.
+
 ## SET
 
 ```
@@ -780,6 +788,8 @@ ALTER MATERIALIZED TABLE [catalog_name.][db_name.]table_name AS <select_statemen
 3. 启动新的流式作业以刷新物化表：
    - 新的流式作业会从头开始，而不会从之前的流式作业状态恢复。
    - 数据源的起始位点会由到连接器的默认实现或查询中设置的 [dynamic hint]({{< ref "docs/sql/reference/queries/hints" >}}#dynamic-table-options) 决定。
+
+If the new refresh job starts but the catalog cannot record it, the job is cancelled and the old job restarts from its savepoint. If that cancel fails, the table is rolled back and left SUSPENDED instead of restarting the old job.
 
 **示例：**
 

@@ -70,17 +70,17 @@ Returns all rows in the qualified Cartesian product (i.e., all combined rows tha
 SELECT *
 FROM Orders
 LEFT JOIN Product
-ON Orders.product_id = Product.id
+ON Orders.product_id = Product.id;
 
 SELECT *
 FROM Orders
 RIGHT JOIN Product
-ON Orders.product_id = Product.id
+ON Orders.product_id = Product.id;
 
 SELECT *
 FROM Orders
 FULL OUTER JOIN Product
-ON Orders.product_id = Product.id
+ON Orders.product_id = Product.id;
 ```
 
 ### Multiple Regular Joins
@@ -131,7 +131,9 @@ The hint accepts the following options:
 | `delay` | yes | A duration of at least 1 millisecond (for example `'5s'`). In `rowtime` mode it is measured from the row's time attribute; in `proctime` mode it is measured from the wall-clock time at which the row is processed. The speculative null-padded row is emitted once this delay elapses without a match. |
 | `time-mode` | no | Either `rowtime` or `proctime`. Controls whether the delay is measured against the watermark (`rowtime`) or wall-clock time (`proctime`). Defaults to `rowtime` for an event-time join and `proctime` for a processing-time join. Setting `'time-mode'='proctime'` on an event-time join triggers early fire on wall-clock time instead of the watermark, which helps when watermarks are sparse or stalled; matching and state cleanup still follow event time, and the join keeps extra state on each input to track the pending early fires. Setting `'time-mode'='rowtime'` on a processing-time join is an error. |
 
-The hint only affects outer joins (`LEFT`, `RIGHT`, `FULL`). It is ignored on inner joins and on joins whose window has a negative span, both of which remain append-only.
+The hint only affects outer joins (`LEFT`, `RIGHT`, `FULL`). It is ignored on inner joins and on joins whose window has a negative span, both of which remain append-only. In batch mode, the hint is ignored on all joins.
+
+Like other query hints, `EARLY_FIRE` applies only to the joins in the [query block]({{< ref "docs/sql/reference/queries/hints" >}}#what-are-query-blocks-) where it is written, so a hint on an outer query does not reach a join inside a subquery. An early-fire join produces an updating result, so its output cannot feed another interval join, which accepts only append-only input. Such a query fails at planning.
 
 **Note:** `EARLY_FIRE` is unrelated to the `table.exec.emit.early-fire.*` configuration, which controls early firing for windowed aggregations rather than interval joins.
 
@@ -182,12 +184,12 @@ CREATE TABLE orders (
 CREATE TABLE currency_rates (
     currency STRING,
     conversion_rate DECIMAL(32, 2),
-    update_time TIMESTAMP(3) METADATA FROM `values.source.timestamp` VIRTUAL,
+    update_time TIMESTAMP(3) METADATA FROM 'value.source.timestamp' VIRTUAL,
     WATERMARK FOR update_time AS update_time - INTERVAL '15' SECOND,
     PRIMARY KEY(currency) NOT ENFORCED
 ) WITH (
    'connector' = 'kafka',
-   'value.format' = 'debezium-json',
+   'value.format' = 'debezium-json'
    /* ... */
 );
 

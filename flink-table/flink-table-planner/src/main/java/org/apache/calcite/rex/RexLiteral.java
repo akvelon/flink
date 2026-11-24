@@ -45,6 +45,7 @@ import org.apache.calcite.util.TimeWithTimeZoneString;
 import org.apache.calcite.util.TimestampString;
 import org.apache.calcite.util.TimestampWithTimeZoneString;
 import org.apache.calcite.util.Util;
+import org.apache.calcite.util.UuidValue;
 import org.checkerframework.checker.nullness.qual.Nullable;
 import org.checkerframework.checker.nullness.qual.PolyNull;
 import org.checkerframework.checker.nullness.qual.RequiresNonNull;
@@ -54,7 +55,6 @@ import org.locationtech.jts.geom.Geometry;
 import java.io.PrintWriter;
 import java.math.BigDecimal;
 import java.math.MathContext;
-import java.nio.ByteBuffer;
 import java.nio.charset.Charset;
 import java.text.SimpleDateFormat;
 import java.util.Calendar;
@@ -71,119 +71,8 @@ import static org.apache.calcite.linq4j.Nullness.castNonNull;
 import static org.apache.calcite.rel.type.RelDataTypeImpl.NON_NULLABLE_SUFFIX;
 
 /**
- * Constant value in a row-expression.
- *
- * <p>There are several methods for creating literals in {@link RexBuilder}: {@link
- * RexBuilder#makeLiteral(boolean)} and so forth.
- *
- * <p>How is the value stored? In that respect, the class is somewhat of a black box. There is a
- * {@link #getValue} method which returns the value as an object, but the type of that value is
- * implementation detail, and it is best that your code does not depend upon that knowledge. It is
- * better to use task-oriented methods such as {@link #getValue2} and {@link #toJavaString}.
- *
- * <p>The allowable types and combinations are:
- *
- * <table>
- * <caption>Allowable types for RexLiteral instances</caption>
- * <tr>
- * <th>TypeName</th>
- * <th>Meaning</th>
- * <th>Value type</th>
- * </tr>
- * <tr>
- * <td>{@link SqlTypeName#NULL}</td>
- * <td>The null value. It has its own special type.</td>
- * <td>null</td>
- * </tr>
- * <tr>
- * <td>{@link SqlTypeName#BOOLEAN}</td>
- * <td>Boolean, namely <code>TRUE</code>, <code>FALSE</code> or <code>
- * UNKNOWN</code>.</td>
- * <td>{@link Boolean}, or null represents the UNKNOWN value</td>
- * </tr>
- * <tr>
- * <td>{@link SqlTypeName#DECIMAL}</td>
- * <td>Exact number, for example <code>0</code>, <code>-.5</code>, <code>
- * 12345</code>.</td>
- * <td>{@link BigDecimal}</td>
- * </tr>
- * <tr>
- * <td>{@link SqlTypeName#DOUBLE},
- *     {@link SqlTypeName#REAL},
- *     {@link SqlTypeName#FLOAT}</td>
- * <td>Approximate number, for example <code>6.023E-23</code>.</td>
- * <td>{@link Double}.</td>
- * </tr>
- * <tr>
- * <td>{@link SqlTypeName#DATE}</td>
- * <td>Date, for example <code>DATE '1969-04'29'</code></td>
- * <td>{@link Calendar};
- *     also {@link Calendar} (UTC time zone)
- *     and {@link Integer} (days since POSIX epoch)</td>
- * </tr>
- * <tr>
- * <td>{@link SqlTypeName#TIME}</td>
- * <td>Time, for example <code>TIME '18:37:42.567'</code></td>
- * <td>{@link Calendar};
- *     also {@link Calendar} (UTC time zone)
- *     and {@link Integer} (milliseconds since midnight)</td>
- * </tr>
- * <tr>
- * <td>{@link SqlTypeName#TIMESTAMP}</td>
- * <td>Timestamp, for example <code>TIMESTAMP '1969-04-29
- * 18:37:42.567'</code></td>
- * <td>{@link TimestampString};
- *     also {@link Calendar} (UTC time zone)
- *     and {@link Long} (milliseconds since POSIX epoch)</td>
- * </tr>
- * <tr>
- * <td>{@link SqlTypeName#INTERVAL_DAY},
- *     {@link SqlTypeName#INTERVAL_DAY_HOUR},
- *     {@link SqlTypeName#INTERVAL_DAY_MINUTE},
- *     {@link SqlTypeName#INTERVAL_DAY_SECOND},
- *     {@link SqlTypeName#INTERVAL_HOUR},
- *     {@link SqlTypeName#INTERVAL_HOUR_MINUTE},
- *     {@link SqlTypeName#INTERVAL_HOUR_SECOND},
- *     {@link SqlTypeName#INTERVAL_MINUTE},
- *     {@link SqlTypeName#INTERVAL_MINUTE_SECOND},
- *     {@link SqlTypeName#INTERVAL_SECOND}</td>
- * <td>Interval, for example <code>INTERVAL '4:3:2' HOUR TO SECOND</code></td>
- * <td>{@link BigDecimal};
- *     also {@link Long} (milliseconds)</td>
- * </tr>
- * <tr>
- * <td>{@link SqlTypeName#INTERVAL_YEAR},
- *     {@link SqlTypeName#INTERVAL_YEAR_MONTH},
- *     {@link SqlTypeName#INTERVAL_MONTH}</td>
- * <td>Interval, for example <code>INTERVAL '2-3' YEAR TO MONTH</code></td>
- * <td>{@link BigDecimal};
- *     also {@link Integer} (months)</td>
- * </tr>
- * <tr>
- * <td>{@link SqlTypeName#CHAR}</td>
- * <td>Character constant, for example <code>'Hello, world!'</code>, <code>
- * ''</code>, <code>_N'Bonjour'</code>, <code>_ISO-8859-1'It''s superman!'
- * COLLATE SHIFT_JIS$ja_JP$2</code>. These are always CHAR, never VARCHAR.</td>
- * <td>{@link NlsString};
- *     also {@link String}</td>
- * </tr>
- * <tr>
- * <td>{@link SqlTypeName#BINARY}</td>
- * <td>Binary constant, for example <code>X'7F34'</code>. (The number of hexits
- * must be even; see above.) These constants are always BINARY, never
- * VARBINARY.</td>
- * <td>{@link ByteBuffer};
- *     also {@code byte[]}</td>
- * </tr>
- * <tr>
- * <td>{@link SqlTypeName#SYMBOL}</td>
- * <td>A symbol is a special type used to make parsing easier; it is not part of
- * the SQL standard, and is not exposed to end-users. It is used to hold a flag,
- * such as the LEADING flag in a call to the function <code>
- * TRIM([LEADING|TRAILING|BOTH] chars FROM string)</code>.</td>
- * <td>An enum class</td>
- * </tr>
- * </table>
+ * The whole class was copied from Calcite because of CALCITE-7716. Should be removed after upgrade
+ * to a release containing both CALCITE-7716 and native GEOGRAPHY support.
  */
 public class RexLiteral extends RexNode {
     // ~ Instance fields --------------------------------------------------------
@@ -298,7 +187,7 @@ public class RexLiteral extends RexNode {
         }
         switch (typeName) {
             case UUID:
-                return value instanceof UUID;
+                return value instanceof UuidValue;
             case VARIANT:
                 return value instanceof VariantValue;
             case BOOLEAN:
@@ -688,7 +577,7 @@ public class RexLiteral extends RexNode {
                 Util.asStringBuilder(sb, sb2 -> printSarg(sb2, (Sarg) value, type));
                 break;
             case UUID:
-                assert value instanceof UUID;
+                assert value instanceof UuidValue;
                 sb.append(value);
                 break;
             case SYMBOL:
@@ -1056,7 +945,9 @@ public class RexLiteral extends RexNode {
         switch (typeName) {
             case UUID:
                 if (clazz == String.class) {
-                    return clazz.cast(((UUID) value).toString());
+                    return clazz.cast(value.toString());
+                } else if (clazz == UUID.class) {
+                    return clazz.cast(((UuidValue) value).uuid());
                 }
                 break;
             case BINARY:

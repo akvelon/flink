@@ -286,8 +286,8 @@ class MyMapperMeter(MapFunction):
 
     def open(self, runtime_context: RuntimeContext):
         # an average rate of events per second over 120s, default is 60s.
-        self.meter = runtime_context
-            .get_metrics_group()
+        self.meter = runtime_context \
+            .get_metrics_group() \
             .meter("my_meter", time_span_in_seconds=120)
 
     def map(self, value: str):
@@ -374,12 +374,12 @@ counter = getRuntimeContext()
 ```python
 
 counter = runtime_context \
-    .get_metric_group() \
+    .get_metrics_group() \
     .add_group("my_metrics") \
     .counter("my_counter")
 
 counter = runtime_context \
-    .get_metric_group() \
+    .get_metrics_group() \
     .add_group("my_metrics_key", "my_metrics_value") \
     .counter("my_counter")
 
@@ -2384,7 +2384,7 @@ Metrics below can be used to measure the effectiveness of speculative execution.
 
 ### UDF
 
-The following metrics are registered per SQL/Table user-defined function when UDF metrics are enabled (see [UDF metrics](#udf-metrics) below). They are registered only on the operator that runs the function, under the infix `udf.<udf_name>`, so the identifier is the operator scope (`metrics.scope.operator`) followed by `udf.<udf_name>.<metric>`.
+The following metrics are registered per SQL/Table user-defined function when UDF metrics are enabled (see [UDF metrics](#udf-metrics) below). They are registered only on the operator that runs the function, under the infix `udf.<udf_name>`, so the identifier is the operator scope (`metrics.scope.operator`) followed by `udf.<udf_name>.<metric>`. For a function called by name, `<udf_name>` is its name in lower case.
 
 <table class="table table-bordered">
   <thead>
@@ -2444,7 +2444,7 @@ purposes.
 ## State access latency tracking
 
 Flink also allows to track the keyed state access latency for standard Flink state-backends or customized state backends which extending from `AbstractStateBackend`. This feature is disabled by default.
-To enable this feature you must set the `state.latency-track.keyed-state-enabled` to true in the [Flink configuration]({{< ref "docs/deployment/config" >}}#state-backends-latency-tracking-options).
+To enable this feature you must set the `state.latency-track.keyed-state-enabled` to true in the [Flink configuration]({{< ref "docs/deployment/config" >}}#state-latency-tracking-options).
 
 Once tracking keyed state access latency is enabled, Flink will sample the state access latency every `N` access, in which `N` is defined by `state.latency-track.sample-interval`.
 This configuration has a default value of 100. A smaller value will get more accurate results but have a higher performance impact since it is sampled more frequently.
@@ -2458,7 +2458,7 @@ It is recommended to only use them for debugging purposes.
 ## State key/value size tracking
 
 Flink also allows to track the keyed state key/value size for standard Flink state-backends or customized state backends which extending from `AbstractStateBackend`. This feature is disabled by default.
-To enable this feature you must set the `state.size-track.keyed-state-enabled` to true in the [Flink configuration]({{< ref "docs/deployment/config" >}}#state-backends-size-tracking-options).
+To enable this feature you must set the `state.size-track.keyed-state-enabled` to true in the [Flink configuration]({{< ref "docs/deployment/config" >}}#state-size-tracking-options).
 
 Once tracking keyed state key/value size is enabled, Flink will sample the state size every `N` access, in which `N` is defined by `state.size-track.sample-interval`.
 This configuration has a default value of 100. A smaller value will get more accurate results but have a higher performance impact since it is sampled more frequently.
@@ -2477,6 +2477,8 @@ Flink can track the processing time and exceptions of SQL/Table user-defined fun
 To enable it you must set `table.exec.udf-metric-enabled` to `true`. When disabled, nothing is registered and there is no overhead.
 
 Once enabled, each user-defined function gets two metrics on the operator that runs it, scoped under `udf.<udf_name>`: a `udfProcessingTime` histogram and a `udfExceptionCount` counter.
+Function names are case-insensitive, so for a function called by name, `<udf_name>` is its name in lower case: calls written as `MyUdf(x)` and `MYUDF(x)` both report under `udf.myudf`.
+A function called inline in the Table API, such as `call(new MyUdf(), $("x"))`, is not registered under a name, so it reports under a name generated from its class, such as `*com.example.MyUdf*`.
 
 Flink samples the processing time every `N` invocations, in which `N` is defined by `table.exec.udf-metric.sample-interval`.
 This configuration has a default value of 100. A smaller value will get more accurate results but have a higher performance impact since it is sampled more frequently.

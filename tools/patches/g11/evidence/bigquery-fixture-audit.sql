@@ -56,5 +56,5 @@ SELECT a.id, a.name, TYPEOF(a.geo) AS native_geo_type,
        CASE WHEN e.nested_wkb IS NULL THEN a.nested.geo IS NULL
             ELSE ST_EQUALS(a.nested.geo, ST_GEOGFROMWKB(FROM_HEX(e.nested_wkb)))
        END AS nested_content_matches
-FROM `healthy-skill-501608-t7.akvelon.g11_geography_20261123_130455` AS a JOIN expected AS e USING(id)
+FROM `healthy-skill-501608-t7.akvelon.g11_geography_20261123_130455_merged` AS a JOIN expected AS e USING(id)
 ORDER BY a.id;

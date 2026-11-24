@@ -136,12 +136,12 @@ println(tableResult1.getJobClient().get().getJobStatus())
 table_env = TableEnvironment.create(...)
 
 # 注册一个 "Orders" 源表，和 "RubberOrders" 结果表
-table_env.executeSql("CREATE TABLE Orders (`user` BIGINT, product STRING, amount INT) WITH (...)")
-table_env.executeSql("CREATE TABLE RubberOrders(product STRING, amount INT) WITH (...)")
+table_env.execute_sql("CREATE TABLE Orders (`user` BIGINT, product STRING, amount INT) WITH (...)")
+table_env.execute_sql("CREATE TABLE RubberOrders(product STRING, amount INT) WITH (...)")
 
 # 运行一条 INSERT 语句，将源表的数据输出到结果表中
 table_result1 = table_env \
-    .executeSql("INSERT INTO RubberOrders SELECT product, amount FROM Orders WHERE product LIKE '%Rubber%'")
+    .execute_sql("INSERT INTO RubberOrders SELECT product, amount FROM Orders WHERE product LIKE '%Rubber%'")
 # 通过 TableResult 来获取作业状态
 print(table_result1.get_job_client().get_job_status())
 
@@ -218,28 +218,28 @@ part_spec:
 
 ```sql
 -- 创建一个分区表
-CREATE TABLE country_page_view (user STRING, cnt INT, date STRING, country STRING)
-PARTITIONED BY (date, country)
-WITH (...)
+CREATE TABLE country_page_view (`user` STRING, cnt INT, `date` STRING, country STRING)
+PARTITIONED BY (`date`, country)
+WITH (...);
 
 -- 追加行到该静态分区中 (date='2019-8-30', country='China')
-INSERT INTO country_page_view PARTITION (date='2019-8-30', country='China')
+INSERT INTO country_page_view PARTITION (`date`='2019-8-30', country='China')
   SELECT user, cnt FROM page_view_source;
 
 -- Insert语句的开头可以额外增加EXECUTE关键字,带EXECUTE关键字和不带是等价的
-EXECUTE INSERT INTO country_page_view PARTITION (date='2019-8-30', country='China')
+EXECUTE INSERT INTO country_page_view PARTITION (`date`='2019-8-30', country='China')
   SELECT user, cnt FROM page_view_source;
 
 -- 追加行到分区 (date, country) 中，其中 date 是静态分区 '2019-8-30'；country 是动态分区，其值由每一行动态决定
-INSERT INTO country_page_view PARTITION (date='2019-8-30')
+INSERT INTO country_page_view PARTITION (`date`='2019-8-30')
   SELECT user, cnt, country FROM page_view_source;
 
 -- 覆盖行到静态分区 (date='2019-8-30', country='China')
-INSERT OVERWRITE country_page_view PARTITION (date='2019-8-30', country='China')
+INSERT OVERWRITE country_page_view PARTITION (`date`='2019-8-30', country='China')
   SELECT user, cnt FROM page_view_source;
 
 -- 覆盖行到分区 (date, country) 中，其中 date 是静态分区 '2019-8-30'；country 是动态分区，其值由每一行动态决定
-INSERT OVERWRITE country_page_view PARTITION (date='2019-8-30')
+INSERT OVERWRITE country_page_view PARTITION (`date`='2019-8-30')
   SELECT user, cnt, country FROM page_view_source;
 ```
 
@@ -306,11 +306,11 @@ END;
 
 When a query produces a changelog stream with an upsert key that differs from the sink table's primary key, multiple records with different upsert keys may map to the same primary key. The `ON CONFLICT` clause specifies how to resolve these primary key conflicts at the sink.
 
-### When is ON CONFLICT required?
+### Requiring ON CONFLICT
 
-By default, Flink requires an explicit `ON CONFLICT` clause whenever the query's upsert key differs from the sink table's primary key. Without it, the query fails at planning time. This forces you to consider whether your query genuinely has a conflict scenario or whether there is a logic issue (e.g., a missing `GROUP BY`).
+When `table.exec.sink.require-on-conflict` is enabled, Flink requires an explicit `ON CONFLICT` clause whenever the query's upsert key differs from the sink table's primary key. Without it, the query fails at planning time. This forces you to consider whether your query genuinely has a conflict scenario or whether there is a logic issue (e.g., a missing `GROUP BY`).
 
-This check is controlled by the configuration option `table.exec.sink.require-on-conflict` (default: `true`). Setting it to `false` restores the legacy behavior where no `ON CONFLICT` clause was required, but may lead to non-deterministic results.
+The option defaults to `false`. A query without an `ON CONFLICT` clause then resolves conflicts as with `ON CONFLICT DO DEDUPLICATE`, which may lead to non-deterministic results.
 
 Alternatively, if you do not need consistency guarantees for conflicting keys, you can disable the sink upsert materializer entirely by setting `table.exec.sink.upsert-materialize` to `NONE`. This removes the materializer operator from the pipeline, so no buffering, compaction, or conflict resolution is performed. Records are passed directly to the sink as they arrive.
 
@@ -419,7 +419,7 @@ CREATE TABLE product_orders (
 ) WITH (...);
 
 -- This join produces an upsert key that may differ from the sink's PK,
--- so ON CONFLICT is required.
+-- so ON CONFLICT defines how conflicts are resolved.
 INSERT INTO product_orders
 SELECT p.name, o.order_id
 FROM orders o JOIN products p ON o.product_name = p.name

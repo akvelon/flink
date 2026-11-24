@@ -16,4 +16,4 @@
 
 SELECT id, name, geo, nested,
 ARRAY(SELECT AS STRUCT position, g AS geo FROM UNNEST(geos) g WITH OFFSET position ORDER BY position) AS geos_with_offsets
-FROM `healthy-skill-501608-t7.akvelon.g11_geography_20261123_130455` ORDER BY id;
+FROM `healthy-skill-501608-t7.akvelon.g11_geography_20261123_130455_merged` ORDER BY id;

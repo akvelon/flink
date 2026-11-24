@@ -105,15 +105,15 @@
       "flink_destination": "flink-table/flink-table-planner/src/main/java/org/apache/calcite/rex/RexBuilder.java",
       "status": "merged after formatting normalization",
       "upstream_sha256": "065bd3322fe626c628c25071cb2cfdf509acb36a0fc2d147b6e633e2a3f2700c",
-      "flink_sha256": "401092d09808ac9b6666e8cd4cafb923b538c004c494e421e4044b38bef218fc",
+      "flink_sha256": "9afd3477a26aaaaac2a217a6fa7fe23ba757ee27aa9cc39905409b5b9cfd951d",
       "initial_backport_sha256": "87f430069ccf6c97db89a797baa2a961da970dd7f6c11c3acc6955539ef1f3a0"
     },
     {
       "calcite_source": "core/src/main/java/org/apache/calcite/rex/RexLiteral.java",
       "flink_destination": "flink-table/flink-table-planner/src/main/java/org/apache/calcite/rex/RexLiteral.java",
-      "status": "copied new override",
+      "status": "merged with existing target CALCITE-7716 UUID override",
       "upstream_sha256": "10fe0565845e681af4adf03fdf36305b851ca9ce04a8978d44bc175ab35fbe12",
-      "flink_sha256": "27097114611846ec9ee0d7621d9f5f9e99eadb79c89361cd270c6ddbdfb0d13f",
+      "flink_sha256": "524bf959b7a084c29db74fd0960a7d64bafd899e85efeba5d7f84ce00668229f",
       "initial_backport_sha256": "13a11758d66be1ccf62a95ecccd5322204d5b8d64218da494fb4d550865b3d05"
     },
     {
@@ -312,6 +312,8 @@
     "Remove UnknownInitialization receiver annotations and adapt nested type-use annotation syntax for the Scala 2.12 mixed Java parser.",
     "Restore stock 1.41 RexBuilder.DEFAULT required by SqlImplementor while preserving Flink RexBuilder changes.",
     "Include ARRAY_MIN/MAX ordering guards and all collection equality/hash runtime guards from pinned review fixes.",
-    "Keep Flink GeographyData/WKB runtime and Flink structural accessors; Calcite opaque runtime is not a general implicit GeographyData conversion."
-  ]
+    "Keep Flink GeographyData/WKB runtime and Flink structural accessors; Calcite opaque runtime is not a general implicit GeographyData conversion.",
+    "Preserve target CALCITE-7716 UuidValue changes in RexBuilder/RexLiteral while retaining GEOGRAPHY non-null-literal rejection."
+  ],
+  "merged_flink_target": "d0102d7b1838a0da2f85cf878ce3202ecc3135ac"
 }

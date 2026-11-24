@@ -68,6 +68,7 @@ import org.apache.flink.table.types.logical.UuidType;
 import org.apache.flink.table.types.logical.VarBinaryType;
 import org.apache.flink.table.types.logical.VarCharType;
 import org.apache.flink.table.types.logical.VariantType;
+import org.apache.flink.table.types.logical.utils.LogicalTypeChecks;
 import org.apache.flink.table.typeutils.TimeIndicatorTypeInfo;
 import org.apache.flink.table.utils.TableSchemaUtils;
 import org.apache.flink.util.Preconditions;
@@ -389,6 +390,11 @@ public class FlinkTypeFactory extends JavaTypeFactoryImpl implements ExtendedRel
                 }
                 break;
             default:
+                // Time-attribute kinds are absent from the cache key.
+                if (LogicalTypeChecks.hasNested(type, LogicalTypeChecks::isTimeAttribute)) {
+                    relType = newRelDataType(type);
+                    break;
+                }
                 final RelDataType seenType = seenTypes.get(type);
                 if (seenType != null) {
                     relType = seenType;

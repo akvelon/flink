@@ -14,9 +14,5 @@
 -- See the License for the specific language governing permissions and
 -- limitations under the License.
 
-CREATE EXTERNAL TABLE `healthy-skill-501608-t7.akvelon.g11_geography_20261123_130455`
-WITH CONNECTION `healthy-skill-501608-t7.us.g11_geography_20261123_130316`
-OPTIONS (
-  format = 'ICEBERG',
-  uris = ['gs://healthy-skill-501608-t7-g11-geography-20261123/g11/20261123_130455/warehouse/attempt03/g11/fixture_matrix/metadata/v2.metadata.json']
-);
+CREATE EXTERNAL TABLE `healthy-skill-501608-t7.akvelon.g11_geography_20261123_130455_merged` WITH CONNECTION `347542310562.us.g11_geography_20261123_130316`
+OPTIONS (format='ICEBERG', uris=['gs://healthy-skill-501608-t7-g11-geography-20261123/g11/20261123_130455/warehouse/attempt05/g11/fixture_matrix/metadata/v2.metadata.json']);

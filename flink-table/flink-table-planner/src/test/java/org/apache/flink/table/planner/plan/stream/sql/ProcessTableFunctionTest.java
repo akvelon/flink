@@ -136,6 +136,11 @@ class ProcessTableFunctionTest extends TableTestBase {
                                 + "WITH ('connector' = 'values')");
         util.tableEnv()
                 .executeSql(
+                        "CREATE TABLE t_upsert_source (`name` STRING PRIMARY KEY NOT ENFORCED, `score` INT) "
+                                + "WITH ('connector' = 'values', 'changelog-mode' = 'I,UA,D', "
+                                + "'source.produces-delete-by-key' = 'true')");
+        util.tableEnv()
+                .executeSql(
                         "CREATE TABLE t_no_pk_sink (`name` STRING, `name0` STRING, `count` BIGINT, `mode` STRING) "
                                 + "WITH ('connector' = 'values', 'sink-insert-only' = 'false')");
     }
@@ -144,6 +149,28 @@ class ProcessTableFunctionTest extends TableTestBase {
     void testScalarArgsNoUid() {
         util.addTemporarySystemFunction("f", ScalarArgsFunction.class);
         util.verifyRelPlan("SELECT * FROM f(i => 1, b => true)");
+    }
+
+    @Test
+    void testInsertWithColumnListSetSemanticTableAndPadding() {
+        util.addTemporarySystemFunction("f", SetSemanticTableFunction.class);
+        // reorders the query columns and pads `name0` and `count` with NULL
+        util.verifyRelPlanInsert(
+                "INSERT INTO t_no_pk_sink (`mode`, `name`) "
+                        + "SELECT `out`, `name` FROM f(r => TABLE t PARTITION BY name, i => 1)");
+    }
+
+    @Test
+    void testInsertWithStaticPartitionSetSemanticTable() {
+        util.addTemporarySystemFunction("f", SetSemanticTableFunction.class);
+        util.tableEnv()
+                .executeSql(
+                        "CREATE TABLE t_partitioned_sink (`name` STRING, `out` STRING, `p` STRING) "
+                                + "PARTITIONED BY (`p`) "
+                                + "WITH ('connector' = 'filesystem', 'path' = '/non', 'format' = 'testcsv')");
+        util.verifyRelPlanInsert(
+                "INSERT INTO t_partitioned_sink PARTITION (`p` = 'x') "
+                        + "SELECT `name`, `out` FROM f(r => TABLE t PARTITION BY name, i => 1)");
     }
 
     @Test
@@ -433,6 +460,42 @@ class ProcessTableFunctionTest extends TableTestBase {
         util.addTemporarySystemFunction("f", UpdatingRetractRowSemanticFunction.class);
         util.verifyRelPlan(
                 "SELECT * FROM f(r => TABLE t)", singletonList(ExplainDetail.CHANGELOG_MODE));
+    }
+
+    @Test
+    void testUpsertInputWithRowSemantics() {
+        util.addTemporarySystemFunction("f", RowSemanticUpdatingFunction.class);
+        util.verifyRelPlan(
+                "SELECT * FROM f(r => TABLE t_upsert_source)",
+                singletonList(ExplainDetail.CHANGELOG_MODE));
+    }
+
+    @Test
+    void testUpsertInputWithRowSemanticsAndFullDeletes() {
+        util.addTemporarySystemFunction("f", RowSemanticUpdatingFunction.class);
+        util.tableEnv()
+                .executeSql(
+                        "CREATE TABLE t_full_delete_upsert_source (`name` STRING PRIMARY KEY NOT ENFORCED, `score` INT) "
+                                + "WITH ('connector' = 'values', 'changelog-mode' = 'I,UA,D')");
+        util.verifyRelPlan(
+                "SELECT * FROM f(r => TABLE t_full_delete_upsert_source)",
+                singletonList(ExplainDetail.CHANGELOG_MODE));
+    }
+
+    @Test
+    void testUpsertInputWithRowSemanticsWithoutUpsertKey() {
+        util.addTemporarySystemFunction("f", RowSemanticUpdatingFunction.class);
+        util.tableEnv().executeSql("CREATE VIEW v AS SELECT score FROM t_upsert_source");
+        util.verifyRelPlan(
+                "SELECT * FROM f(r => TABLE v)", singletonList(ExplainDetail.CHANGELOG_MODE));
+    }
+
+    @Test
+    void testUpsertInputWithRowSemanticsFilteredOnNonKeyColumn() {
+        util.addTemporarySystemFunction("f", RowSemanticUpdatingFunction.class);
+        util.tableEnv().executeSql("CREATE VIEW v AS SELECT * FROM t_updating WHERE `EXPR$1` > 1");
+        util.verifyRelPlan(
+                "SELECT * FROM f(r => TABLE v)", singletonList(ExplainDetail.CHANGELOG_MODE));
     }
 
     @Test
@@ -894,6 +957,12 @@ class ProcessTableFunctionTest extends TableTestBase {
     public static class ReservedArgFunction extends ProcessTableFunction<String> {
         @SuppressWarnings("unused")
         public void eval(String uid) {}
+    }
+
+    /** Testing function. */
+    public static class RowSemanticUpdatingFunction extends ProcessTableFunction<String> {
+        @SuppressWarnings("unused")
+        public void eval(@ArgumentHint({ROW_SEMANTIC_TABLE, SUPPORT_UPDATES}) Row r) {}
     }
 
     /** Testing function. */

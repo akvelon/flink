@@ -1557,13 +1557,15 @@ To store one of these values, cast the number to a `VARIANT` instead of parsing 
 `CAST(CAST('Infinity' AS DOUBLE) AS VARIANT)`.
 
 `PARSE_XML` maps an XML document to an object, see
-[XML to VARIANT]({{< ref "docs/sql/functions/built-in-functions" >}}#xml-to-variant).
+[XML to VARIANT]({{< ref "docs/sql/built-in-functions/variant/xml" >}}#xml-to-variant), and
+`XML_STRING` maps it back, see
+[VARIANT to XML String]({{< ref "docs/sql/built-in-functions/variant/xml" >}}#variant-to-xml-string).
 
 A `VARIANT` can be converted to a scalar type with `CAST` or `TRY_CAST`. A cast succeeds only when
 the target holds the stored value without reinterpreting it, so a value is never wrapped or rounded
 to make it fit. Otherwise `CAST` fails and `TRY_CAST` returns `NULL`. `VARIANT_GET` and
 `TRY_VARIANT_GET` read the value at a
-[path]({{< ref "docs/sql/functions/built-in-functions" >}}#variant-paths) such as `'$.items[0].qty'`
+[path]({{< ref "docs/sql/built-in-functions/variant/paths" >}}) such as `'$.items[0].qty'`
 and cast it by the same rules, returning `NULL` when nothing is at the path.
 
 | Stored kind     | Succeeds for                                          |
@@ -1790,10 +1792,10 @@ with `IS NULL`, cast, and passed to aggregate functions such as `COUNT`, `FIRST_
 `LAST_VALUE`.
 
 ```sql
-SELECT v['a'], COUNT(*) FROM t GROUP BY v['a']                             -- fails
-SELECT CAST(v['a'] AS INT), COUNT(*) FROM t GROUP BY CAST(v['a'] AS INT)   -- one group per number
-SELECT * FROM t WHERE v['a'] = PARSE_JSON('1')                             -- fails
-SELECT * FROM t WHERE CAST(v['a'] AS INT) = 1                              -- compares the number
+SELECT v['a'], COUNT(*) FROM t GROUP BY v['a'];                            -- fails
+SELECT CAST(v['a'] AS INT), COUNT(*) FROM t GROUP BY CAST(v['a'] AS INT);  -- one group per number
+SELECT * FROM t WHERE v['a'] = PARSE_JSON('1');                            -- fails
+SELECT * FROM t WHERE CAST(v['a'] AS INT) = 1;                             -- compares the number
 ```
 
 A `PRIMARY KEY` column cannot be a `VARIANT` or a type that contains one either. Declare the key
@@ -1810,8 +1812,8 @@ VARIANT
 Variant type is usually produced by the `PARSE_JSON` or `PARSE_XML` function. For example:
 
 ```sql
-SELECT PARSE_JSON('{"a":1,"b":["a","b","c"]}') AS v
-SELECT PARSE_XML('<a><b>1</b><b>2</b></a>') AS v
+SELECT PARSE_JSON('{"a":1,"b":["a","b","c"]}') AS v;
+SELECT PARSE_XML('<a><b>1</b><b>2</b></a>') AS v;
 ```
 
 {{< /tab >}}
@@ -1837,8 +1839,8 @@ for debugging: it never fails, but can be lossy. Both render a `TIMESTAMP_LTZ` i
 Data type of bitmap data that stores 32-bit integers in a compressed form using [RoaringBitmap](https://roaringbitmap.org/).
 
 The bitmap type is useful for efficiently representing and querying large sets of integers. It supports
-a variety of built-in [scalar functions]({{< ref "docs/sql/functions/built-in-functions" >}}#bitmap-functions) and
-[aggregate functions]({{< ref "docs/sql/functions/built-in-functions" >}}#bitmap-aggregate-functions).
+a variety of built-in [scalar functions]({{< ref "docs/sql/built-in-functions/bitmap" >}}) and
+[aggregate functions]({{< ref "docs/sql/built-in-functions/bitmap" >}}#bitmap-aggregate-functions).
 
 The bitmap type is an extension to the SQL standard.
 
@@ -1892,9 +1894,9 @@ A `UUID` usually comes from a literal, a cast from a string, or the `UUID_V4` an
 functions. For example:
 
 ```sql
-SELECT UUID 'a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11'
-SELECT CAST('a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11' AS UUID)
-SELECT UUID_V7()
+SELECT UUID 'a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11';
+SELECT CAST('a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11' AS UUID);
+SELECT UUID_V7();
 ```
 
 {{< /tab >}}
@@ -1924,7 +1926,7 @@ UUID 'A0EEBC99-9C0B-4EF8-BB6D-6BB9BD380A11'  -- a0eebc99-9c0b-4ef8-bb6d-6bb9bd38
 UUID 'a0eebc999c0b4ef8bb6d6bb9bd380a11'      -- fails at validation
 ```
 
-The [arithmetic functions]({{< ref "docs/sql/functions/built-in-functions" >}}#arithmetic-functions)
+The [arithmetic functions]({{< ref "docs/sql/built-in-functions/mathematical" >}})
 `UUID_V4()` and `UUID_V7()` generate a random and a time-ordered `UUID`. `UUID()` returns a random
 version 4 UUID as a `CHAR(36)` string instead.
 

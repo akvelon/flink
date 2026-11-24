@@ -239,7 +239,7 @@ env.createTable(
 // Call the PTF in Table API and pass the watermarked time column
 env.from("Names")
   .partitionBy($("name"))
-  .process(GreetingWithCatchingUp.class, descriptor("ts").asArgument("on_time"))
+  .process(GreetingWithFollowUp.class, descriptor("ts").asArgument("on_time"))
   .execute()
   .print();
 
@@ -622,6 +622,10 @@ For read and write access, only row or structured types (i.e. POJOs with default
 qualify as a data type. If no state is present, all fields are set to null (in case of a row
 type) or fields are set to their default value (in case of a structured type). For state
 efficiency, it is recommended to keep all fields nullable.
+
+The data type of a state entry can't change once a job has stored state for it. See
+[Changing a Process Table Function]({{< ref "docs/ops/upgrading" >}}#changing-a-process-table-function)
+for the changes that keep the state of a PTF.
 
 {{< tabs "0937eeed-3d13-455c-8e2f-5e164da9f844" >}}
 {{< tab "Java" >}}
@@ -1375,7 +1379,7 @@ The result will look similar to:
 | op |                           name |                       customer |                         EXPR$0 |
 +----+--------------------------------+--------------------------------+--------------------------------+
 | +I |                            Bob |                            Bob | Hello Bob, let me know if I... |
-| +I |                          Alice |                          Alice | Hello Alice, here to buy Pr... |
+| +I |                          Alice |                          Alice | Hello Alice, here to buy mi... |
 | +I |                            Bob |                            Bob | Hello Bob, let me know if I... |
 +----+--------------------------------+--------------------------------+--------------------------------+
 ```
@@ -1573,14 +1577,17 @@ Query Evolution with UIDs
 Unlike other SQL operators, PTFs support stateful query evolution.
 
 From the planner's perspective, a PTF is a stateful building block that remains unoptimized, while the planner optimizes
-the surrounding operators of the query. The state entries of a PTF can be persisted and restored by Flink, even if the
-surrounding query or the PTF itself changes. As long as the schema of the state entries remains unchanged.
+the surrounding operators of the query. Flink restores the state entries of a PTF from a savepoint even if the
+surrounding query or the logic of the PTF changes, as long as the UID, the `PARTITION BY` clause, and the name and data
+type of each state entry stay the same. See [Changing a Process Table Function]({{< ref "docs/ops/upgrading" >}}#changing-a-process-table-function)
+for which changes keep the state.
 
 For future query evolution, the framework enforces a unique identifier (UID) for all PTFs that operate on tables with set
 or broadcast semantics. The UID can be provided through the implicit `uid` string argument. It is used when persisting the PTF's state
 entries to checkpoints or savepoints. If the `uid` argument is not specified, the function name will be used by the framework,
 ensuring one unique PTF invocation per statement. If a PTF is invoked multiple times, validation will require a manually
-specified UID to ensure it is unique across the entire Flink job.
+specified UID to ensure it is unique across the entire Flink job. Set the UID explicitly for every PTF whose state you want
+to keep. Without it, renaming the function changes the UID, and Flink can't map the state of the PTF after a restore.
 
 Additionally, the UID helps the optimizer determine whether to merge common parts of the pipeline. A shared UID enables
 fan-out behavior while maintaining a single stateful PTF.
@@ -1720,10 +1727,15 @@ SELECT * FROM f(table_arg => TABLE UpdatingTable)
 If updates should be supported, ensure that the data type of the table argument is chosen in a way that it can encode
 changes. In other words: choose a `Row` type that exposes the `RowKind` change flag.
 
-The changelog of the backing input table decides which kinds of changes enter the function. The function receives `{+I}`
-when the input table is append-only. The function receives `{+I,+U,-D}` if the input table is upserting using the same
-upsert key as the partition key. Otherwise, retractions `{+I,-U,+U,-D}` (i.e. including `RowKind.UPDATE_BEFORE`) enter
-the function. Use `ArgumentTrait.REQUIRE_UPDATE_BEFORE` to enforce retractions for all updating cases.
+The changelog of the backing input table decides which kinds of changes enter the function:
+
+- `{+I}` if the input table is append-only.
+- `{+I,+U,-D}` if the input table is upserting and either:
+  - the table argument has set semantics and is partitioned by the upsert key, or
+  - the function emits only inserts.
+- `{+I,-U,+U,-D}` (i.e. including `RowKind.UPDATE_BEFORE`) otherwise.
+
+Use `ArgumentTrait.REQUIRE_UPDATE_BEFORE` to enforce retractions for all updating cases.
 
 For upserting tables, if the changelog contains key-only deletions (also known as partial deletions), only upsert key
 fields are set when a row enters the function. Non-key fields are set to `null`, regardless of `NOT NULL` constraints.
@@ -2144,7 +2156,7 @@ CREATE VIEW Checkouts AS SELECT * FROM CheckoutProcessor(
   on_time => DESCRIPTOR(ts),
   reminderInterval => INTERVAL '1' DAY,
   timeoutInterval => INTERVAL '2' DAY, uid => 'cart-processor'
-)
+);
 
 EXECUTE STATEMENT SET
 BEGIN
@@ -3013,6 +3025,101 @@ void testTimerWithState() throws Exception {
 {{< /tab >}}
 {{< /tabs >}}
 
+#### Testing Updating (Changelog) Tables
+
+A table argument that declares `ArgumentTrait.SUPPORT_UPDATES` may receive an updating changelog rather
+than an insert-only stream. You can configure the changelog mode of a particular table argument
+via `.changelogMode()` on `TableArgument.Builder`. If not configured, it defaults to
+`ChangelogMode.insertOnly()`.
+
+When processing elements for a table argument with a specific changelog mode, the harness will
+reject any row kind that the mode does not contain.
+
+{{< tabs "changelog-input" >}}
+{{< tab "Java" >}}
+```java
+// A row-semantic PTF that accepts an updating input and echoes each row's kind and value.
+@DataTypeHint("ROW<seen STRING>")
+public class UpdatingConsumerPTF extends ProcessTableFunction<Row> {
+  public void eval(
+      @ArgumentHint({ArgumentTrait.ROW_SEMANTIC_TABLE, ArgumentTrait.SUPPORT_UPDATES}) Row input) {
+    collect(Row.of(input.getKind() + ":" + input.getFieldAs("value")));
+  }
+}
+
+@Test
+void testUpdatingInput() throws Exception {
+  try (ProcessTableFunctionTestHarness<Row> harness =
+    ProcessTableFunctionTestHarness.ofClass(UpdatingConsumerPTF.class)
+    .withTableArgument(
+        TableArgument.forName("input")
+            .type(DataTypes.of("ROW<value INT>"))
+            .changelogMode(ChangelogMode.all())
+            .build())
+    .build()) {
+
+    harness.processElement(RowKind.INSERT, 10);
+    harness.processElement(RowKind.UPDATE_AFTER, 20);
+    harness.processElement(RowKind.DELETE, 10);
+
+    List<Row> output = harness.getFunctionOutput();
+    assertThat(output).containsExactly(
+        Row.of("INSERT:10"), Row.of("UPDATE_AFTER:20"), Row.of("DELETE:10"));
+  }
+}
+```
+{{< /tab >}}
+{{< /tabs >}}
+
+**Upsert Input**: Upsert changelog modes (`ChangelogMode.upsert(...)`) apply to `SET_SEMANTIC_TABLE`
+arguments only. You can configure the upsert key with `.upsertKey()` on `TableArgument.Builder`.
+Call it more than once to declare additional candidate keys. The partition columns must equal one
+of them exactly.
+
+{{< tabs "changelog-upsert" >}}
+{{< tab "Java" >}}
+```java
+@DataTypeHint("ROW<v INT>")
+public class UpsertConsumerPTF extends ProcessTableFunction<Row> {
+  public void eval(
+      @ArgumentHint({ArgumentTrait.SET_SEMANTIC_TABLE, ArgumentTrait.SUPPORT_UPDATES}) Row input) {
+    collect(Row.of((Integer) input.getFieldAs("value")));
+  }
+}
+
+@Test
+void testUpsertInput() throws Exception {
+  try (ProcessTableFunctionTestHarness<Row> harness =
+    ProcessTableFunctionTestHarness.ofClass(UpsertConsumerPTF.class)
+    .withTableArgument(
+        TableArgument.forName("input")
+            .type(DataTypes.of("ROW<key STRING, value INT>"))
+            .partitionBy("key")
+            .upsertKey("key")
+            .changelogMode(ChangelogMode.upsert(true))
+            .build())
+    .build()) {
+
+    harness.processElement(RowKind.INSERT, "A", 1);
+    harness.processElement(RowKind.UPDATE_AFTER, "A", 2);
+
+    List<Row> output = harness.getFunctionOutput();
+    assertThat(output).containsExactly(Row.of(1), Row.of(2));
+  }
+}
+```
+{{< /tab >}}
+{{< /tabs >}}
+
+**Output Changelog Mode**: The harness validates collected rows against the PTF's resolved output
+changelog mode (derived from `ChangelogFunction`, or insert-only otherwise) and rejects any row
+whose kind that mode does not contain.
+
+**Key-only Deletes**: If an argument's changelog mode has key-only deletes, the harness nulls all
+non-key fields of a `DELETE` row before passing it to the PTF.
+
+{{< top >}}
+
 #### Optional Partitioning
 
 For PTFs with `OPTIONAL_PARTITION_BY`, you can omit `.partitionBy(...)` on `TableArgument.Builder`
@@ -3190,5 +3297,4 @@ void testAtomicOutputFunctionOutput() throws Exception {
 
 ### PTF Features Unsupported by the TestHarness
 
-- Update traits (`SUPPORTS_UPDATES`, `REQUIRE_UPDATE_BEFORE`)
 - State TTL (state is supported but TTL expiration is not yet implemented)
