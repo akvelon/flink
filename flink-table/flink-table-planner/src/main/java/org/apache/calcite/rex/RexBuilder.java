@@ -31,6 +31,7 @@ import org.apache.calcite.rel.core.CorrelationId;
 import org.apache.calcite.rel.type.RelDataType;
 import org.apache.calcite.rel.type.RelDataTypeFactory;
 import org.apache.calcite.rel.type.RelDataTypeField;
+import org.apache.calcite.rel.type.RelDataTypeSystemImpl;
 import org.apache.calcite.runtime.FlatLists;
 import org.apache.calcite.sql.SqlAggFunction;
 import org.apache.calcite.sql.SqlCollation;
@@ -46,6 +47,7 @@ import org.apache.calcite.sql.parser.SqlParserPos;
 import org.apache.calcite.sql.type.ArraySqlType;
 import org.apache.calcite.sql.type.MapSqlType;
 import org.apache.calcite.sql.type.MultisetSqlType;
+import org.apache.calcite.sql.type.SqlTypeFactoryImpl;
 import org.apache.calcite.sql.type.SqlTypeFamily;
 import org.apache.calcite.sql.type.SqlTypeName;
 import org.apache.calcite.sql.type.SqlTypeUtil;
@@ -91,6 +93,11 @@ import static org.apache.calcite.linq4j.Nullness.castNonNull;
  * <p>FLINK modifications (because of FLINK-39945): Lines 858-860, 1277-1294
  */
 public class RexBuilder {
+
+    /** Default builder, retained from Calcite 1.41 for copied planner classes. */
+    public static final RexBuilder DEFAULT =
+            new RexBuilder(new SqlTypeFactoryImpl(RelDataTypeSystemImpl.DEFAULT));
+
     /**
      * Special operator that accesses an unadvertised field of an input record. This operator cannot
      * be used in SQL queries; it is introduced temporarily during sql-to-rel translation, then
@@ -1803,6 +1810,8 @@ public class RexBuilder {
 
     private static Comparable zeroValue(RelDataType type) {
         switch (type.getSqlTypeName()) {
+            case GEOGRAPHY:
+                throw new UnsupportedOperationException("GEOGRAPHY has no non-null default value");
             case CHAR:
                 return new NlsString(Spaces.of(type.getPrecision()), null, null);
             case VARCHAR:
@@ -1886,6 +1895,10 @@ public class RexBuilder {
             @Nullable Object value, RelDataType type, boolean allowCast, boolean trim) {
         if (value == null) {
             return makeCast(type, constantNull);
+        }
+        if (type.getSqlTypeName() == SqlTypeName.GEOGRAPHY) {
+            throw new UnsupportedOperationException(
+                    "Non-null GEOGRAPHY literals are not supported");
         }
         if (type.isNullable()) {
             final RelDataType typeNotNull = typeFactory.createTypeWithNullability(type, false);

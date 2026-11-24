@@ -266,6 +266,12 @@ public class FlinkTypeFactory extends JavaTypeFactoryImpl implements ExtendedRel
             return normalizeLeastRestrictive(resolved.get());
         }
 
+        // Calcite's OTHER family has no assignment rules for Flink's opaque types.
+        if (types.stream()
+                .anyMatch(t -> t instanceof RawRelDataType || t instanceof BitmapRelDataType)) {
+            return null;
+        }
+
         final RelDataType leastRestrictive = super.leastRestrictive(types);
         return normalizeLeastRestrictive(leastRestrictive);
     }

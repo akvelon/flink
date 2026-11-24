@@ -2739,7 +2739,8 @@ public class SqlValidatorImpl implements SqlValidatorWithHints {
                                 binding.operand(2).getKind() != SqlKind.LITERAL;
                         if (!queryColumnIsNotLiteral && !lateral) {
                             throw new ValidationException(
-                                    "The query column is not literal, please use LATERAL TABLE to run VECTOR_SEARCH.");
+                                    "The query column is not literal, please use LATERAL TABLE to"
+                                            + " run VECTOR_SEARCH.");
                         }
                         SqlValidatorScope scope = getSelectScope((SqlSelect) binding.operand(0));
                         scopes.put(enclosingNode, scope);
@@ -6215,6 +6216,7 @@ public class SqlValidatorImpl implements SqlValidatorWithHints {
             SqlIdentifier identifier = (SqlIdentifier) node;
             identifier.validate(this, scope);
             RelDataType type = deriveType(scope, identifier);
+            SqlValidatorUtil.validateGeographyHashKey(this, identifier, type, "PARTITION BY");
             String name = identifier.names.get(1);
             typeBuilder.add(name, type);
         }
@@ -6222,6 +6224,7 @@ public class SqlValidatorImpl implements SqlValidatorWithHints {
         // parse ORDER BY column
         for (SqlNode node : matchRecognize.getOrderList()) {
             node.validate(this, scope);
+            SqlValidatorUtil.validateGeographyOrderKey(this, scope, node);
             SqlIdentifier identifier;
             if (node instanceof SqlBasicCall) {
                 identifier = ((SqlBasicCall) node).operand(0);
@@ -6736,6 +6739,8 @@ public class SqlValidatorImpl implements SqlValidatorWithHints {
                 if (a.findAgg(param) != null) {
                     throw newValidationError(aggCall, RESOURCE.aggregateInWithinDistinctIllegal());
                 }
+                SqlValidatorUtil.validateGeographyHashKey(
+                        this, param, deriveType(scope, param), "WITHIN DISTINCT");
             }
         }
         if (orderList != null) {
@@ -6743,10 +6748,24 @@ public class SqlValidatorImpl implements SqlValidatorWithHints {
                 if (a.findAgg(param) != null) {
                     throw newValidationError(aggCall, RESOURCE.aggregateInWithinGroupIllegal());
                 }
+                SqlValidatorUtil.validateGeographyOrderKey(this, scope, param);
             }
         }
 
         final SqlAggFunction op = (SqlAggFunction) aggCall.getOperator();
+        final SqlLiteral quantifier = aggCall.getFunctionQuantifier();
+        if ((quantifier != null
+                        && quantifier.getValue() == SqlSelectKeyword.DISTINCT
+                        && op.getDistinctOptionality() != Optionality.IGNORED)
+                || op == SqlStdOperatorTable.APPROX_COUNT_DISTINCT
+                || op.getKind() == SqlKind.MODE) {
+            for (SqlNode param : aggCall.getOperandList()) {
+                if (!(param instanceof SqlIdentifier) || !((SqlIdentifier) param).isStar()) {
+                    SqlValidatorUtil.validateGeographyHashKey(
+                            this, param, deriveType(scope, param), op.getName());
+                }
+            }
+        }
         switch (op.requiresGroupOrder()) {
             case MANDATORY:
                 if (orderList == null || orderList.isEmpty()) {

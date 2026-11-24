@@ -1,0 +1,3285 @@
+{
+  "_license": "Licensed to the Apache Software Foundation (ASF) under one\nor more contributor license agreements. See the NOTICE file\ndistributed with this work for additional information\nregarding copyright ownership. The ASF licenses this file\nto you under the Apache License, Version 2.0 (the\n\"License\"); you may not use this file except in compliance\nwith the License. You may obtain a copy of the License at\nhttp://www.apache.org/licenses/LICENSE-2.0\nUnless required by applicable law or agreed to in writing, software\ndistributed under the License is distributed on an \"AS IS\" BASIS,\nWITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.\nSee the License for the specific language governing permissions and\nlimitations under the License.",
+  "kind": "bigquery#queryResponse",
+  "schema": {
+    "fields": [
+      {
+        "name": "id",
+        "type": "INTEGER",
+        "mode": "NULLABLE"
+      },
+      {
+        "name": "name",
+        "type": "STRING",
+        "mode": "NULLABLE"
+      },
+      {
+        "name": "native_geo_type",
+        "type": "STRING",
+        "mode": "NULLABLE"
+      },
+      {
+        "name": "native_array_type",
+        "type": "STRING",
+        "mode": "NULLABLE"
+      },
+      {
+        "name": "native_nested_geo_type",
+        "type": "STRING",
+        "mode": "NULLABLE"
+      },
+      {
+        "name": "scalar_is_null",
+        "type": "BOOLEAN",
+        "mode": "NULLABLE"
+      },
+      {
+        "name": "scalar_is_empty",
+        "type": "BOOLEAN",
+        "mode": "NULLABLE"
+      },
+      {
+        "name": "scalar_shape",
+        "type": "STRING",
+        "mode": "NULLABLE"
+      },
+      {
+        "name": "scalar_wkt",
+        "type": "STRING",
+        "mode": "NULLABLE"
+      },
+      {
+        "name": "scalar_content_matches",
+        "type": "BOOLEAN",
+        "mode": "NULLABLE"
+      },
+      {
+        "name": "array_is_null",
+        "type": "BOOLEAN",
+        "mode": "NULLABLE"
+      },
+      {
+        "name": "array_length",
+        "type": "INTEGER",
+        "mode": "NULLABLE"
+      },
+      {
+        "name": "expected_array_is_null",
+        "type": "BOOLEAN",
+        "mode": "NULLABLE"
+      },
+      {
+        "name": "expected_array_length",
+        "type": "INTEGER",
+        "mode": "NULLABLE"
+      },
+      {
+        "name": "array_values_json",
+        "type": "STRING",
+        "mode": "NULLABLE"
+      },
+      {
+        "name": "nested_is_null",
+        "type": "BOOLEAN",
+        "mode": "NULLABLE"
+      },
+      {
+        "name": "expected_nested_is_null",
+        "type": "BOOLEAN",
+        "mode": "NULLABLE"
+      },
+      {
+        "name": "nested_leaf_is_null",
+        "type": "BOOLEAN",
+        "mode": "NULLABLE"
+      },
+      {
+        "name": "nested_leaf_is_empty",
+        "type": "BOOLEAN",
+        "mode": "NULLABLE"
+      },
+      {
+        "name": "nested_leaf_shape",
+        "type": "STRING",
+        "mode": "NULLABLE"
+      },
+      {
+        "name": "nested_content_matches",
+        "type": "BOOLEAN",
+        "mode": "NULLABLE"
+      }
+    ]
+  },
+  "jobReference": {
+    "projectId": "healthy-skill-501608-t7",
+    "jobId": "job_O3-xGBBzZELH0RjcH5ikVvJqdi3h",
+    "location": "US"
+  },
+  "totalRows": "47",
+  "rows": [
+    {
+      "f": [
+        {
+          "v": "1"
+        },
+        {
+          "v": "point_nonempty_little"
+        },
+        {
+          "v": "GEOGRAPHY"
+        },
+        {
+          "v": "ARRAY<GEOGRAPHY>"
+        },
+        {
+          "v": "GEOGRAPHY"
+        },
+        {
+          "v": "false"
+        },
+        {
+          "v": "false"
+        },
+        {
+          "v": "ST_Point"
+        },
+        {
+          "v": "POINT(1 2)"
+        },
+        {
+          "v": "true"
+        },
+        {
+          "v": "false"
+        },
+        {
+          "v": "0"
+        },
+        {
+          "v": "true"
+        },
+        {
+          "v": null
+        },
+        {
+          "v": "[]"
+        },
+        {
+          "v": "false"
+        },
+        {
+          "v": "false"
+        },
+        {
+          "v": "false"
+        },
+        {
+          "v": "false"
+        },
+        {
+          "v": "ST_Point"
+        },
+        {
+          "v": "true"
+        }
+      ]
+    },
+    {
+      "f": [
+        {
+          "v": "2"
+        },
+        {
+          "v": "point_empty_little"
+        },
+        {
+          "v": "GEOGRAPHY"
+        },
+        {
+          "v": "ARRAY<GEOGRAPHY>"
+        },
+        {
+          "v": "GEOGRAPHY"
+        },
+        {
+          "v": "false"
+        },
+        {
+          "v": "true"
+        },
+        {
+          "v": "ST_GeometryCollection"
+        },
+        {
+          "v": "GEOMETRYCOLLECTION EMPTY"
+        },
+        {
+          "v": "true"
+        },
+        {
+          "v": "false"
+        },
+        {
+          "v": "0"
+        },
+        {
+          "v": "true"
+        },
+        {
+          "v": null
+        },
+        {
+          "v": "[]"
+        },
+        {
+          "v": "false"
+        },
+        {
+          "v": "false"
+        },
+        {
+          "v": "false"
+        },
+        {
+          "v": "true"
+        },
+        {
+          "v": "ST_GeometryCollection"
+        },
+        {
+          "v": "true"
+        }
+      ]
+    },
+    {
+      "f": [
+        {
+          "v": "3"
+        },
+        {
+          "v": "linestring_nonempty_little"
+        },
+        {
+          "v": "GEOGRAPHY"
+        },
+        {
+          "v": "ARRAY<GEOGRAPHY>"
+        },
+        {
+          "v": "GEOGRAPHY"
+        },
+        {
+          "v": "false"
+        },
+        {
+          "v": "false"
+        },
+        {
+          "v": "ST_LineString"
+        },
+        {
+          "v": "LINESTRING(0 0, 1 1, 2 1)"
+        },
+        {
+          "v": "true"
+        },
+        {
+          "v": "false"
+        },
+        {
+          "v": "0"
+        },
+        {
+          "v": "true"
+        },
+        {
+          "v": null
+        },
+        {
+          "v": "[]"
+        },
+        {
+          "v": "false"
+        },
+        {
+          "v": "false"
+        },
+        {
+          "v": "false"
+        },
+        {
+          "v": "false"
+        },
+        {
+          "v": "ST_LineString"
+        },
+        {
+          "v": "true"
+        }
+      ]
+    },
+    {
+      "f": [
+        {
+          "v": "4"
+        },
+        {
+          "v": "linestring_empty_little"
+        },
+        {
+          "v": "GEOGRAPHY"
+        },
+        {
+          "v": "ARRAY<GEOGRAPHY>"
+        },
+        {
+          "v": "GEOGRAPHY"
+        },
+        {
+          "v": "false"
+        },
+        {
+          "v": "true"
+        },
+        {
+          "v": "ST_GeometryCollection"
+        },
+        {
+          "v": "GEOMETRYCOLLECTION EMPTY"
+        },
+        {
+          "v": "true"
+        },
+        {
+          "v": "false"
+        },
+        {
+          "v": "0"
+        },
+        {
+          "v": "true"
+        },
+        {
+          "v": null
+        },
+        {
+          "v": "[]"
+        },
+        {
+          "v": "false"
+        },
+        {
+          "v": "false"
+        },
+        {
+          "v": "false"
+        },
+        {
+          "v": "true"
+        },
+        {
+          "v": "ST_GeometryCollection"
+        },
+        {
+          "v": "true"
+        }
+      ]
+    },
+    {
+      "f": [
+        {
+          "v": "5"
+        },
+        {
+          "v": "polygon_nonempty_little"
+        },
+        {
+          "v": "GEOGRAPHY"
+        },
+        {
+          "v": "ARRAY<GEOGRAPHY>"
+        },
+        {
+          "v": "GEOGRAPHY"
+        },
+        {
+          "v": "false"
+        },
+        {
+          "v": "false"
+        },
+        {
+          "v": "ST_Polygon"
+        },
+        {
+          "v": "POLYGON((0 0, 4 0, 4 4, 0 4, 0 0), (1 1, 1 2, 2 2, 2 1, 1 1))"
+        },
+        {
+          "v": "true"
+        },
+        {
+          "v": "false"
+        },
+        {
+          "v": "0"
+        },
+        {
+          "v": "true"
+        },
+        {
+          "v": null
+        },
+        {
+          "v": "[]"
+        },
+        {
+          "v": "false"
+        },
+        {
+          "v": "false"
+        },
+        {
+          "v": "false"
+        },
+        {
+          "v": "false"
+        },
+        {
+          "v": "ST_Polygon"
+        },
+        {
+          "v": "true"
+        }
+      ]
+    },
+    {
+      "f": [
+        {
+          "v": "6"
+        },
+        {
+          "v": "polygon_empty_little"
+        },
+        {
+          "v": "GEOGRAPHY"
+        },
+        {
+          "v": "ARRAY<GEOGRAPHY>"
+        },
+        {
+          "v": "GEOGRAPHY"
+        },
+        {
+          "v": "false"
+        },
+        {
+          "v": "true"
+        },
+        {
+          "v": "ST_GeometryCollection"
+        },
+        {
+          "v": "GEOMETRYCOLLECTION EMPTY"
+        },
+        {
+          "v": "true"
+        },
+        {
+          "v": "false"
+        },
+        {
+          "v": "0"
+        },
+        {
+          "v": "true"
+        },
+        {
+          "v": null
+        },
+        {
+          "v": "[]"
+        },
+        {
+          "v": "false"
+        },
+        {
+          "v": "false"
+        },
+        {
+          "v": "false"
+        },
+        {
+          "v": "true"
+        },
+        {
+          "v": "ST_GeometryCollection"
+        },
+        {
+          "v": "true"
+        }
+      ]
+    },
+    {
+      "f": [
+        {
+          "v": "7"
+        },
+        {
+          "v": "multipoint_nonempty_little"
+        },
+        {
+          "v": "GEOGRAPHY"
+        },
+        {
+          "v": "ARRAY<GEOGRAPHY>"
+        },
+        {
+          "v": "GEOGRAPHY"
+        },
+        {
+          "v": "false"
+        },
+        {
+          "v": "false"
+        },
+        {
+          "v": "ST_MultiPoint"
+        },
+        {
+          "v": "MULTIPOINT(1 2, 3 4)"
+        },
+        {
+          "v": "true"
+        },
+        {
+          "v": "false"
+        },
+        {
+          "v": "0"
+        },
+        {
+          "v": "true"
+        },
+        {
+          "v": null
+        },
+        {
+          "v": "[]"
+        },
+        {
+          "v": "false"
+        },
+        {
+          "v": "false"
+        },
+        {
+          "v": "false"
+        },
+        {
+          "v": "false"
+        },
+        {
+          "v": "ST_MultiPoint"
+        },
+        {
+          "v": "true"
+        }
+      ]
+    },
+    {
+      "f": [
+        {
+          "v": "8"
+        },
+        {
+          "v": "multipoint_empty_little"
+        },
+        {
+          "v": "GEOGRAPHY"
+        },
+        {
+          "v": "ARRAY<GEOGRAPHY>"
+        },
+        {
+          "v": "GEOGRAPHY"
+        },
+        {
+          "v": "false"
+        },
+        {
+          "v": "true"
+        },
+        {
+          "v": "ST_GeometryCollection"
+        },
+        {
+          "v": "GEOMETRYCOLLECTION EMPTY"
+        },
+        {
+          "v": "true"
+        },
+        {
+          "v": "false"
+        },
+        {
+          "v": "0"
+        },
+        {
+          "v": "true"
+        },
+        {
+          "v": null
+        },
+        {
+          "v": "[]"
+        },
+        {
+          "v": "false"
+        },
+        {
+          "v": "false"
+        },
+        {
+          "v": "false"
+        },
+        {
+          "v": "true"
+        },
+        {
+          "v": "ST_GeometryCollection"
+        },
+        {
+          "v": "true"
+        }
+      ]
+    },
+    {
+      "f": [
+        {
+          "v": "9"
+        },
+        {
+          "v": "multilinestring_nonempty_little"
+        },
+        {
+          "v": "GEOGRAPHY"
+        },
+        {
+          "v": "ARRAY<GEOGRAPHY>"
+        },
+        {
+          "v": "GEOGRAPHY"
+        },
+        {
+          "v": "false"
+        },
+        {
+          "v": "false"
+        },
+        {
+          "v": "ST_MultiLineString"
+        },
+        {
+          "v": "MULTILINESTRING((0 0, 1 1, 2 1), (10 10, 11 11))"
+        },
+        {
+          "v": "true"
+        },
+        {
+          "v": "false"
+        },
+        {
+          "v": "0"
+        },
+        {
+          "v": "true"
+        },
+        {
+          "v": null
+        },
+        {
+          "v": "[]"
+        },
+        {
+          "v": "false"
+        },
+        {
+          "v": "false"
+        },
+        {
+          "v": "false"
+        },
+        {
+          "v": "false"
+        },
+        {
+          "v": "ST_MultiLineString"
+        },
+        {
+          "v": "true"
+        }
+      ]
+    },
+    {
+      "f": [
+        {
+          "v": "10"
+        },
+        {
+          "v": "multilinestring_empty_little"
+        },
+        {
+          "v": "GEOGRAPHY"
+        },
+        {
+          "v": "ARRAY<GEOGRAPHY>"
+        },
+        {
+          "v": "GEOGRAPHY"
+        },
+        {
+          "v": "false"
+        },
+        {
+          "v": "true"
+        },
+        {
+          "v": "ST_GeometryCollection"
+        },
+        {
+          "v": "GEOMETRYCOLLECTION EMPTY"
+        },
+        {
+          "v": "true"
+        },
+        {
+          "v": "false"
+        },
+        {
+          "v": "0"
+        },
+        {
+          "v": "true"
+        },
+        {
+          "v": null
+        },
+        {
+          "v": "[]"
+        },
+        {
+          "v": "false"
+        },
+        {
+          "v": "false"
+        },
+        {
+          "v": "false"
+        },
+        {
+          "v": "true"
+        },
+        {
+          "v": "ST_GeometryCollection"
+        },
+        {
+          "v": "true"
+        }
+      ]
+    },
+    {
+      "f": [
+        {
+          "v": "11"
+        },
+        {
+          "v": "multipolygon_nonempty_little"
+        },
+        {
+          "v": "GEOGRAPHY"
+        },
+        {
+          "v": "ARRAY<GEOGRAPHY>"
+        },
+        {
+          "v": "GEOGRAPHY"
+        },
+        {
+          "v": "false"
+        },
+        {
+          "v": "false"
+        },
+        {
+          "v": "ST_MultiPolygon"
+        },
+        {
+          "v": "MULTIPOLYGON(((10 10, 12 10, 12 12, 10 12, 10 10)), ((0 0, 4 0, 4 4, 0 4, 0 0), (1 1, 1 2, 2 2, 2 1, 1 1)))"
+        },
+        {
+          "v": "true"
+        },
+        {
+          "v": "false"
+        },
+        {
+          "v": "0"
+        },
+        {
+          "v": "true"
+        },
+        {
+          "v": null
+        },
+        {
+          "v": "[]"
+        },
+        {
+          "v": "false"
+        },
+        {
+          "v": "false"
+        },
+        {
+          "v": "false"
+        },
+        {
+          "v": "false"
+        },
+        {
+          "v": "ST_MultiPolygon"
+        },
+        {
+          "v": "true"
+        }
+      ]
+    },
+    {
+      "f": [
+        {
+          "v": "12"
+        },
+        {
+          "v": "multipolygon_empty_little"
+        },
+        {
+          "v": "GEOGRAPHY"
+        },
+        {
+          "v": "ARRAY<GEOGRAPHY>"
+        },
+        {
+          "v": "GEOGRAPHY"
+        },
+        {
+          "v": "false"
+        },
+        {
+          "v": "true"
+        },
+        {
+          "v": "ST_GeometryCollection"
+        },
+        {
+          "v": "GEOMETRYCOLLECTION EMPTY"
+        },
+        {
+          "v": "true"
+        },
+        {
+          "v": "false"
+        },
+        {
+          "v": "0"
+        },
+        {
+          "v": "true"
+        },
+        {
+          "v": null
+        },
+        {
+          "v": "[]"
+        },
+        {
+          "v": "false"
+        },
+        {
+          "v": "false"
+        },
+        {
+          "v": "false"
+        },
+        {
+          "v": "true"
+        },
+        {
+          "v": "ST_GeometryCollection"
+        },
+        {
+          "v": "true"
+        }
+      ]
+    },
+    {
+      "f": [
+        {
+          "v": "13"
+        },
+        {
+          "v": "geometrycollection_nonempty_little"
+        },
+        {
+          "v": "GEOGRAPHY"
+        },
+        {
+          "v": "ARRAY<GEOGRAPHY>"
+        },
+        {
+          "v": "GEOGRAPHY"
+        },
+        {
+          "v": "false"
+        },
+        {
+          "v": "false"
+        },
+        {
+          "v": "ST_Polygon"
+        },
+        {
+          "v": "POLYGON((0 0, 4 0, 4 4, 0 4, 0 0), (1 1, 1 2, 2 2, 2 1, 1 1))"
+        },
+        {
+          "v": "true"
+        },
+        {
+          "v": "false"
+        },
+        {
+          "v": "0"
+        },
+        {
+          "v": "true"
+        },
+        {
+          "v": null
+        },
+        {
+          "v": "[]"
+        },
+        {
+          "v": "false"
+        },
+        {
+          "v": "false"
+        },
+        {
+          "v": "false"
+        },
+        {
+          "v": "false"
+        },
+        {
+          "v": "ST_Polygon"
+        },
+        {
+          "v": "true"
+        }
+      ]
+    },
+    {
+      "f": [
+        {
+          "v": "14"
+        },
+        {
+          "v": "geometrycollection_empty_little"
+        },
+        {
+          "v": "GEOGRAPHY"
+        },
+        {
+          "v": "ARRAY<GEOGRAPHY>"
+        },
+        {
+          "v": "GEOGRAPHY"
+        },
+        {
+          "v": "false"
+        },
+        {
+          "v": "true"
+        },
+        {
+          "v": "ST_GeometryCollection"
+        },
+        {
+          "v": "GEOMETRYCOLLECTION EMPTY"
+        },
+        {
+          "v": "true"
+        },
+        {
+          "v": "false"
+        },
+        {
+          "v": "0"
+        },
+        {
+          "v": "true"
+        },
+        {
+          "v": null
+        },
+        {
+          "v": "[]"
+        },
+        {
+          "v": "false"
+        },
+        {
+          "v": "false"
+        },
+        {
+          "v": "false"
+        },
+        {
+          "v": "true"
+        },
+        {
+          "v": "ST_GeometryCollection"
+        },
+        {
+          "v": "true"
+        }
+      ]
+    },
+    {
+      "f": [
+        {
+          "v": "15"
+        },
+        {
+          "v": "multipoint_empty_members_little"
+        },
+        {
+          "v": "GEOGRAPHY"
+        },
+        {
+          "v": "ARRAY<GEOGRAPHY>"
+        },
+        {
+          "v": "GEOGRAPHY"
+        },
+        {
+          "v": "false"
+        },
+        {
+          "v": "true"
+        },
+        {
+          "v": "ST_GeometryCollection"
+        },
+        {
+          "v": "GEOMETRYCOLLECTION EMPTY"
+        },
+        {
+          "v": "true"
+        },
+        {
+          "v": "false"
+        },
+        {
+          "v": "0"
+        },
+        {
+          "v": "true"
+        },
+        {
+          "v": null
+        },
+        {
+          "v": "[]"
+        },
+        {
+          "v": "false"
+        },
+        {
+          "v": "false"
+        },
+        {
+          "v": "false"
+        },
+        {
+          "v": "true"
+        },
+        {
+          "v": "ST_GeometryCollection"
+        },
+        {
+          "v": "true"
+        }
+      ]
+    },
+    {
+      "f": [
+        {
+          "v": "16"
+        },
+        {
+          "v": "multilinestring_empty_members_little"
+        },
+        {
+          "v": "GEOGRAPHY"
+        },
+        {
+          "v": "ARRAY<GEOGRAPHY>"
+        },
+        {
+          "v": "GEOGRAPHY"
+        },
+        {
+          "v": "false"
+        },
+        {
+          "v": "true"
+        },
+        {
+          "v": "ST_GeometryCollection"
+        },
+        {
+          "v": "GEOMETRYCOLLECTION EMPTY"
+        },
+        {
+          "v": "true"
+        },
+        {
+          "v": "false"
+        },
+        {
+          "v": "0"
+        },
+        {
+          "v": "true"
+        },
+        {
+          "v": null
+        },
+        {
+          "v": "[]"
+        },
+        {
+          "v": "false"
+        },
+        {
+          "v": "false"
+        },
+        {
+          "v": "false"
+        },
+        {
+          "v": "true"
+        },
+        {
+          "v": "ST_GeometryCollection"
+        },
+        {
+          "v": "true"
+        }
+      ]
+    },
+    {
+      "f": [
+        {
+          "v": "17"
+        },
+        {
+          "v": "multipolygon_empty_members_little"
+        },
+        {
+          "v": "GEOGRAPHY"
+        },
+        {
+          "v": "ARRAY<GEOGRAPHY>"
+        },
+        {
+          "v": "GEOGRAPHY"
+        },
+        {
+          "v": "false"
+        },
+        {
+          "v": "true"
+        },
+        {
+          "v": "ST_GeometryCollection"
+        },
+        {
+          "v": "GEOMETRYCOLLECTION EMPTY"
+        },
+        {
+          "v": "true"
+        },
+        {
+          "v": "false"
+        },
+        {
+          "v": "0"
+        },
+        {
+          "v": "true"
+        },
+        {
+          "v": null
+        },
+        {
+          "v": "[]"
+        },
+        {
+          "v": "false"
+        },
+        {
+          "v": "false"
+        },
+        {
+          "v": "false"
+        },
+        {
+          "v": "true"
+        },
+        {
+          "v": "ST_GeometryCollection"
+        },
+        {
+          "v": "true"
+        }
+      ]
+    },
+    {
+      "f": [
+        {
+          "v": "18"
+        },
+        {
+          "v": "collection_empty_members_little"
+        },
+        {
+          "v": "GEOGRAPHY"
+        },
+        {
+          "v": "ARRAY<GEOGRAPHY>"
+        },
+        {
+          "v": "GEOGRAPHY"
+        },
+        {
+          "v": "false"
+        },
+        {
+          "v": "true"
+        },
+        {
+          "v": "ST_GeometryCollection"
+        },
+        {
+          "v": "GEOMETRYCOLLECTION EMPTY"
+        },
+        {
+          "v": "true"
+        },
+        {
+          "v": "false"
+        },
+        {
+          "v": "0"
+        },
+        {
+          "v": "true"
+        },
+        {
+          "v": null
+        },
+        {
+          "v": "[]"
+        },
+        {
+          "v": "false"
+        },
+        {
+          "v": "false"
+        },
+        {
+          "v": "false"
+        },
+        {
+          "v": "true"
+        },
+        {
+          "v": "ST_GeometryCollection"
+        },
+        {
+          "v": "true"
+        }
+      ]
+    },
+    {
+      "f": [
+        {
+          "v": "19"
+        },
+        {
+          "v": "point_nonempty_big"
+        },
+        {
+          "v": "GEOGRAPHY"
+        },
+        {
+          "v": "ARRAY<GEOGRAPHY>"
+        },
+        {
+          "v": "GEOGRAPHY"
+        },
+        {
+          "v": "false"
+        },
+        {
+          "v": "false"
+        },
+        {
+          "v": "ST_Point"
+        },
+        {
+          "v": "POINT(1 2)"
+        },
+        {
+          "v": "true"
+        },
+        {
+          "v": "false"
+        },
+        {
+          "v": "0"
+        },
+        {
+          "v": "true"
+        },
+        {
+          "v": null
+        },
+        {
+          "v": "[]"
+        },
+        {
+          "v": "false"
+        },
+        {
+          "v": "false"
+        },
+        {
+          "v": "false"
+        },
+        {
+          "v": "false"
+        },
+        {
+          "v": "ST_Point"
+        },
+        {
+          "v": "true"
+        }
+      ]
+    },
+    {
+      "f": [
+        {
+          "v": "20"
+        },
+        {
+          "v": "point_empty_big"
+        },
+        {
+          "v": "GEOGRAPHY"
+        },
+        {
+          "v": "ARRAY<GEOGRAPHY>"
+        },
+        {
+          "v": "GEOGRAPHY"
+        },
+        {
+          "v": "false"
+        },
+        {
+          "v": "true"
+        },
+        {
+          "v": "ST_GeometryCollection"
+        },
+        {
+          "v": "GEOMETRYCOLLECTION EMPTY"
+        },
+        {
+          "v": "true"
+        },
+        {
+          "v": "false"
+        },
+        {
+          "v": "0"
+        },
+        {
+          "v": "true"
+        },
+        {
+          "v": null
+        },
+        {
+          "v": "[]"
+        },
+        {
+          "v": "false"
+        },
+        {
+          "v": "false"
+        },
+        {
+          "v": "false"
+        },
+        {
+          "v": "true"
+        },
+        {
+          "v": "ST_GeometryCollection"
+        },
+        {
+          "v": "true"
+        }
+      ]
+    },
+    {
+      "f": [
+        {
+          "v": "21"
+        },
+        {
+          "v": "linestring_nonempty_big"
+        },
+        {
+          "v": "GEOGRAPHY"
+        },
+        {
+          "v": "ARRAY<GEOGRAPHY>"
+        },
+        {
+          "v": "GEOGRAPHY"
+        },
+        {
+          "v": "false"
+        },
+        {
+          "v": "false"
+        },
+        {
+          "v": "ST_LineString"
+        },
+        {
+          "v": "LINESTRING(0 0, 1 1, 2 1)"
+        },
+        {
+          "v": "true"
+        },
+        {
+          "v": "false"
+        },
+        {
+          "v": "0"
+        },
+        {
+          "v": "true"
+        },
+        {
+          "v": null
+        },
+        {
+          "v": "[]"
+        },
+        {
+          "v": "false"
+        },
+        {
+          "v": "false"
+        },
+        {
+          "v": "false"
+        },
+        {
+          "v": "false"
+        },
+        {
+          "v": "ST_LineString"
+        },
+        {
+          "v": "true"
+        }
+      ]
+    },
+    {
+      "f": [
+        {
+          "v": "22"
+        },
+        {
+          "v": "linestring_empty_big"
+        },
+        {
+          "v": "GEOGRAPHY"
+        },
+        {
+          "v": "ARRAY<GEOGRAPHY>"
+        },
+        {
+          "v": "GEOGRAPHY"
+        },
+        {
+          "v": "false"
+        },
+        {
+          "v": "true"
+        },
+        {
+          "v": "ST_GeometryCollection"
+        },
+        {
+          "v": "GEOMETRYCOLLECTION EMPTY"
+        },
+        {
+          "v": "true"
+        },
+        {
+          "v": "false"
+        },
+        {
+          "v": "0"
+        },
+        {
+          "v": "true"
+        },
+        {
+          "v": null
+        },
+        {
+          "v": "[]"
+        },
+        {
+          "v": "false"
+        },
+        {
+          "v": "false"
+        },
+        {
+          "v": "false"
+        },
+        {
+          "v": "true"
+        },
+        {
+          "v": "ST_GeometryCollection"
+        },
+        {
+          "v": "true"
+        }
+      ]
+    },
+    {
+      "f": [
+        {
+          "v": "23"
+        },
+        {
+          "v": "polygon_nonempty_big"
+        },
+        {
+          "v": "GEOGRAPHY"
+        },
+        {
+          "v": "ARRAY<GEOGRAPHY>"
+        },
+        {
+          "v": "GEOGRAPHY"
+        },
+        {
+          "v": "false"
+        },
+        {
+          "v": "false"
+        },
+        {
+          "v": "ST_Polygon"
+        },
+        {
+          "v": "POLYGON((0 0, 4 0, 4 4, 0 4, 0 0), (1 1, 1 2, 2 2, 2 1, 1 1))"
+        },
+        {
+          "v": "true"
+        },
+        {
+          "v": "false"
+        },
+        {
+          "v": "0"
+        },
+        {
+          "v": "true"
+        },
+        {
+          "v": null
+        },
+        {
+          "v": "[]"
+        },
+        {
+          "v": "false"
+        },
+        {
+          "v": "false"
+        },
+        {
+          "v": "false"
+        },
+        {
+          "v": "false"
+        },
+        {
+          "v": "ST_Polygon"
+        },
+        {
+          "v": "true"
+        }
+      ]
+    },
+    {
+      "f": [
+        {
+          "v": "24"
+        },
+        {
+          "v": "polygon_empty_big"
+        },
+        {
+          "v": "GEOGRAPHY"
+        },
+        {
+          "v": "ARRAY<GEOGRAPHY>"
+        },
+        {
+          "v": "GEOGRAPHY"
+        },
+        {
+          "v": "false"
+        },
+        {
+          "v": "true"
+        },
+        {
+          "v": "ST_GeometryCollection"
+        },
+        {
+          "v": "GEOMETRYCOLLECTION EMPTY"
+        },
+        {
+          "v": "true"
+        },
+        {
+          "v": "false"
+        },
+        {
+          "v": "0"
+        },
+        {
+          "v": "true"
+        },
+        {
+          "v": null
+        },
+        {
+          "v": "[]"
+        },
+        {
+          "v": "false"
+        },
+        {
+          "v": "false"
+        },
+        {
+          "v": "false"
+        },
+        {
+          "v": "true"
+        },
+        {
+          "v": "ST_GeometryCollection"
+        },
+        {
+          "v": "true"
+        }
+      ]
+    },
+    {
+      "f": [
+        {
+          "v": "25"
+        },
+        {
+          "v": "multipoint_nonempty_big"
+        },
+        {
+          "v": "GEOGRAPHY"
+        },
+        {
+          "v": "ARRAY<GEOGRAPHY>"
+        },
+        {
+          "v": "GEOGRAPHY"
+        },
+        {
+          "v": "false"
+        },
+        {
+          "v": "false"
+        },
+        {
+          "v": "ST_MultiPoint"
+        },
+        {
+          "v": "MULTIPOINT(1 2, 3 4)"
+        },
+        {
+          "v": "true"
+        },
+        {
+          "v": "false"
+        },
+        {
+          "v": "0"
+        },
+        {
+          "v": "true"
+        },
+        {
+          "v": null
+        },
+        {
+          "v": "[]"
+        },
+        {
+          "v": "false"
+        },
+        {
+          "v": "false"
+        },
+        {
+          "v": "false"
+        },
+        {
+          "v": "false"
+        },
+        {
+          "v": "ST_MultiPoint"
+        },
+        {
+          "v": "true"
+        }
+      ]
+    },
+    {
+      "f": [
+        {
+          "v": "26"
+        },
+        {
+          "v": "multipoint_empty_big"
+        },
+        {
+          "v": "GEOGRAPHY"
+        },
+        {
+          "v": "ARRAY<GEOGRAPHY>"
+        },
+        {
+          "v": "GEOGRAPHY"
+        },
+        {
+          "v": "false"
+        },
+        {
+          "v": "true"
+        },
+        {
+          "v": "ST_GeometryCollection"
+        },
+        {
+          "v": "GEOMETRYCOLLECTION EMPTY"
+        },
+        {
+          "v": "true"
+        },
+        {
+          "v": "false"
+        },
+        {
+          "v": "0"
+        },
+        {
+          "v": "true"
+        },
+        {
+          "v": null
+        },
+        {
+          "v": "[]"
+        },
+        {
+          "v": "false"
+        },
+        {
+          "v": "false"
+        },
+        {
+          "v": "false"
+        },
+        {
+          "v": "true"
+        },
+        {
+          "v": "ST_GeometryCollection"
+        },
+        {
+          "v": "true"
+        }
+      ]
+    },
+    {
+      "f": [
+        {
+          "v": "27"
+        },
+        {
+          "v": "multilinestring_nonempty_big"
+        },
+        {
+          "v": "GEOGRAPHY"
+        },
+        {
+          "v": "ARRAY<GEOGRAPHY>"
+        },
+        {
+          "v": "GEOGRAPHY"
+        },
+        {
+          "v": "false"
+        },
+        {
+          "v": "false"
+        },
+        {
+          "v": "ST_MultiLineString"
+        },
+        {
+          "v": "MULTILINESTRING((0 0, 1 1, 2 1), (10 10, 11 11))"
+        },
+        {
+          "v": "true"
+        },
+        {
+          "v": "false"
+        },
+        {
+          "v": "0"
+        },
+        {
+          "v": "true"
+        },
+        {
+          "v": null
+        },
+        {
+          "v": "[]"
+        },
+        {
+          "v": "false"
+        },
+        {
+          "v": "false"
+        },
+        {
+          "v": "false"
+        },
+        {
+          "v": "false"
+        },
+        {
+          "v": "ST_MultiLineString"
+        },
+        {
+          "v": "true"
+        }
+      ]
+    },
+    {
+      "f": [
+        {
+          "v": "28"
+        },
+        {
+          "v": "multilinestring_empty_big"
+        },
+        {
+          "v": "GEOGRAPHY"
+        },
+        {
+          "v": "ARRAY<GEOGRAPHY>"
+        },
+        {
+          "v": "GEOGRAPHY"
+        },
+        {
+          "v": "false"
+        },
+        {
+          "v": "true"
+        },
+        {
+          "v": "ST_GeometryCollection"
+        },
+        {
+          "v": "GEOMETRYCOLLECTION EMPTY"
+        },
+        {
+          "v": "true"
+        },
+        {
+          "v": "false"
+        },
+        {
+          "v": "0"
+        },
+        {
+          "v": "true"
+        },
+        {
+          "v": null
+        },
+        {
+          "v": "[]"
+        },
+        {
+          "v": "false"
+        },
+        {
+          "v": "false"
+        },
+        {
+          "v": "false"
+        },
+        {
+          "v": "true"
+        },
+        {
+          "v": "ST_GeometryCollection"
+        },
+        {
+          "v": "true"
+        }
+      ]
+    },
+    {
+      "f": [
+        {
+          "v": "29"
+        },
+        {
+          "v": "multipolygon_nonempty_big"
+        },
+        {
+          "v": "GEOGRAPHY"
+        },
+        {
+          "v": "ARRAY<GEOGRAPHY>"
+        },
+        {
+          "v": "GEOGRAPHY"
+        },
+        {
+          "v": "false"
+        },
+        {
+          "v": "false"
+        },
+        {
+          "v": "ST_MultiPolygon"
+        },
+        {
+          "v": "MULTIPOLYGON(((10 10, 12 10, 12 12, 10 12, 10 10)), ((0 0, 4 0, 4 4, 0 4, 0 0), (1 1, 1 2, 2 2, 2 1, 1 1)))"
+        },
+        {
+          "v": "true"
+        },
+        {
+          "v": "false"
+        },
+        {
+          "v": "0"
+        },
+        {
+          "v": "true"
+        },
+        {
+          "v": null
+        },
+        {
+          "v": "[]"
+        },
+        {
+          "v": "false"
+        },
+        {
+          "v": "false"
+        },
+        {
+          "v": "false"
+        },
+        {
+          "v": "false"
+        },
+        {
+          "v": "ST_MultiPolygon"
+        },
+        {
+          "v": "true"
+        }
+      ]
+    },
+    {
+      "f": [
+        {
+          "v": "30"
+        },
+        {
+          "v": "multipolygon_empty_big"
+        },
+        {
+          "v": "GEOGRAPHY"
+        },
+        {
+          "v": "ARRAY<GEOGRAPHY>"
+        },
+        {
+          "v": "GEOGRAPHY"
+        },
+        {
+          "v": "false"
+        },
+        {
+          "v": "true"
+        },
+        {
+          "v": "ST_GeometryCollection"
+        },
+        {
+          "v": "GEOMETRYCOLLECTION EMPTY"
+        },
+        {
+          "v": "true"
+        },
+        {
+          "v": "false"
+        },
+        {
+          "v": "0"
+        },
+        {
+          "v": "true"
+        },
+        {
+          "v": null
+        },
+        {
+          "v": "[]"
+        },
+        {
+          "v": "false"
+        },
+        {
+          "v": "false"
+        },
+        {
+          "v": "false"
+        },
+        {
+          "v": "true"
+        },
+        {
+          "v": "ST_GeometryCollection"
+        },
+        {
+          "v": "true"
+        }
+      ]
+    },
+    {
+      "f": [
+        {
+          "v": "31"
+        },
+        {
+          "v": "geometrycollection_nonempty_big"
+        },
+        {
+          "v": "GEOGRAPHY"
+        },
+        {
+          "v": "ARRAY<GEOGRAPHY>"
+        },
+        {
+          "v": "GEOGRAPHY"
+        },
+        {
+          "v": "false"
+        },
+        {
+          "v": "false"
+        },
+        {
+          "v": "ST_Polygon"
+        },
+        {
+          "v": "POLYGON((0 0, 4 0, 4 4, 0 4, 0 0), (1 1, 1 2, 2 2, 2 1, 1 1))"
+        },
+        {
+          "v": "true"
+        },
+        {
+          "v": "false"
+        },
+        {
+          "v": "0"
+        },
+        {
+          "v": "true"
+        },
+        {
+          "v": null
+        },
+        {
+          "v": "[]"
+        },
+        {
+          "v": "false"
+        },
+        {
+          "v": "false"
+        },
+        {
+          "v": "false"
+        },
+        {
+          "v": "false"
+        },
+        {
+          "v": "ST_Polygon"
+        },
+        {
+          "v": "true"
+        }
+      ]
+    },
+    {
+      "f": [
+        {
+          "v": "32"
+        },
+        {
+          "v": "geometrycollection_empty_big"
+        },
+        {
+          "v": "GEOGRAPHY"
+        },
+        {
+          "v": "ARRAY<GEOGRAPHY>"
+        },
+        {
+          "v": "GEOGRAPHY"
+        },
+        {
+          "v": "false"
+        },
+        {
+          "v": "true"
+        },
+        {
+          "v": "ST_GeometryCollection"
+        },
+        {
+          "v": "GEOMETRYCOLLECTION EMPTY"
+        },
+        {
+          "v": "true"
+        },
+        {
+          "v": "false"
+        },
+        {
+          "v": "0"
+        },
+        {
+          "v": "true"
+        },
+        {
+          "v": null
+        },
+        {
+          "v": "[]"
+        },
+        {
+          "v": "false"
+        },
+        {
+          "v": "false"
+        },
+        {
+          "v": "false"
+        },
+        {
+          "v": "true"
+        },
+        {
+          "v": "ST_GeometryCollection"
+        },
+        {
+          "v": "true"
+        }
+      ]
+    },
+    {
+      "f": [
+        {
+          "v": "33"
+        },
+        {
+          "v": "multipoint_empty_members_big"
+        },
+        {
+          "v": "GEOGRAPHY"
+        },
+        {
+          "v": "ARRAY<GEOGRAPHY>"
+        },
+        {
+          "v": "GEOGRAPHY"
+        },
+        {
+          "v": "false"
+        },
+        {
+          "v": "true"
+        },
+        {
+          "v": "ST_GeometryCollection"
+        },
+        {
+          "v": "GEOMETRYCOLLECTION EMPTY"
+        },
+        {
+          "v": "true"
+        },
+        {
+          "v": "false"
+        },
+        {
+          "v": "0"
+        },
+        {
+          "v": "true"
+        },
+        {
+          "v": null
+        },
+        {
+          "v": "[]"
+        },
+        {
+          "v": "false"
+        },
+        {
+          "v": "false"
+        },
+        {
+          "v": "false"
+        },
+        {
+          "v": "true"
+        },
+        {
+          "v": "ST_GeometryCollection"
+        },
+        {
+          "v": "true"
+        }
+      ]
+    },
+    {
+      "f": [
+        {
+          "v": "34"
+        },
+        {
+          "v": "multilinestring_empty_members_big"
+        },
+        {
+          "v": "GEOGRAPHY"
+        },
+        {
+          "v": "ARRAY<GEOGRAPHY>"
+        },
+        {
+          "v": "GEOGRAPHY"
+        },
+        {
+          "v": "false"
+        },
+        {
+          "v": "true"
+        },
+        {
+          "v": "ST_GeometryCollection"
+        },
+        {
+          "v": "GEOMETRYCOLLECTION EMPTY"
+        },
+        {
+          "v": "true"
+        },
+        {
+          "v": "false"
+        },
+        {
+          "v": "0"
+        },
+        {
+          "v": "true"
+        },
+        {
+          "v": null
+        },
+        {
+          "v": "[]"
+        },
+        {
+          "v": "false"
+        },
+        {
+          "v": "false"
+        },
+        {
+          "v": "false"
+        },
+        {
+          "v": "true"
+        },
+        {
+          "v": "ST_GeometryCollection"
+        },
+        {
+          "v": "true"
+        }
+      ]
+    },
+    {
+      "f": [
+        {
+          "v": "35"
+        },
+        {
+          "v": "multipolygon_empty_members_big"
+        },
+        {
+          "v": "GEOGRAPHY"
+        },
+        {
+          "v": "ARRAY<GEOGRAPHY>"
+        },
+        {
+          "v": "GEOGRAPHY"
+        },
+        {
+          "v": "false"
+        },
+        {
+          "v": "true"
+        },
+        {
+          "v": "ST_GeometryCollection"
+        },
+        {
+          "v": "GEOMETRYCOLLECTION EMPTY"
+        },
+        {
+          "v": "true"
+        },
+        {
+          "v": "false"
+        },
+        {
+          "v": "0"
+        },
+        {
+          "v": "true"
+        },
+        {
+          "v": null
+        },
+        {
+          "v": "[]"
+        },
+        {
+          "v": "false"
+        },
+        {
+          "v": "false"
+        },
+        {
+          "v": "false"
+        },
+        {
+          "v": "true"
+        },
+        {
+          "v": "ST_GeometryCollection"
+        },
+        {
+          "v": "true"
+        }
+      ]
+    },
+    {
+      "f": [
+        {
+          "v": "36"
+        },
+        {
+          "v": "collection_empty_members_big"
+        },
+        {
+          "v": "GEOGRAPHY"
+        },
+        {
+          "v": "ARRAY<GEOGRAPHY>"
+        },
+        {
+          "v": "GEOGRAPHY"
+        },
+        {
+          "v": "false"
+        },
+        {
+          "v": "true"
+        },
+        {
+          "v": "ST_GeometryCollection"
+        },
+        {
+          "v": "GEOMETRYCOLLECTION EMPTY"
+        },
+        {
+          "v": "true"
+        },
+        {
+          "v": "false"
+        },
+        {
+          "v": "0"
+        },
+        {
+          "v": "true"
+        },
+        {
+          "v": null
+        },
+        {
+          "v": "[]"
+        },
+        {
+          "v": "false"
+        },
+        {
+          "v": "false"
+        },
+        {
+          "v": "false"
+        },
+        {
+          "v": "true"
+        },
+        {
+          "v": "ST_GeometryCollection"
+        },
+        {
+          "v": "true"
+        }
+      ]
+    },
+    {
+      "f": [
+        {
+          "v": "37"
+        },
+        {
+          "v": "sql_null"
+        },
+        {
+          "v": "GEOGRAPHY"
+        },
+        {
+          "v": "ARRAY<GEOGRAPHY>"
+        },
+        {
+          "v": "GEOGRAPHY"
+        },
+        {
+          "v": "true"
+        },
+        {
+          "v": null
+        },
+        {
+          "v": null
+        },
+        {
+          "v": null
+        },
+        {
+          "v": "true"
+        },
+        {
+          "v": "false"
+        },
+        {
+          "v": "0"
+        },
+        {
+          "v": "true"
+        },
+        {
+          "v": null
+        },
+        {
+          "v": "[]"
+        },
+        {
+          "v": "true"
+        },
+        {
+          "v": "true"
+        },
+        {
+          "v": "true"
+        },
+        {
+          "v": null
+        },
+        {
+          "v": null
+        },
+        {
+          "v": "true"
+        }
+      ]
+    },
+    {
+      "f": [
+        {
+          "v": "38"
+        },
+        {
+          "v": "array_points"
+        },
+        {
+          "v": "GEOGRAPHY"
+        },
+        {
+          "v": "ARRAY<GEOGRAPHY>"
+        },
+        {
+          "v": "GEOGRAPHY"
+        },
+        {
+          "v": "false"
+        },
+        {
+          "v": "false"
+        },
+        {
+          "v": "ST_MultiPolygon"
+        },
+        {
+          "v": "MULTIPOLYGON(((10 10, 12 10, 12 12, 10 12, 10 10)), ((0 0, 4 0, 4 4, 0 4, 0 0), (1 1, 1 2, 2 2, 2 1, 1 1)))"
+        },
+        {
+          "v": "true"
+        },
+        {
+          "v": "false"
+        },
+        {
+          "v": "2"
+        },
+        {
+          "v": "false"
+        },
+        {
+          "v": "2"
+        },
+        {
+          "v": "[{\"position\":0,\"is_null\":false,\"is_empty\":false,\"shape\":\"ST_Point\",\"wkt\":\"POINT(1 2)\",\"content_matches\":true},{\"position\":1,\"is_null\":false,\"is_empty\":false,\"shape\":\"ST_Point\",\"wkt\":\"POINT(3 4)\",\"content_matches\":true}]"
+        },
+        {
+          "v": "false"
+        },
+        {
+          "v": "false"
+        },
+        {
+          "v": "false"
+        },
+        {
+          "v": "false"
+        },
+        {
+          "v": "ST_MultiPolygon"
+        },
+        {
+          "v": "true"
+        }
+      ]
+    },
+    {
+      "f": [
+        {
+          "v": "39"
+        },
+        {
+          "v": "array_polygons"
+        },
+        {
+          "v": "GEOGRAPHY"
+        },
+        {
+          "v": "ARRAY<GEOGRAPHY>"
+        },
+        {
+          "v": "GEOGRAPHY"
+        },
+        {
+          "v": "false"
+        },
+        {
+          "v": "false"
+        },
+        {
+          "v": "ST_MultiPolygon"
+        },
+        {
+          "v": "MULTIPOLYGON(((10 10, 12 10, 12 12, 10 12, 10 10)), ((0 0, 4 0, 4 4, 0 4, 0 0), (1 1, 1 2, 2 2, 2 1, 1 1)))"
+        },
+        {
+          "v": "true"
+        },
+        {
+          "v": "false"
+        },
+        {
+          "v": "2"
+        },
+        {
+          "v": "false"
+        },
+        {
+          "v": "2"
+        },
+        {
+          "v": "[{\"position\":0,\"is_null\":false,\"is_empty\":false,\"shape\":\"ST_Polygon\",\"wkt\":\"POLYGON((0 0, 4 0, 4 4, 0 4, 0 0), (1 1, 1 2, 2 2, 2 1, 1 1))\",\"content_matches\":true},{\"position\":1,\"is_null\":false,\"is_empty\":false,\"shape\":\"ST_Polygon\",\"wkt\":\"POLYGON((10 10, 12 10, 12 12, 10 12, 10 10))\",\"content_matches\":true}]"
+        },
+        {
+          "v": "false"
+        },
+        {
+          "v": "false"
+        },
+        {
+          "v": "false"
+        },
+        {
+          "v": "false"
+        },
+        {
+          "v": "ST_MultiPolygon"
+        },
+        {
+          "v": "true"
+        }
+      ]
+    },
+    {
+      "f": [
+        {
+          "v": "40"
+        },
+        {
+          "v": "array_multipolygons"
+        },
+        {
+          "v": "GEOGRAPHY"
+        },
+        {
+          "v": "ARRAY<GEOGRAPHY>"
+        },
+        {
+          "v": "GEOGRAPHY"
+        },
+        {
+          "v": "false"
+        },
+        {
+          "v": "false"
+        },
+        {
+          "v": "ST_MultiPolygon"
+        },
+        {
+          "v": "MULTIPOLYGON(((10 10, 12 10, 12 12, 10 12, 10 10)), ((0 0, 4 0, 4 4, 0 4, 0 0), (1 1, 1 2, 2 2, 2 1, 1 1)))"
+        },
+        {
+          "v": "true"
+        },
+        {
+          "v": "false"
+        },
+        {
+          "v": "2"
+        },
+        {
+          "v": "false"
+        },
+        {
+          "v": "2"
+        },
+        {
+          "v": "[{\"position\":0,\"is_null\":false,\"is_empty\":false,\"shape\":\"ST_MultiPolygon\",\"wkt\":\"MULTIPOLYGON(((10 10, 12 10, 12 12, 10 12, 10 10)), ((0 0, 4 0, 4 4, 0 4, 0 0), (1 1, 1 2, 2 2, 2 1, 1 1)))\",\"content_matches\":true},{\"position\":1,\"is_null\":false,\"is_empty\":false,\"shape\":\"ST_MultiPolygon\",\"wkt\":\"MULTIPOLYGON(((10 10, 12 10, 12 12, 10 12, 10 10)), ((0 0, 4 0, 4 4, 0 4, 0 0), (1 1, 1 2, 2 2, 2 1, 1 1)))\",\"content_matches\":true}]"
+        },
+        {
+          "v": "false"
+        },
+        {
+          "v": "false"
+        },
+        {
+          "v": "false"
+        },
+        {
+          "v": "false"
+        },
+        {
+          "v": "ST_MultiPolygon"
+        },
+        {
+          "v": "true"
+        }
+      ]
+    },
+    {
+      "f": [
+        {
+          "v": "41"
+        },
+        {
+          "v": "array_mixed_shapes"
+        },
+        {
+          "v": "GEOGRAPHY"
+        },
+        {
+          "v": "ARRAY<GEOGRAPHY>"
+        },
+        {
+          "v": "GEOGRAPHY"
+        },
+        {
+          "v": "false"
+        },
+        {
+          "v": "false"
+        },
+        {
+          "v": "ST_MultiPolygon"
+        },
+        {
+          "v": "MULTIPOLYGON(((10 10, 12 10, 12 12, 10 12, 10 10)), ((0 0, 4 0, 4 4, 0 4, 0 0), (1 1, 1 2, 2 2, 2 1, 1 1)))"
+        },
+        {
+          "v": "true"
+        },
+        {
+          "v": "false"
+        },
+        {
+          "v": "3"
+        },
+        {
+          "v": "false"
+        },
+        {
+          "v": "3"
+        },
+        {
+          "v": "[{\"position\":0,\"is_null\":false,\"is_empty\":false,\"shape\":\"ST_Point\",\"wkt\":\"POINT(1 2)\",\"content_matches\":true},{\"position\":1,\"is_null\":false,\"is_empty\":false,\"shape\":\"ST_Polygon\",\"wkt\":\"POLYGON((0 0, 4 0, 4 4, 0 4, 0 0), (1 1, 1 2, 2 2, 2 1, 1 1))\",\"content_matches\":true},{\"position\":2,\"is_null\":false,\"is_empty\":false,\"shape\":\"ST_MultiPolygon\",\"wkt\":\"MULTIPOLYGON(((10 10, 12 10, 12 12, 10 12, 10 10)), ((0 0, 4 0, 4 4, 0 4, 0 0), (1 1, 1 2, 2 2, 2 1, 1 1)))\",\"content_matches\":true}]"
+        },
+        {
+          "v": "false"
+        },
+        {
+          "v": "false"
+        },
+        {
+          "v": "false"
+        },
+        {
+          "v": "false"
+        },
+        {
+          "v": "ST_MultiPolygon"
+        },
+        {
+          "v": "true"
+        }
+      ]
+    },
+    {
+      "f": [
+        {
+          "v": "42"
+        },
+        {
+          "v": "array_empty"
+        },
+        {
+          "v": "GEOGRAPHY"
+        },
+        {
+          "v": "ARRAY<GEOGRAPHY>"
+        },
+        {
+          "v": "GEOGRAPHY"
+        },
+        {
+          "v": "false"
+        },
+        {
+          "v": "false"
+        },
+        {
+          "v": "ST_Point"
+        },
+        {
+          "v": "POINT(1 2)"
+        },
+        {
+          "v": "true"
+        },
+        {
+          "v": "false"
+        },
+        {
+          "v": "0"
+        },
+        {
+          "v": "false"
+        },
+        {
+          "v": "0"
+        },
+        {
+          "v": "[]"
+        },
+        {
+          "v": "false"
+        },
+        {
+          "v": "false"
+        },
+        {
+          "v": "false"
+        },
+        {
+          "v": "false"
+        },
+        {
+          "v": "ST_Point"
+        },
+        {
+          "v": "true"
+        }
+      ]
+    },
+    {
+      "f": [
+        {
+          "v": "43"
+        },
+        {
+          "v": "array_null"
+        },
+        {
+          "v": "GEOGRAPHY"
+        },
+        {
+          "v": "ARRAY<GEOGRAPHY>"
+        },
+        {
+          "v": "GEOGRAPHY"
+        },
+        {
+          "v": "false"
+        },
+        {
+          "v": "false"
+        },
+        {
+          "v": "ST_Point"
+        },
+        {
+          "v": "POINT(1 2)"
+        },
+        {
+          "v": "true"
+        },
+        {
+          "v": "false"
+        },
+        {
+          "v": "0"
+        },
+        {
+          "v": "true"
+        },
+        {
+          "v": null
+        },
+        {
+          "v": "[]"
+        },
+        {
+          "v": "false"
+        },
+        {
+          "v": "false"
+        },
+        {
+          "v": "false"
+        },
+        {
+          "v": "false"
+        },
+        {
+          "v": "ST_Point"
+        },
+        {
+          "v": "true"
+        }
+      ]
+    },
+    {
+      "f": [
+        {
+          "v": "44"
+        },
+        {
+          "v": "array_null_element"
+        },
+        {
+          "v": "GEOGRAPHY"
+        },
+        {
+          "v": "ARRAY<GEOGRAPHY>"
+        },
+        {
+          "v": "GEOGRAPHY"
+        },
+        {
+          "v": "false"
+        },
+        {
+          "v": "false"
+        },
+        {
+          "v": "ST_Point"
+        },
+        {
+          "v": "POINT(1 2)"
+        },
+        {
+          "v": "true"
+        },
+        {
+          "v": "false"
+        },
+        {
+          "v": "1"
+        },
+        {
+          "v": "false"
+        },
+        {
+          "v": "1"
+        },
+        {
+          "v": "[{\"position\":0,\"is_null\":true,\"is_empty\":null,\"shape\":null,\"wkt\":null,\"content_matches\":true}]"
+        },
+        {
+          "v": "false"
+        },
+        {
+          "v": "false"
+        },
+        {
+          "v": "false"
+        },
+        {
+          "v": "false"
+        },
+        {
+          "v": "ST_Point"
+        },
+        {
+          "v": "true"
+        }
+      ]
+    },
+    {
+      "f": [
+        {
+          "v": "45"
+        },
+        {
+          "v": "array_values_and_null"
+        },
+        {
+          "v": "GEOGRAPHY"
+        },
+        {
+          "v": "ARRAY<GEOGRAPHY>"
+        },
+        {
+          "v": "GEOGRAPHY"
+        },
+        {
+          "v": "false"
+        },
+        {
+          "v": "false"
+        },
+        {
+          "v": "ST_Polygon"
+        },
+        {
+          "v": "POLYGON((0 0, 4 0, 4 4, 0 4, 0 0), (1 1, 1 2, 2 2, 2 1, 1 1))"
+        },
+        {
+          "v": "true"
+        },
+        {
+          "v": "false"
+        },
+        {
+          "v": "4"
+        },
+        {
+          "v": "false"
+        },
+        {
+          "v": "4"
+        },
+        {
+          "v": "[{\"position\":0,\"is_null\":false,\"is_empty\":false,\"shape\":\"ST_Point\",\"wkt\":\"POINT(1 2)\",\"content_matches\":true},{\"position\":1,\"is_null\":true,\"is_empty\":null,\"shape\":null,\"wkt\":null,\"content_matches\":true},{\"position\":2,\"is_null\":false,\"is_empty\":false,\"shape\":\"ST_Polygon\",\"wkt\":\"POLYGON((0 0, 4 0, 4 4, 0 4, 0 0), (1 1, 1 2, 2 2, 2 1, 1 1))\",\"content_matches\":true},{\"position\":3,\"is_null\":false,\"is_empty\":false,\"shape\":\"ST_MultiPolygon\",\"wkt\":\"MULTIPOLYGON(((10 10, 12 10, 12 12, 10 12, 10 10)), ((0 0, 4 0, 4 4, 0 4, 0 0), (1 1, 1 2, 2 2, 2 1, 1 1)))\",\"content_matches\":true}]"
+        },
+        {
+          "v": "false"
+        },
+        {
+          "v": "false"
+        },
+        {
+          "v": "false"
+        },
+        {
+          "v": "false"
+        },
+        {
+          "v": "ST_Polygon"
+        },
+        {
+          "v": "true"
+        }
+      ]
+    },
+    {
+      "f": [
+        {
+          "v": "46"
+        },
+        {
+          "v": "nested_row_null"
+        },
+        {
+          "v": "GEOGRAPHY"
+        },
+        {
+          "v": "ARRAY<GEOGRAPHY>"
+        },
+        {
+          "v": "GEOGRAPHY"
+        },
+        {
+          "v": "false"
+        },
+        {
+          "v": "false"
+        },
+        {
+          "v": "ST_Point"
+        },
+        {
+          "v": "POINT(1 2)"
+        },
+        {
+          "v": "true"
+        },
+        {
+          "v": "false"
+        },
+        {
+          "v": "0"
+        },
+        {
+          "v": "true"
+        },
+        {
+          "v": null
+        },
+        {
+          "v": "[]"
+        },
+        {
+          "v": "true"
+        },
+        {
+          "v": "true"
+        },
+        {
+          "v": "true"
+        },
+        {
+          "v": null
+        },
+        {
+          "v": null
+        },
+        {
+          "v": "true"
+        }
+      ]
+    },
+    {
+      "f": [
+        {
+          "v": "47"
+        },
+        {
+          "v": "nested_leaf_null"
+        },
+        {
+          "v": "GEOGRAPHY"
+        },
+        {
+          "v": "ARRAY<GEOGRAPHY>"
+        },
+        {
+          "v": "GEOGRAPHY"
+        },
+        {
+          "v": "false"
+        },
+        {
+          "v": "false"
+        },
+        {
+          "v": "ST_Point"
+        },
+        {
+          "v": "POINT(1 2)"
+        },
+        {
+          "v": "true"
+        },
+        {
+          "v": "false"
+        },
+        {
+          "v": "0"
+        },
+        {
+          "v": "true"
+        },
+        {
+          "v": null
+        },
+        {
+          "v": "[]"
+        },
+        {
+          "v": "false"
+        },
+        {
+          "v": "false"
+        },
+        {
+          "v": "true"
+        },
+        {
+          "v": null
+        },
+        {
+          "v": null
+        },
+        {
+          "v": "true"
+        }
+      ]
+    }
+  ],
+  "totalBytesProcessed": "13530",
+  "jobComplete": true,
+  "cacheHit": false,
+  "queryId": "job_O3-xGBBzZELH0RjcH5ikVvJqdi3h",
+  "jobCreationReason": {
+    "code": "REQUESTED"
+  },
+  "totalBytesBilled": "10485760",
+  "totalSlotMs": "411",
+  "location": "US",
+  "creationTime": "1795445796852",
+  "startTime": "1795445797605",
+  "endTime": "1795445798662",
+  "pageRowCount": "47",
+  "statementType": "SELECT"
+}

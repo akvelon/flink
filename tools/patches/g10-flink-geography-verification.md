@@ -18,6 +18,11 @@ limitations under the License.
 
 # G10 Flink geography accessors
 
+Historical run. [G11](g11/README.md) retains the accessors, replaces the custom
+Calcite dependency with released 1.41.0 plus source overrides, and records a
+separate 47-row Iceberg/BigQuery verification. The 19-row results below belong
+only to G10.
+
 This backport adds the Calcite G10 structural accessors from commit
 `7bb90db72` in [Calcite PR #1](https://github.com/akvelon/calcite/pull/1).
 Flink resolves the resulting Calcite snapshot as `1.41.0-g10-SNAPSHOT`.

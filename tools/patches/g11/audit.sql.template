@@ -1,0 +1,60 @@
+-- Licensed to the Apache Software Foundation (ASF) under one
+-- or more contributor license agreements. See the NOTICE file
+-- distributed with this work for additional information
+-- regarding copyright ownership. The ASF licenses this file
+-- to you under the Apache License, Version 2.0 (the
+-- "License"); you may not use this file except in compliance
+-- with the License. You may obtain a copy of the License at
+--
+--     http://www.apache.org/licenses/LICENSE-2.0
+--
+-- Unless required by applicable law or agreed to in writing, software
+-- distributed under the License is distributed on an "AS IS" BASIS,
+-- WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+-- See the License for the specific language governing permissions and
+-- limitations under the License.
+
+WITH expected AS (
+  SELECT CAST(JSON_VALUE(item, '$.id') AS INT64) AS id,
+         JSON_VALUE(item, '$.geo_wkb') AS geo_wkb,
+         JSON_QUERY_ARRAY(item, '$.geos_wkb') AS geos_wkb,
+         JSON_QUERY(item, '$.nested') AS nested_json,
+         JSON_VALUE(item, '$.nested.geo_wkb') AS nested_wkb
+  FROM UNNEST(JSON_QUERY_ARRAY(r'FIXTURES')) AS item
+)
+SELECT a.id, a.name, TYPEOF(a.geo) AS native_geo_type,
+       TYPEOF(a.geos) AS native_array_type,
+       TYPEOF(a.nested.geo) AS native_nested_geo_type,
+       a.geo IS NULL AS scalar_is_null,
+       ST_ISEMPTY(a.geo) AS scalar_is_empty,
+       ST_GEOMETRYTYPE(a.geo) AS scalar_shape,
+       ST_ASTEXT(a.geo) AS scalar_wkt,
+       CASE WHEN e.geo_wkb IS NULL THEN a.geo IS NULL
+            ELSE ST_EQUALS(a.geo, ST_GEOGFROMWKB(FROM_HEX(e.geo_wkb)))
+       END AS scalar_content_matches,
+       a.geos IS NULL AS array_is_null,
+       ARRAY_LENGTH(a.geos) AS array_length,
+       e.geos_wkb IS NULL AS expected_array_is_null,
+       ARRAY_LENGTH(e.geos_wkb) AS expected_array_length,
+       TO_JSON_STRING(ARRAY(
+         SELECT AS STRUCT position, g IS NULL AS is_null,
+                ST_ISEMPTY(g) AS is_empty, ST_GEOMETRYTYPE(g) AS shape,
+                ST_ASTEXT(g) AS wkt,
+                CASE WHEN JSON_VALUE(e.geos_wkb[SAFE_OFFSET(position)]) IS NULL
+                     THEN g IS NULL
+                     ELSE ST_EQUALS(g, ST_GEOGFROMWKB(FROM_HEX(
+                       JSON_VALUE(e.geos_wkb[SAFE_OFFSET(position)]))))
+                END AS content_matches
+         FROM UNNEST(a.geos) AS g WITH OFFSET AS position
+         ORDER BY position
+       )) AS array_values_json,
+       a.nested IS NULL AS nested_is_null,
+       e.nested_json IS NULL AS expected_nested_is_null,
+       a.nested.geo IS NULL AS nested_leaf_is_null,
+       ST_ISEMPTY(a.nested.geo) AS nested_leaf_is_empty,
+       ST_GEOMETRYTYPE(a.nested.geo) AS nested_leaf_shape,
+       CASE WHEN e.nested_wkb IS NULL THEN a.nested.geo IS NULL
+            ELSE ST_EQUALS(a.nested.geo, ST_GEOGFROMWKB(FROM_HEX(e.nested_wkb)))
+       END AS nested_content_matches
+FROM TABLE_NAME AS a JOIN expected AS e USING(id)
+ORDER BY a.id;

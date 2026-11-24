@@ -18,6 +18,10 @@ limitations under the License.
 
 # G08 Flink GEOGRAPHY verification
 
+Historical run. [G11](g11/README.md) replaces the custom Calcite dependency with
+source overrides on released Calcite 1.41.0 and records a separate 47-row native
+Iceberg/BigQuery verification. The results below belong only to G08.
+
 Internal Flink 2.5-SNAPSHOT was tested on Windows with JDK 21 and Parquet
 1.16.0. The build used a local Calcite 1.41.0 backport of G02–G07 from
 [akvelon/calcite#1](https://github.com/akvelon/calcite/pull/1), through

@@ -1050,20 +1050,6 @@ public abstract class SqlTypeUtil {
         return false;
     }
 
-    /** Returns whether a type is GEOGRAPHY or contains a GEOGRAPHY leaf. */
-    public static boolean containsGeography(RelDataType type) {
-        final RelDataType component = type.getComponentType();
-        final RelDataType key = type.getKeyType();
-        final RelDataType value = type.getValueType();
-        return type.getSqlTypeName() == SqlTypeName.GEOGRAPHY
-                || component != null && containsGeography(component)
-                || key != null && containsGeography(key)
-                || value != null && containsGeography(value)
-                || type.isStruct()
-                        && type.getFieldList().stream()
-                                .anyMatch(field -> containsGeography(field.getType()));
-    }
-
     /**
      * Compares two types and returns whether {@code fromType} can be cast to {@code toType}, using
      * either coercion or assignment.
@@ -1208,6 +1194,20 @@ public abstract class SqlTypeUtil {
             return false;
         }
         return typeMappingRule.canApplyFrom(toTypeName, fromTypeName);
+    }
+
+    /** Returns whether a type is GEOGRAPHY or contains a GEOGRAPHY leaf. */
+    public static boolean containsGeography(RelDataType type) {
+        final RelDataType componentType = type.getComponentType();
+        final RelDataType keyType = type.getKeyType();
+        final RelDataType valueType = type.getValueType();
+        return type.getSqlTypeName() == SqlTypeName.GEOGRAPHY
+                || componentType != null && containsGeography(componentType)
+                || keyType != null && containsGeography(keyType)
+                || valueType != null && containsGeography(valueType)
+                || type.isStruct()
+                        && type.getFieldList().stream()
+                                .anyMatch(field -> containsGeography(field.getType()));
     }
 
     /**
@@ -1381,7 +1381,9 @@ public abstract class SqlTypeUtil {
                     requireNonNull(type.getValueType(), () -> "valueType of " + type);
             final SqlDataTypeSpec keyTypeSpec = convertTypeToSpec(keyType);
             final SqlDataTypeSpec valueTypeSpec = convertTypeToSpec(valueType);
-            typeNameSpec = new SqlMapTypeNameSpec(keyTypeSpec, valueTypeSpec, SqlParserPos.ZERO);
+            typeNameSpec =
+                    new SqlMapTypeNameSpec(
+                            keyTypeSpec, valueTypeSpec, SqlParserPos.ZERO, containsGeography(type));
         } else {
             throw new UnsupportedOperationException(
                     "Unsupported type when convertTypeToSpec: " + typeName);
