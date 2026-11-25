@@ -18,6 +18,11 @@ limitations under the License.
 
 # G11 native geography cross-engine verification
 
+For the current Calcite review follow-up and new snapshot, see the
+[25 November verification](review-20261125/README.md). The results below are the
+historical 24 November run. Its original inventory is preserved at
+[commit c83957c9f87](https://github.com/akvelon/flink/blob/c83957c9f8736980c32339be853aeb78a579187b/tools/patches/g11/calcite-copy-inventory.json).
+
 Final verification on 2026-11-24: **47 fixtures passed Flink SQL → native Iceberg/Parquet
 in GCS → a fresh Flink session → native BigQuery Iceberg reads**. This result
 uses the two explicitly accepted BigQuery boundaries below. It does not certify
@@ -29,7 +34,7 @@ general BigQuery Iceberg geography support, arbitrary versions, or other paths.
 | --- | --- |
 | Flink | 2.5-SNAPSHOT; G11 integration `f8b962dc1cf51a53ba35556258fbf453f0974216` merged with target `d0102d7b1838a0da2f85cf878ce3202ecc3135ac`, internal [PR #25](https://github.com/akvelon/flink/pull/25) |
 | Calcite contribution | [apache/calcite#5427](https://github.com/apache/calcite/pull/5427), `da1cb15d5f366d2466b88de84fbf8950495d434b`, OPEN and unmerged when tested |
-| Calcite dependency | Released **1.41.0**, with 37 source/resource overrides listed in [the copy inventory](calcite-copy-inventory.json); no patched SNAPSHOT dependency |
+| Calcite dependency | Released **1.41.0**, with 37 source/resource overrides in [the historical copy inventory](https://github.com/akvelon/flink/blob/c83957c9f8736980c32339be853aeb78a579187b/tools/patches/g11/calcite-copy-inventory.json); no patched SNAPSHOT dependency |
 | Iceberg | [akvelon/iceberg#1](https://github.com/akvelon/iceberg/pull/1), `94de0342ff408d591bcdf872bdfd430f431629a6`; connector module `v2.1`, compiled against stock Flink 2.1.0, exercised with this Flink 2.5-SNAPSHOT |
 | Iceberg runtime artifact | `iceberg-flink-runtime-2.1-94de034.jar`, built locally from that worktree; build version `94de034`, not a released Iceberg version |
 | Parquet | Flink filesystem fixture reader/writer: 1.16.0; Iceberg shaded native table reader/writer: 1.17.1 |

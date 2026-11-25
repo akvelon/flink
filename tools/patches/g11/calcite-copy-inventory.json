@@ -1,14 +1,14 @@
 {
   "_license": "Licensed to the Apache Software Foundation (ASF) under one\nor more contributor license agreements. See the NOTICE file\ndistributed with this work for additional information\nregarding copyright ownership. The ASF licenses this file\nto you under the Apache License, Version 2.0 (the\n\"License\"); you may not use this file except in compliance\nwith the License. You may obtain a copy of the License at\nhttp://www.apache.org/licenses/LICENSE-2.0\nUnless required by applicable law or agreed to in writing, software\ndistributed under the License is distributed on an \"AS IS\" BASIS,\nWITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.\nSee the License for the specific language governing permissions and\nlimitations under the License.",
   "calcite_pr": "https://github.com/apache/calcite/pull/5427",
-  "calcite_commit": "da1cb15d5f366d2466b88de84fbf8950495d434b",
+  "calcite_commit": "f5728f797e8abd61ccf197db48c7dc1c5500dd44",
   "base_calcite": "1.41.0",
   "files": [
     {
       "calcite_source": "core/src/main/java/org/apache/calcite/adapter/enumerable/EnumUtils.java",
       "flink_destination": "flink-table/flink-table-planner/src/main/java/org/apache/calcite/adapter/enumerable/EnumUtils.java",
       "status": "copied new override",
-      "upstream_sha256": "e39d5a51f769597fc005f44e000782c1c6e95ebcd2b70ffcbc7f97ffb78a3f0c",
+      "upstream_sha256": "3d978a3c3efde10e8dd2fb54fd1cc6fb71c2e090f20effe48a25ead0e6fd806c",
       "flink_sha256": "94cb50ebc8d824866a7ba7338a6afd871bccfb4d4fc5a72115b80a9f5a672540",
       "initial_backport_sha256": "84188d4d7ae9b371adbada9061477e07486ab3c344ebc758e3b9e44cd97fd4f1"
     },
@@ -85,14 +85,6 @@
       "initial_backport_sha256": "9a065d4f9e7e96f582b97396673113433fd3bb5aa346f63be7ab4f415e5f62ed"
     },
     {
-      "calcite_source": "core/src/main/java/org/apache/calcite/rel/type/RelDataTypeFactoryImpl.java",
-      "flink_destination": "flink-table/flink-table-planner/src/main/java/org/apache/calcite/rel/type/RelDataTypeFactoryImpl.java",
-      "status": "merged after formatting normalization",
-      "upstream_sha256": "83d3bece9f58cb093b177ece44ebaf2764a33c35ab26d1c98a37d333f2ea3d1b",
-      "flink_sha256": "83e7e625b247a07b9a5a6261476fa1b547064215a85aac76ab6a37c01ed40304",
-      "initial_backport_sha256": "ac5f271812989c2747db76f5565002dd0037dabd6b51b84c2c86c43d567f0783"
-    },
-    {
       "calcite_source": "core/src/main/java/org/apache/calcite/rel/type/RelDataTypeImpl.java",
       "flink_destination": "flink-table/flink-table-planner/src/main/java/org/apache/calcite/rel/type/RelDataTypeImpl.java",
       "status": "copied new override",
@@ -120,7 +112,7 @@
       "calcite_source": "core/src/main/java/org/apache/calcite/runtime/CalciteResource.java",
       "flink_destination": "flink-table/flink-table-planner/src/main/java/org/apache/calcite/runtime/CalciteResource.java",
       "status": "copied new override",
-      "upstream_sha256": "f8b9b9ea2050cf43d39d15bedaad394e67944c3887e7cabbb8c8d4a379180d38",
+      "upstream_sha256": "3290fdf2911960a9c65647d56cbfdbc0f3ea4c57526dfef0d27eb89a81688584",
       "flink_sha256": "84d3d194dba9271210d2006225dc421117ecf85b0a9499ad0f0a0091962433ac",
       "initial_backport_sha256": "1b25be3d2299a190613bdf3a5e3e7c62e415d354604f87ae282c09ef0dd8227a"
     },
@@ -128,8 +120,8 @@
       "calcite_source": "core/src/main/java/org/apache/calcite/sql/SqlMapTypeNameSpec.java",
       "flink_destination": "flink-table/flink-table-planner/src/main/java/org/apache/calcite/sql/SqlMapTypeNameSpec.java",
       "status": "copied new override",
-      "upstream_sha256": "18a87733817b25b74d00c82d35aef4e8639e9679f6accbef0e4e9362c09b09ee",
-      "flink_sha256": "f8ee1a3da6095b1a32c8824a13584702ea479653fb7186983376e84efcea943f",
+      "upstream_sha256": "35a5836e7227419505e831657fd6306fd3b0f41e38c324e01acd98ceb3695ab1",
+      "flink_sha256": "08b6722c24b5d45b4d5f5139555d5d2517d6198781af03f8258d96d62a9c82ee",
       "initial_backport_sha256": "6c82d2e4cec5abbd9d9868df0723162ac2f63d151d1dfbaa35048bcd46a16c7a"
     },
     {
@@ -216,7 +208,7 @@
       "calcite_source": "core/src/main/java/org/apache/calcite/sql/type/SqlTypeUtil.java",
       "flink_destination": "flink-table/flink-table-planner/src/main/java/org/apache/calcite/sql/type/SqlTypeUtil.java",
       "status": "merged after formatting normalization",
-      "upstream_sha256": "6e6bd23426dfebae1122ecc4c2479ffc44a9e64714c30a8029dfb6b03249e811",
+      "upstream_sha256": "eacbfe181dc55f5f3195295fe633ec649fd388774c5ce9b9d5068335e6091dbf",
       "flink_sha256": "f0e46fe938b76bb5a1986e873e7fe585300b95eed9805f0e76b4ba19026471f9",
       "initial_backport_sha256": "a0d18bcd49d878032ce77ab272c7accc96e6c61d885d71da5988fe298e4880a7"
     },
@@ -256,7 +248,7 @@
       "calcite_source": "core/src/main/java/org/apache/calcite/sql/validate/SqlValidatorImpl.java",
       "flink_destination": "flink-table/flink-table-planner/src/main/java/org/apache/calcite/sql/validate/SqlValidatorImpl.java",
       "status": "merged after formatting normalization",
-      "upstream_sha256": "9e8c72e7e45b6b8a8fa1e25d7b6b7f2245719e77bb1cc72ad95f8c5afce1e9d6",
+      "upstream_sha256": "e73e301a7e821bd3870fd6dfa467bc8bff79013d8854307c10d8109a9733d4eb",
       "flink_sha256": "3bee2a5c1674b1c517f669fccda3d7fc9d79d924a91a468b7b4935851bd73d85",
       "initial_backport_sha256": "66bdb6aec3251d936c10edc7fed63e5d2a9a5d8099757e41b291c6eb3b48c163"
     },
@@ -272,7 +264,7 @@
       "calcite_source": "core/src/main/java/org/apache/calcite/sql/validate/implicit/AbstractTypeCoercion.java",
       "flink_destination": "flink-table/flink-table-planner/src/main/java/org/apache/calcite/sql/validate/implicit/AbstractTypeCoercion.java",
       "status": "copied new override",
-      "upstream_sha256": "4f1b99bdc173c98906f1f0fd766bc52d70272866c96a1ee77b77f0180485ecdb",
+      "upstream_sha256": "020d417bee520719016d2875b80dc8f6501063b4bab52e167548df3649b906ba",
       "flink_sha256": "88930a18661724d27d026b3a2211f149f81bbc641d396eb6c136f28ab702d68a",
       "initial_backport_sha256": "bcc43a84d15364e1c7e1d4be4861d94c00bf66e3c4cb2f90d48930b8fd684a8a"
     },
@@ -280,7 +272,7 @@
       "calcite_source": "core/src/main/resources/org/apache/calcite/runtime/CalciteResource.properties",
       "flink_destination": "flink-table/flink-table-planner/src/main/resources/org/apache/calcite/runtime/CalciteResource.properties",
       "status": "copied new override",
-      "upstream_sha256": "b34278ee3d20ffb12edb960ccf839ef8c96f53946356085fc490b51d36f28ef3",
+      "upstream_sha256": "d780469ea017f28aa2d4ad2a0c102928c3aa63caeaeba872b60e286265701f10",
       "flink_sha256": "3871072bd3eada513879b05ecf136222a9f0f7262f2b45ef55be017524d6316f",
       "initial_backport_sha256": "ee35bfda31966a26728a0462d0b48430f9e4ce06659484c7bc8f61c17bb89b36"
     },
@@ -288,8 +280,8 @@
       "calcite_source": "core/src/main/java/org/apache/calcite/runtime/GeographyValue.java",
       "flink_destination": "flink-table/flink-table-planner/src/main/java/org/apache/calcite/runtime/GeographyValue.java",
       "status": "copied new override",
-      "upstream_sha256": "8b6e5ac1e07272bcbdac57219515f503d4084d284513df76facf97d693f5b13c",
-      "flink_sha256": "f06122f6abe5a15d76af6fe6765e65d9d89f9f04972acfd42ede6a84782109f6",
+      "upstream_sha256": "675e52ce232050cf05c1806682cf10b314f42b7f81f255467372a6014c63fa32",
+      "flink_sha256": "322b4b630dec9b3bf35145f65a9f4793ec37c8b140d163f1b25a65dfd2bb7faa",
       "initial_backport_sha256": "7ab30c45d78a493b395dd390b8ba27e804f77c11933f3f47bafcaa7dcc2e4ef1"
     },
     {
@@ -304,7 +296,7 @@
   "hash_format": "SHA-256 of UTF-8 file bytes with LF line endings",
   "flink_base": "da55a4bf9e14322630fd559a850ef3dc94b6694b",
   "release_base": "calcite-1.41.0 / c838dd471",
-  "upstream_status": "PR 5427 open, not merged, at 2026-11-23 verification",
+  "upstream_status": "PR 5427 open; separate MAP/Javadoc prerequisites are draft pending Jira keys",
   "removal": "Remove new overrides and geography hunks in existing overrides after upgrading to a released Calcite containing PR 5427; rerun the focused and cross-engine tests.",
   "adaptations": [
     "Backport geography hunks onto Calcite 1.41.0 APIs; preserve existing Flink override behavior.",
@@ -313,7 +305,27 @@
     "Restore stock 1.41 RexBuilder.DEFAULT required by SqlImplementor while preserving Flink RexBuilder changes.",
     "Include ARRAY_MIN/MAX ordering guards and all collection equality/hash runtime guards from pinned review fixes.",
     "Keep Flink GeographyData/WKB runtime and Flink structural accessors; Calcite opaque runtime is not a general implicit GeographyData conversion.",
-    "Preserve target CALCITE-7716 UuidValue changes in RexBuilder/RexLiteral while retaining GEOGRAPHY non-null-literal rejection."
+    "Preserve target CALCITE-7716 UuidValue changes in RexBuilder/RexLiteral while retaining GEOGRAPHY non-null-literal rejection.",
+    "Review refresh: preserve legacy MAP rendering through the prerequisite opt-in; keep geography-only type-to-spec opt-in.",
+    "Restore baseline ROW common typing; Flink nested record metadata preserves declared leaf nullability while Rex field access is nullable.",
+    "Keep Calcite 1.41.0 APIs and existing non-geography algorithms; unrelated upstream merge changes are not blanket-copied."
   ],
-  "merged_flink_target": "d0102d7b1838a0da2f85cf878ce3202ecc3135ac"
+  "merged_flink_target": "d0102d7b1838a0da2f85cf878ce3202ecc3135ac",
+  "previous_calcite_commit": "da1cb15d5f366d2466b88de84fbf8950495d434b",
+  "review_prerequisites": [
+    "https://github.com/apache/calcite/pull/5452",
+    "https://github.com/apache/calcite/pull/5453"
+  ],
+  "verified_review_date": "2026-11-25",
+  "retired_files": [
+    {
+      "calcite_source": "core/src/main/java/org/apache/calcite/rel/type/RelDataTypeFactoryImpl.java",
+      "flink_destination": "flink-table/flink-table-planner/src/main/java/org/apache/calcite/rel/type/RelDataTypeFactoryImpl.java",
+      "status": "merged after formatting normalization",
+      "upstream_sha256": "5b265cbd84cc24f2d41feaec358425569436b28e2176d24e236fe447aa2546bc",
+      "flink_sha256": "373391f1e69895199f0493a5a99e1a3e7b506e6272a2140465fdb7d27f945f82",
+      "initial_backport_sha256": "ac5f271812989c2747db76f5565002dd0037dabd6b51b84c2c86c43d567f0783",
+      "retirement_reason": "Generic ROW change removed; the existing Flink override is restored to the PR target version."
+    }
+  ]
 }
