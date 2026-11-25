@@ -1,0 +1,24 @@
+{
+  "_license": "Licensed to the Apache Software Foundation (ASF) under one\nor more contributor license agreements. See the NOTICE file\ndistributed with this work for additional information\nregarding copyright ownership. The ASF licenses this file\nto you under the Apache License, Version 2.0 (the\n\"License\"); you may not use this file except in compliance\nwith the License. You may obtain a copy of the License at\nhttp://www.apache.org/licenses/LICENSE-2.0\nUnless required by applicable law or agreed to in writing, software\ndistributed under the License is distributed on an \"AS IS\" BASIS,\nWITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.\nSee the License for the specific language governing permissions and\nlimitations under the License.",
+  "project": "healthy-skill-501608-t7",
+  "dataset": "akvelon",
+  "location": "US",
+  "bucket": "healthy-skill-501608-t7-g11-geography-20261123",
+  "run_id": "20261123_130455",
+  "warehouse": "gs://healthy-skill-501608-t7-g11-geography-20261123/g11/20261123_130455/warehouse",
+  "connection": "projects/347542310562/locations/us/connections/g11_geography_20261123_130316",
+  "connection_service_account": "bqcx-347542310562-encp@gcp-sa-bigquery-condel.iam.gserviceaccount.com",
+  "connection_read_binding": {
+    "role": "roles/storage.objectViewer",
+    "members": [
+      "serviceAccount:bqcx-347542310562-encp@gcp-sa-bigquery-condel.iam.gserviceaccount.com"
+    ],
+    "condition": {
+      "title": "g11_geography_20261123_130316",
+      "description": "Read only the G11 test prefix for seven days",
+      "expression": "resource.name.startsWith('projects/_/buckets/healthy-skill-501608-t7-g11-geography-20261123/objects/g11/') && request.time < timestamp('2026-11-30T13:04:55Z')"
+    }
+  },
+  "bigquery_table": "healthy-skill-501608-t7.akvelon.g11_geography_20261123_130455_merged",
+  "verification_stage": "2026-11-24 final target-merge validation"
+}

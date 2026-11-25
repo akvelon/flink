@@ -72,7 +72,7 @@ import static org.apache.calcite.rel.type.RelDataTypeImpl.NON_NULLABLE_SUFFIX;
 
 /**
  * The whole class was copied from Calcite because of CALCITE-7716. Should be removed after upgrade
- * to 1.43.0
+ * to a release containing both CALCITE-7716 and native GEOGRAPHY support.
  */
 public class RexLiteral extends RexNode {
     // ~ Instance fields --------------------------------------------------------
@@ -106,6 +106,9 @@ public class RexLiteral extends RexNode {
         this.value = value;
         this.type = requireNonNull(type, "type");
         this.typeName = requireNonNull(typeName, "typeName");
+        checkArgument(
+                value == null || type.getSqlTypeName() != SqlTypeName.GEOGRAPHY,
+                "Non-null GEOGRAPHY literals are not supported");
         checkArgument(valueMatchesType(value, typeName, true));
         checkArgument((value == null) == type.isNullable());
         checkArgument(typeName != SqlTypeName.ANY);
@@ -263,6 +266,8 @@ public class RexLiteral extends RexNode {
                 return value instanceof List;
             case GEOMETRY:
                 return value instanceof Geometry;
+            case GEOGRAPHY:
+                return false;
             case ANY:
                 // Literal of type ANY is not legal. "CAST(2 AS ANY)" remains
                 // an integer literal surrounded by a cast function.

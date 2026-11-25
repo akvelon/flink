@@ -2022,6 +2022,16 @@ DataTypes.GEOGRAPHY()
 types. Likewise, `GEOGRAPHY` values cannot be cast to character or binary string types.
 Use explicit geography functions for those conversions once such functions are available.
 
+`ST_IsEmpty(geography)` returns a `BOOLEAN`. A collection is empty when
+all its members are empty. `ST_GeometryType(geography)` returns a `STRING`
+with the concrete shape name. The shape names are `POINT`, `LINESTRING`,
+`POLYGON`, `MULTIPOINT`, `MULTILINESTRING`, `MULTIPOLYGON`, and
+`GEOMETRYCOLLECTION`.
+
+Both functions return SQL NULL for SQL NULL input. A non-NULL empty
+value returns `TRUE` from `ST_IsEmpty` and keeps its shape name in
+`ST_GeometryType`.
+
 #### `RAW`
 
 Data type of an arbitrary serialized type. This type is a black box within the table ecosystem

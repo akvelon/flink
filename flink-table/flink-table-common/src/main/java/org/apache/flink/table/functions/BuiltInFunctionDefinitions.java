@@ -602,6 +602,30 @@ public final class BuiltInFunctionDefinitions {
                     .build();
 
     // --------------------------------------------------------------------------------------------
+    // Spatial functions
+    // --------------------------------------------------------------------------------------------
+
+    public static final BuiltInFunctionDefinition ST_IS_EMPTY =
+            BuiltInFunctionDefinition.newBuilder()
+                    .name("ST_ISEMPTY")
+                    .kind(SCALAR)
+                    .inputTypeStrategy(sequence(logical(LogicalTypeRoot.GEOGRAPHY)))
+                    .outputTypeStrategy(nullableIfArgs(explicit(DataTypes.BOOLEAN())))
+                    .runtimeClass(
+                            "org.apache.flink.table.runtime.functions.scalar.StIsEmptyFunction")
+                    .build();
+
+    public static final BuiltInFunctionDefinition ST_GEOMETRY_TYPE =
+            BuiltInFunctionDefinition.newBuilder()
+                    .name("ST_GEOMETRYTYPE")
+                    .kind(SCALAR)
+                    .inputTypeStrategy(sequence(logical(LogicalTypeRoot.GEOGRAPHY)))
+                    .outputTypeStrategy(nullableIfArgs(explicit(DataTypes.STRING())))
+                    .runtimeClass(
+                            "org.apache.flink.table.runtime.functions.scalar.StGeometryTypeFunction")
+                    .build();
+
+    // --------------------------------------------------------------------------------------------
     // Logic functions
     // --------------------------------------------------------------------------------------------
 

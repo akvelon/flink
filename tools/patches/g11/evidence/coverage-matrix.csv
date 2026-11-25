@@ -1,0 +1,60 @@
+id,name,byte_order,flink_shape,bigquery_shape,empty,scalar_null,list_null_normalized,shape_normalized,flink_wkb,bigquery_native_projection,bigquery_geographic_content,_license
+1,point_nonempty_little,little,POINT,ST_Point,False,False,True,False,PASS,PASS,PASS,"Licensed to the Apache Software Foundation (ASF) under one
+or more contributor license agreements. See the NOTICE file
+distributed with this work for additional information
+regarding copyright ownership. The ASF licenses this file
+to you under the Apache License, Version 2.0 (the
+""License""); you may not use this file except in compliance
+with the License. You may obtain a copy of the License at
+http://www.apache.org/licenses/LICENSE-2.0
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an ""AS IS"" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License."
+2,point_empty_little,little,POINT,ST_GeometryCollection,True,False,True,True,PASS,PASS,PASS,
+3,linestring_nonempty_little,little,LINESTRING,ST_LineString,False,False,True,False,PASS,PASS,PASS,
+4,linestring_empty_little,little,LINESTRING,ST_GeometryCollection,True,False,True,True,PASS,PASS,PASS,
+5,polygon_nonempty_little,little,POLYGON,ST_Polygon,False,False,True,False,PASS,PASS,PASS,
+6,polygon_empty_little,little,POLYGON,ST_GeometryCollection,True,False,True,True,PASS,PASS,PASS,
+7,multipoint_nonempty_little,little,MULTIPOINT,ST_MultiPoint,False,False,True,False,PASS,PASS,PASS,
+8,multipoint_empty_little,little,MULTIPOINT,ST_GeometryCollection,True,False,True,True,PASS,PASS,PASS,
+9,multilinestring_nonempty_little,little,MULTILINESTRING,ST_MultiLineString,False,False,True,False,PASS,PASS,PASS,
+10,multilinestring_empty_little,little,MULTILINESTRING,ST_GeometryCollection,True,False,True,True,PASS,PASS,PASS,
+11,multipolygon_nonempty_little,little,MULTIPOLYGON,ST_MultiPolygon,False,False,True,False,PASS,PASS,PASS,
+12,multipolygon_empty_little,little,MULTIPOLYGON,ST_GeometryCollection,True,False,True,True,PASS,PASS,PASS,
+13,geometrycollection_nonempty_little,little,GEOMETRYCOLLECTION,ST_Polygon,False,False,True,True,PASS,PASS,PASS,
+14,geometrycollection_empty_little,little,GEOMETRYCOLLECTION,ST_GeometryCollection,True,False,True,False,PASS,PASS,PASS,
+15,multipoint_empty_members_little,little,MULTIPOINT,ST_GeometryCollection,True,False,True,True,PASS,PASS,PASS,
+16,multilinestring_empty_members_little,little,MULTILINESTRING,ST_GeometryCollection,True,False,True,True,PASS,PASS,PASS,
+17,multipolygon_empty_members_little,little,MULTIPOLYGON,ST_GeometryCollection,True,False,True,True,PASS,PASS,PASS,
+18,collection_empty_members_little,little,GEOMETRYCOLLECTION,ST_GeometryCollection,True,False,True,False,PASS,PASS,PASS,
+19,point_nonempty_big,big,POINT,ST_Point,False,False,True,False,PASS,PASS,PASS,
+20,point_empty_big,big,POINT,ST_GeometryCollection,True,False,True,True,PASS,PASS,PASS,
+21,linestring_nonempty_big,big,LINESTRING,ST_LineString,False,False,True,False,PASS,PASS,PASS,
+22,linestring_empty_big,big,LINESTRING,ST_GeometryCollection,True,False,True,True,PASS,PASS,PASS,
+23,polygon_nonempty_big,big,POLYGON,ST_Polygon,False,False,True,False,PASS,PASS,PASS,
+24,polygon_empty_big,big,POLYGON,ST_GeometryCollection,True,False,True,True,PASS,PASS,PASS,
+25,multipoint_nonempty_big,big,MULTIPOINT,ST_MultiPoint,False,False,True,False,PASS,PASS,PASS,
+26,multipoint_empty_big,big,MULTIPOINT,ST_GeometryCollection,True,False,True,True,PASS,PASS,PASS,
+27,multilinestring_nonempty_big,big,MULTILINESTRING,ST_MultiLineString,False,False,True,False,PASS,PASS,PASS,
+28,multilinestring_empty_big,big,MULTILINESTRING,ST_GeometryCollection,True,False,True,True,PASS,PASS,PASS,
+29,multipolygon_nonempty_big,big,MULTIPOLYGON,ST_MultiPolygon,False,False,True,False,PASS,PASS,PASS,
+30,multipolygon_empty_big,big,MULTIPOLYGON,ST_GeometryCollection,True,False,True,True,PASS,PASS,PASS,
+31,geometrycollection_nonempty_big,big,GEOMETRYCOLLECTION,ST_Polygon,False,False,True,True,PASS,PASS,PASS,
+32,geometrycollection_empty_big,big,GEOMETRYCOLLECTION,ST_GeometryCollection,True,False,True,False,PASS,PASS,PASS,
+33,multipoint_empty_members_big,big,MULTIPOINT,ST_GeometryCollection,True,False,True,True,PASS,PASS,PASS,
+34,multilinestring_empty_members_big,big,MULTILINESTRING,ST_GeometryCollection,True,False,True,True,PASS,PASS,PASS,
+35,multipolygon_empty_members_big,big,MULTIPOLYGON,ST_GeometryCollection,True,False,True,True,PASS,PASS,PASS,
+36,collection_empty_members_big,big,GEOMETRYCOLLECTION,ST_GeometryCollection,True,False,True,False,PASS,PASS,PASS,
+37,sql_null,little,,,,True,True,False,PASS,PASS,PASS,
+38,array_points,little,MULTIPOLYGON,ST_MultiPolygon,False,False,False,False,PASS,PASS,PASS,
+39,array_polygons,little,MULTIPOLYGON,ST_MultiPolygon,False,False,False,False,PASS,PASS,PASS,
+40,array_multipolygons,little,MULTIPOLYGON,ST_MultiPolygon,False,False,False,False,PASS,PASS,PASS,
+41,array_mixed_shapes,little,MULTIPOLYGON,ST_MultiPolygon,False,False,False,False,PASS,PASS,PASS,
+42,array_empty,little,POINT,ST_Point,False,False,False,False,PASS,PASS,PASS,
+43,array_null,little,POINT,ST_Point,False,False,True,False,PASS,PASS,PASS,
+44,array_null_element,little,POINT,ST_Point,False,False,False,False,PASS,PASS,PASS,
+45,array_values_and_null,little,POLYGON,ST_Polygon,False,False,False,False,PASS,PASS,PASS,
+46,nested_row_null,little,POINT,ST_Point,False,False,True,False,PASS,PASS,PASS,
+47,nested_leaf_null,little,POINT,ST_Point,False,False,True,False,PASS,PASS,PASS,

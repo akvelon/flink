@@ -281,6 +281,41 @@ class FlinkTypeFactoryTest {
                 Arguments.of(Arrays.asList(new GeographyType(), new IntType())));
     }
 
+    static Stream<Arguments> testRowNullCommonType() {
+        return Stream.of(
+                Arguments.of(false, new GeographyType(false)),
+                Arguments.of(true, new GeographyType(false)),
+                Arguments.of(false, new IntType(false)),
+                Arguments.of(true, new IntType(false)));
+    }
+
+    @MethodSource("testRowNullCommonType")
+    @ParameterizedTest
+    void testRowNullCommonType(boolean nullFirst, LogicalType leaf) {
+        final FlinkTypeFactory typeFactory = createTypeFactory();
+        final RelDataType record =
+                typeFactory.createFieldTypeFromLogicalType(RowType.of(false, leaf));
+        final RelDataType nullType = typeFactory.createFieldTypeFromLogicalType(new NullType());
+        final RelDataType result =
+                typeFactory.leastRestrictive(
+                        nullFirst
+                                ? Arrays.asList(nullType, record)
+                                : Arrays.asList(record, nullType));
+        assertThat(result).isNotNull();
+        assertThat(result.isStruct()).isTrue();
+        assertThat(result.isNullable()).isTrue();
+        final RelDataType field = result.getFieldList().get(0).getType();
+        assertThat(field.getSqlTypeName())
+                .isEqualTo(record.getFieldList().get(0).getType().getSqlTypeName());
+        assertThat(field.isNullable())
+                .isEqualTo(record.getFieldList().get(0).getType().isNullable());
+        final FlinkRexBuilder rex = new FlinkRexBuilder(typeFactory);
+        final RelDataType accessType =
+                rex.makeFieldAccess(rex.makeInputRef(result, 0), 0).getType();
+        assertThat(accessType.isNullable()).isTrue();
+        assertThat(accessType.getSqlTypeName()).isEqualTo(field.getSqlTypeName());
+    }
+
     @MethodSource("testLeastRestrictiveIncompatibleGeographyCases")
     @ParameterizedTest
     void testLeastRestrictiveIncompatibleGeographyCases(List<LogicalType> input) {

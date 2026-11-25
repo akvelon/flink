@@ -1,0 +1,1152 @@
+diff --git a/core/src/main/codegen/default_config.fmpp b/core/src/main/codegen/default_config.fmpp
+index a2547273c..1f55aabe2 100644
+--- a/core/src/main/codegen/default_config.fmpp
++++ b/core/src/main/codegen/default_config.fmpp
+@@ -129,6 +129,7 @@ parser: {
+     "G"
+     "GENERAL"
+     "GENERATED"
++    "GEOGRAPHY"
+     "GEOMETRY"
+     "GO"
+     "GOTO"
+diff --git a/core/src/main/codegen/templates/Parser.jj b/core/src/main/codegen/templates/Parser.jj
+index 95d34d4eb..641cd8c41 100644
+--- a/core/src/main/codegen/templates/Parser.jj
++++ b/core/src/main/codegen/templates/Parser.jj
+@@ -5894,6 +5894,14 @@ SqlTypeNameSpec SqlTypeName1(Span s) :
+ }
+ {
+     (
++        <GEOGRAPHY> {
++            if (!this.conformance.allowGeography()) {
++                throw SqlUtil.newContextException(getPos(), RESOURCE.geographyDisabled());
++            }
++            s.add(this);
++            sqlTypeName = SqlTypeName.GEOGRAPHY;
++        }
++    |
+         <GEOMETRY> {
+             if (!this.conformance.allowGeometry()) {
+                 throw SqlUtil.newContextException(getPos(), RESOURCE.geometryDisabled());
+@@ -6160,21 +6168,40 @@ SqlTypeNameSpec RowTypeName() :
+ 
+ SqlTypeNameSpec MapTypeName() :
+ {
+-    SqlDataTypeSpec keyType = null;
+-    SqlDataTypeSpec valType = null;
++    final SqlDataTypeSpec keyType;
++    final SqlDataTypeSpec valType;
++    final Boolean keyNullable;
++    final Boolean valueNullable;
+ }
+ {
+     <MAP>
+     <LT>
+     keyType = DataType()
++    keyNullable = MapNullabilityOpt()
+     <COMMA>
+     valType = DataType()
++    valueNullable = MapNullabilityOpt()
+     <GT>
+     {
+-        return new SqlMapTypeNameSpec(keyType, valType, getPos());
++        return new SqlMapTypeNameSpec(
++            keyNullable == null ? keyType : keyType.withNullable(keyNullable),
++            valueNullable == null ? valType : valType.withNullable(valueNullable),
++            getPos(), true);
+     }
+ }
+ 
++/** Preserves the type system's default when a MAP entry omits nullability. */
++Boolean MapNullabilityOpt() :
++{
++}
++{
++    <NULL> { return true; }
++|
++    <NOT> <NULL> { return false; }
++|
++    { return null; }
++}
++
+ /**
+ * Parse character types: char, varchar.
+ */
+@@ -8309,6 +8336,7 @@ SqlPostfixOperator PostfixRowOperator() :
+ |   < G: "G" >
+ |   < GENERAL: "GENERAL" >
+ |   < GENERATED: "GENERATED" >
++|   < GEOGRAPHY: "GEOGRAPHY" >
+ |   < GEOMETRY: "GEOMETRY" >
+ |   < GET: "GET" >
+ |   < GLOBAL: "GLOBAL" >
+diff --git a/core/src/main/java/org/apache/calcite/adapter/enumerable/EnumUtils.java b/core/src/main/java/org/apache/calcite/adapter/enumerable/EnumUtils.java
+index 93db65e22..c3e7f4e3b 100644
+--- a/core/src/main/java/org/apache/calcite/adapter/enumerable/EnumUtils.java
++++ b/core/src/main/java/org/apache/calcite/adapter/enumerable/EnumUtils.java
+@@ -46,6 +46,8 @@
+ import org.apache.calcite.linq4j.tree.UnaryExpression;
+ import org.apache.calcite.linq4j.tree.UnsignedType;
+ import org.apache.calcite.rel.RelNode;
++import org.apache.calcite.rel.core.Join;
++import org.apache.calcite.rel.core.JoinInfo;
+ import org.apache.calcite.rel.core.JoinRelType;
+ import org.apache.calcite.rel.type.RelDataType;
+ import org.apache.calcite.rel.type.RelDataTypeField;
+@@ -57,6 +59,7 @@
+ import org.apache.calcite.runtime.SqlFunctions;
+ import org.apache.calcite.runtime.Utilities;
+ import org.apache.calcite.sql.SqlCollation;
++import org.apache.calcite.sql.type.SqlTypeUtil;
+ import org.apache.calcite.util.BuiltInMethod;
+ import org.apache.calcite.util.Pair;
+ import org.apache.calcite.util.Util;
+@@ -96,6 +99,18 @@
+  * style.
+  */
+ public class EnumUtils {
++  /** Checks join keys before generating Java equality, hashing, or ordering. */
++  static void checkGeographyJoinKeys(Join join) {
++    final JoinInfo info = join.analyzeCondition();
++    if (info.leftKeys.stream().anyMatch(i ->
++        SqlTypeUtil.containsGeography(join.getLeft().getRowType().getFieldList().get(i).getType()))
++        || info.rightKeys.stream().anyMatch(i ->
++            SqlTypeUtil.containsGeography(
++                join.getRight().getRowType().getFieldList().get(i).getType()))) {
++      throw new UnsupportedOperationException("Local GEOGRAPHY join keys are not supported");
++    }
++  }
++
+ 
+   private EnumUtils() {}
+ 
+diff --git a/core/src/main/java/org/apache/calcite/adapter/enumerable/EnumerableAsofJoin.java b/core/src/main/java/org/apache/calcite/adapter/enumerable/EnumerableAsofJoin.java
+index d7cb7b4cd..243b259a6 100644
+--- a/core/src/main/java/org/apache/calcite/adapter/enumerable/EnumerableAsofJoin.java
++++ b/core/src/main/java/org/apache/calcite/adapter/enumerable/EnumerableAsofJoin.java
+@@ -185,6 +185,7 @@ private int getTimestampFieldIndex(RexCall call) {
+   }
+ 
+   @Override public Result implement(EnumerableRelImplementor implementor, Prefer pref) {
++    EnumUtils.checkGeographyJoinKeys(this);
+     BlockBuilder builder = new BlockBuilder();
+     final Result leftResult =
+         implementor.visitChild(this, 0, (EnumerableRel) left, pref);
+diff --git a/core/src/main/java/org/apache/calcite/adapter/enumerable/EnumerableHashJoin.java b/core/src/main/java/org/apache/calcite/adapter/enumerable/EnumerableHashJoin.java
+index 8bd9ffbf0..40d2d5dbf 100644
+--- a/core/src/main/java/org/apache/calcite/adapter/enumerable/EnumerableHashJoin.java
++++ b/core/src/main/java/org/apache/calcite/adapter/enumerable/EnumerableHashJoin.java
+@@ -169,6 +169,7 @@ public static EnumerableHashJoin create(
+   }
+ 
+   @Override public Result implement(EnumerableRelImplementor implementor, Prefer pref) {
++    EnumUtils.checkGeographyJoinKeys(this);
+     switch (joinType) {
+     case SEMI:
+     case ANTI:
+diff --git a/core/src/main/java/org/apache/calcite/adapter/enumerable/EnumerableMergeJoin.java b/core/src/main/java/org/apache/calcite/adapter/enumerable/EnumerableMergeJoin.java
+index 838e37064..3d69a28c8 100644
+--- a/core/src/main/java/org/apache/calcite/adapter/enumerable/EnumerableMergeJoin.java
++++ b/core/src/main/java/org/apache/calcite/adapter/enumerable/EnumerableMergeJoin.java
+@@ -435,6 +435,7 @@ public static EnumerableMergeJoin create(RelNode left, RelNode right,
+   }
+ 
+   @Override public Result implement(EnumerableRelImplementor implementor, Prefer pref) {
++    EnumUtils.checkGeographyJoinKeys(this);
+     BlockBuilder builder = new BlockBuilder();
+     final Result leftResult =
+         implementor.visitChild(this, 0, (EnumerableRel) left, pref);
+diff --git a/core/src/main/java/org/apache/calcite/adapter/enumerable/EnumerableTableScan.java b/core/src/main/java/org/apache/calcite/adapter/enumerable/EnumerableTableScan.java
+index ace76188b..5d6d7a646 100644
+--- a/core/src/main/java/org/apache/calcite/adapter/enumerable/EnumerableTableScan.java
++++ b/core/src/main/java/org/apache/calcite/adapter/enumerable/EnumerableTableScan.java
+@@ -39,6 +39,7 @@
+ import org.apache.calcite.rel.core.TableScan;
+ import org.apache.calcite.rel.type.RelDataType;
+ import org.apache.calcite.rel.type.RelDataTypeField;
++import org.apache.calcite.sql.type.SqlTypeUtil;
+ import org.apache.calcite.schema.FilterableTable;
+ import org.apache.calcite.schema.ProjectableFilterableTable;
+ import org.apache.calcite.schema.QueryableTable;
+@@ -328,6 +329,9 @@ private static boolean hasCollectionField(RelDataType rowType) {
+   }
+ 
+   @Override public Result implement(EnumerableRelImplementor implementor, Prefer pref) {
++    if (SqlTypeUtil.containsGeography(getRowType())) {
++      throw new UnsupportedOperationException("Local GEOGRAPHY table scans are not supported");
++    }
+     // Note that representation is ARRAY. This assumes that the table
+     // returns a Object[] for each record. Actually a Table<T> can
+     // return any type T. And, if it is a JdbcTable, we'd like to be
+diff --git a/core/src/main/java/org/apache/calcite/adapter/enumerable/RexToLixTranslator.java b/core/src/main/java/org/apache/calcite/adapter/enumerable/RexToLixTranslator.java
+index e82cde56a..4af9394c4 100644
+--- a/core/src/main/java/org/apache/calcite/adapter/enumerable/RexToLixTranslator.java
++++ b/core/src/main/java/org/apache/calcite/adapter/enumerable/RexToLixTranslator.java
+@@ -60,6 +60,7 @@
+ import org.apache.calcite.runtime.variant.VariantValue;
+ import org.apache.calcite.schema.FunctionContext;
+ import org.apache.calcite.sql.SqlIntervalQualifier;
++import org.apache.calcite.sql.SqlKind;
+ import org.apache.calcite.sql.SqlOperator;
+ import org.apache.calcite.sql.SqlWindowTableFunction;
+ import org.apache.calcite.sql.fun.SqlStdOperatorTable;
+@@ -67,6 +68,7 @@
+ import org.apache.calcite.sql.type.SqlTypeName;
+ import org.apache.calcite.sql.type.SqlTypeUtil;
+ import org.apache.calcite.sql.validate.SqlConformance;
++import org.apache.calcite.sql.validate.SqlUserDefinedFunction;
+ import org.apache.calcite.util.BuiltInMethod;
+ import org.apache.calcite.util.ControlFlowException;
+ import org.apache.calcite.util.Pair;
+@@ -304,6 +306,11 @@ Expression translateCast(
+       Expression operand,
+       boolean safe,
+       ConstantExpression format) {
++    if ((SqlTypeUtil.containsGeography(sourceType) || SqlTypeUtil.containsGeography(targetType))
++        && !SqlTypeUtil.isNull(sourceType) && sourceType.getSqlTypeName() != SqlTypeName.UNKNOWN
++        && !SqlTypeUtil.sameNamedType(sourceType, targetType)) {
++      throw new UnsupportedOperationException("Local casts involving GEOGRAPHY are not supported");
++    }
+     Expression convert = getConvertExpression(sourceType, targetType, operand, format);
+     Expression convert2 = checkExpressionPadTruncate(convert, sourceType, targetType);
+     Expression convert3 = scaleValue(sourceType, targetType, convert2);
+@@ -1441,6 +1448,19 @@ private ConstantExpression getTypedNullLiteral(RexLiteral literal) {
+    * need to be implemented separately.
+    */
+   @Override public Result visitCall(RexCall call) {
++    if ((SqlKind.COMPARISON.contains(call.getKind()) || call.getKind() == SqlKind.SEARCH
++        || call.getKind() == SqlKind.IS_DISTINCT_FROM
++        || call.getKind() == SqlKind.IS_NOT_DISTINCT_FROM)
++        && call.getOperands().stream()
++            .anyMatch(operand -> SqlTypeUtil.containsGeography(operand.getType()))) {
++      throw new UnsupportedOperationException("Local GEOGRAPHY comparison is not supported");
++    }
++    if (call.getOperator() instanceof SqlUserDefinedFunction
++        && (SqlTypeUtil.containsGeography(call.getType())
++            || call.getOperands().stream()
++                .anyMatch(operand -> SqlTypeUtil.containsGeography(operand.getType())))) {
++      throw new UnsupportedOperationException("Local Java functions involving GEOGRAPHY are not supported");
++    }
+     if (rexResultMap.containsKey(call)) {
+       return rexResultMap.get(call);
+     }
+@@ -1638,6 +1658,9 @@ private Result toInnerStorageType(Result result, Type storageType) {
+   }
+ 
+   @Override public Result visitDynamicParam(RexDynamicParam dynamicParam) {
++    if (SqlTypeUtil.containsGeography(dynamicParam.getType())) {
++      throw new UnsupportedOperationException("Local GEOGRAPHY parameters are not supported");
++    }
+     final Pair<RexNode, @Nullable Type> key =
+         Pair.of(dynamicParam, currentStorageType);
+     if (rexWithStorageTypeResultMap.containsKey(key)) {
+diff --git a/core/src/main/java/org/apache/calcite/interpreter/TableScanNode.java b/core/src/main/java/org/apache/calcite/interpreter/TableScanNode.java
+index 98ece3e24..a6cb4d080 100644
+--- a/core/src/main/java/org/apache/calcite/interpreter/TableScanNode.java
++++ b/core/src/main/java/org/apache/calcite/interpreter/TableScanNode.java
+@@ -25,6 +25,7 @@
+ import org.apache.calcite.rel.type.RelDataType;
+ import org.apache.calcite.rel.type.RelDataTypeFactory;
+ import org.apache.calcite.rel.type.RelDataTypeField;
++import org.apache.calcite.sql.type.SqlTypeUtil;
+ import org.apache.calcite.rex.RexNode;
+ import org.apache.calcite.rex.RexUtil;
+ import org.apache.calcite.runtime.Enumerables;
+@@ -76,6 +77,9 @@ private TableScanNode(Compiler compiler, TableScan rel,
+    * any filters and projects that cannot be implemented by the table. */
+   static TableScanNode create(Compiler compiler, TableScan rel,
+       ImmutableList<RexNode> filters, @Nullable ImmutableIntList projects) {
++    if (SqlTypeUtil.containsGeography(rel.getRowType())) {
++      throw new UnsupportedOperationException("Local GEOGRAPHY table scans are not supported");
++    }
+     final RelOptTable relOptTable = rel.getTable();
+     final ProjectableFilterableTable pfTable =
+         relOptTable.unwrap(ProjectableFilterableTable.class);
+diff --git a/core/src/main/java/org/apache/calcite/jdbc/JavaTypeFactoryImpl.java b/core/src/main/java/org/apache/calcite/jdbc/JavaTypeFactoryImpl.java
+index 3f276b41e..5c11e6778 100644
+--- a/core/src/main/java/org/apache/calcite/jdbc/JavaTypeFactoryImpl.java
++++ b/core/src/main/java/org/apache/calcite/jdbc/JavaTypeFactoryImpl.java
+@@ -226,6 +226,8 @@ private static Type fieldType(Field field) {
+         return ByteString.class;
+       case GEOMETRY:
+         return Geometry.class;
++      case GEOGRAPHY:
++        return Object.class;
+       case SYMBOL:
+         return Enum.class;
+       case ANY:
+diff --git a/core/src/main/java/org/apache/calcite/rel/externalize/RelJson.java b/core/src/main/java/org/apache/calcite/rel/externalize/RelJson.java
+index 17a34411e..e620424aa 100644
+--- a/core/src/main/java/org/apache/calcite/rel/externalize/RelJson.java
++++ b/core/src/main/java/org/apache/calcite/rel/externalize/RelJson.java
+@@ -366,7 +366,8 @@ public RelDataType toType(RelDataTypeFactory typeFactory, Object o) {
+       final Map<String, Object> map = (Map<String, Object>) o;
+       final RelDataType type = getRelDataType(typeFactory, map);
+       final boolean nullable = get(map, "nullable");
+-      return typeFactory.createTypeWithNullability(type, nullable);
++      // ROW fields have their own serialized nullability.
++      return typeFactory.enforceTypeWithNullability(type, nullable);
+     } else {
+       final SqlTypeName sqlTypeName =
+           requireNonNull(Util.enumVal(SqlTypeName.class, (String) o),
+diff --git a/core/src/main/java/org/apache/calcite/rel/rel2sql/SqlImplementor.java b/core/src/main/java/org/apache/calcite/rel/rel2sql/SqlImplementor.java
+index 895273656..c604223d4 100644
+--- a/core/src/main/java/org/apache/calcite/rel/rel2sql/SqlImplementor.java
++++ b/core/src/main/java/org/apache/calcite/rel/rel2sql/SqlImplementor.java
+@@ -16,6 +16,8 @@
+  */
+ package org.apache.calcite.rel.rel2sql;
+ 
++import org.apache.calcite.sql.type.SqlTypeUtil;
++
+ import org.apache.calcite.adapter.jdbc.JdbcCorrelationDataContext;
+ import org.apache.calcite.config.CalciteSystemProperty;
+ import org.apache.calcite.linq4j.Ord;
+@@ -730,6 +732,10 @@ public SqlNode toSql(@Nullable RexProgram program, RexNode rex) {
+         }
+ 
+       case LITERAL:
++        if (((RexLiteral) rex).isNull() && SqlTypeUtil.containsGeography(rex.getType())) {
++          return SqlStdOperatorTable.CAST.createCall(POS, SqlLiteral.createNull(POS),
++              castNonNull(dialect.getCastSpec(rex.getType())));
++        }
+         return SqlImplementor.toSql(program, (RexLiteral) rex);
+ 
+       case CASE:
+diff --git a/core/src/main/java/org/apache/calcite/rel/type/RelDataTypeFactoryImpl.java b/core/src/main/java/org/apache/calcite/rel/type/RelDataTypeFactoryImpl.java
+index b5d901ec3..ff596596f 100644
+--- a/core/src/main/java/org/apache/calcite/rel/type/RelDataTypeFactoryImpl.java
++++ b/core/src/main/java/org/apache/calcite/rel/type/RelDataTypeFactoryImpl.java
+@@ -216,24 +216,28 @@ private RelDataType createStructType(
+ 
+   protected @Nullable RelDataType leastRestrictiveStructuredType(
+       final List<RelDataType> types) {
+-    final RelDataType type0 = types.get(0);
+-    // precheck that fieldCount is present
+-    if (!type0.isStruct()) {
+-      return null;
+-    }
+-    final int fieldCount = type0.getFieldCount();
+-
+-    // precheck that all types are structs with same number of fields
+-    // and register desired nullability for the result
++    // NULL contributes nullability without contributing any field types.
++    final List<RelDataType> records = new ArrayList<>();
+     boolean isNullable = false;
+     for (RelDataType type : types) {
+-      if (!type.isStruct()) {
++      if (type.getSqlTypeName() == SqlTypeName.NULL) {
++        isNullable = true;
++      } else if (!type.isStruct()) {
+         return null;
++      } else {
++        records.add(type);
++        isNullable |= type.isNullable();
+       }
++    }
++    if (records.isEmpty()) {
++      return null;
++    }
++    final RelDataType type0 = records.get(0);
++    final int fieldCount = type0.getFieldCount();
++    for (RelDataType type : records) {
+       if (type.getFieldList().size() != fieldCount) {
+         return null;
+       }
+-      isNullable |= type.isNullable();
+     }
+ 
+     // recursively compute column-wise least restrictive
+@@ -246,7 +250,7 @@ private RelDataType createStructType(
+ 
+       RelDataType type =
+           leastRestrictive(
+-              Util.transform(types, t -> t.getFieldList().get(k).getType()));
++              Util.transform(records, t -> t.getFieldList().get(k).getType()));
+       if (type == null) {
+         return null;
+       }
+diff --git a/core/src/main/java/org/apache/calcite/rel/type/RelDataTypeImpl.java b/core/src/main/java/org/apache/calcite/rel/type/RelDataTypeImpl.java
+index 67ab34101..b0ff19bb8 100644
+--- a/core/src/main/java/org/apache/calcite/rel/type/RelDataTypeImpl.java
++++ b/core/src/main/java/org/apache/calcite/rel/type/RelDataTypeImpl.java
+@@ -22,6 +22,7 @@
+ import org.apache.calcite.sql.parser.SqlParserPos;
+ import org.apache.calcite.sql.type.BasicSqlType;
+ import org.apache.calcite.sql.type.SqlTypeName;
++import org.apache.calcite.sql.type.SqlTypeUtil;
+ import org.apache.calcite.util.Pair;
+ import org.apache.calcite.util.Util;
+ 
+@@ -347,7 +348,9 @@ protected void computeDigest(@UnknownInitialization RelDataTypeImpl this) {
+   }
+ 
+   @Override public RelDataTypeComparability getComparability() {
+-    return RelDataTypeComparability.ALL;
++    return SqlTypeUtil.containsGeography(this)
++        ? RelDataTypeComparability.UNORDERED
++        : RelDataTypeComparability.ALL;
+   }
+ 
+   /**
+diff --git a/core/src/main/java/org/apache/calcite/rex/RexBuilder.java b/core/src/main/java/org/apache/calcite/rex/RexBuilder.java
+index d5492f063..843fe2ea1 100644
+--- a/core/src/main/java/org/apache/calcite/rex/RexBuilder.java
++++ b/core/src/main/java/org/apache/calcite/rex/RexBuilder.java
+@@ -1965,6 +1965,8 @@ public RexNode makeZeroRexNode(RelDataType type) {
+ 
+   private static Comparable<?> zeroValue(RelDataType type) {
+     switch (type.getSqlTypeName()) {
++    case GEOGRAPHY:
++      throw new UnsupportedOperationException("GEOGRAPHY has no non-null default value");
+     case CHAR:
+       return new NlsString(Spaces.of(type.getPrecision()), null, null);
+     case VARCHAR:
+@@ -2058,6 +2060,9 @@ public RexNode makeLiteral(@Nullable Object value, RelDataType type,
+     if (value == null) {
+       return makeCast(type, constantNull);
+     }
++    if (type.getSqlTypeName() == SqlTypeName.GEOGRAPHY) {
++      throw new UnsupportedOperationException("Non-null GEOGRAPHY literals are not supported");
++    }
+     if (type.isNullable()) {
+       final RelDataType typeNotNull =
+           typeFactory.createTypeWithNullability(type, false);
+diff --git a/core/src/main/java/org/apache/calcite/rex/RexLiteral.java b/core/src/main/java/org/apache/calcite/rex/RexLiteral.java
+index ce7ac68ab..2ba318073 100644
+--- a/core/src/main/java/org/apache/calcite/rex/RexLiteral.java
++++ b/core/src/main/java/org/apache/calcite/rex/RexLiteral.java
+@@ -233,6 +233,8 @@ public class RexLiteral extends RexNode {
+     this.value = value;
+     this.type = requireNonNull(type, "type");
+     this.typeName = requireNonNull(typeName, "typeName");
++    checkArgument(value == null || type.getSqlTypeName() != SqlTypeName.GEOGRAPHY,
++        "Non-null GEOGRAPHY literals are not supported");
+     checkArgument(valueMatchesType(value, typeName, true));
+     checkArgument((value == null) == type.isNullable());
+     checkArgument(typeName != SqlTypeName.ANY);
+@@ -397,6 +399,8 @@ public static boolean valueMatchesType(
+       return value instanceof List;
+     case GEOMETRY:
+       return value instanceof Geometry;
++    case GEOGRAPHY:
++      return false;
+     case ANY:
+       // Literal of type ANY is not legal. "CAST(2 AS ANY)" remains
+       // an integer literal surrounded by a cast function.
+diff --git a/core/src/main/java/org/apache/calcite/runtime/CalciteResource.java b/core/src/main/java/org/apache/calcite/runtime/CalciteResource.java
+index 809bdcce7..d89853c92 100644
+--- a/core/src/main/java/org/apache/calcite/runtime/CalciteResource.java
++++ b/core/src/main/java/org/apache/calcite/runtime/CalciteResource.java
+@@ -66,6 +66,15 @@ public interface CalciteResource {
+   @BaseMessage("Geo-spatial extensions and the GEOMETRY data type are not enabled")
+   ExInst<SqlValidatorException> geometryDisabled();
+ 
++  @BaseMessage("The GEOGRAPHY data type is not enabled in the current SQL conformance")
++  ExInst<SqlValidatorException> geographyDisabled();
++
++  @BaseMessage("GEOGRAPHY cannot be used as an ordering key")
++  ExInst<SqlValidatorException> geographyOrderKey();
++
++  @BaseMessage("GEOGRAPHY cannot be used as a key in {0}")
++  ExInst<SqlValidatorException> geographyHashKey(String a0);
++
+   @BaseMessage("Support for UNSIGNED data types is not enabled")
+   ExInst<SqlValidatorException> unsignedDisabled();
+ 
+diff --git a/core/src/main/java/org/apache/calcite/sql/SqlMapTypeNameSpec.java b/core/src/main/java/org/apache/calcite/sql/SqlMapTypeNameSpec.java
+index f80e5b6b1..357db8cdc 100644
+--- a/core/src/main/java/org/apache/calcite/sql/SqlMapTypeNameSpec.java
++++ b/core/src/main/java/org/apache/calcite/sql/SqlMapTypeNameSpec.java
+@@ -20,11 +20,12 @@
+ import org.apache.calcite.sql.parser.SqlParserPos;
+ import org.apache.calcite.sql.type.SqlTypeName;
+ import org.apache.calcite.sql.validate.SqlValidator;
++import org.apache.calcite.sql.validate.SqlValidatorUtil;
+ import org.apache.calcite.util.Litmus;
+ 
+ /**
+- * Parse SQL MAP type, i.e. MAP&lt;INT NOT NULL, TIMESTAMP NULL&gt;, the key and value can specify a
+- * suffix to indicate if the type is nullable, default is not null.
++ * SQL MAP type, for example MAP&lt;INT NOT NULL, TIMESTAMP NULL&gt;.
++ * The key defaults to the type system's map-key nullability and the value defaults to nullable.
+  *
+  * <p>MAP type does not belong to standard SQL.
+  */
+@@ -32,6 +33,7 @@ public class SqlMapTypeNameSpec extends SqlTypeNameSpec {
+ 
+   private final SqlDataTypeSpec keyType;
+   private final SqlDataTypeSpec valType;
++  private final boolean unparseNotNull;
+ 
+   /**
+    * Creates a {@code SqlMapTypeNameSpec}.
+@@ -41,9 +43,16 @@ public class SqlMapTypeNameSpec extends SqlTypeNameSpec {
+    * @param pos the parser position
+    */
+   public SqlMapTypeNameSpec(SqlDataTypeSpec keyType, SqlDataTypeSpec valType, SqlParserPos pos) {
++    this(keyType, valType, pos, false);
++  }
++
++  /** Creates a map type specification with optional explicit NOT NULL rendering. */
++  public SqlMapTypeNameSpec(SqlDataTypeSpec keyType, SqlDataTypeSpec valType,
++      SqlParserPos pos, boolean unparseNotNull) {
+     super(new SqlIdentifier(SqlTypeName.MAP.getName(), pos), pos);
+     this.keyType = keyType;
+     this.valType = valType;
++    this.unparseNotNull = unparseNotNull;
+   }
+ 
+   public SqlDataTypeSpec getKeyType() {
+@@ -58,6 +67,7 @@ public SqlDataTypeSpec getValType() {
+     boolean keyCanBeNullable = validator.getTypeFactory().getTypeSystem().mapKeysCanBeNullable();
+     RelDataType kType =
+         keyType.deriveType(validator, keyCanBeNullable);
++    SqlValidatorUtil.validateGeographyHashKey(validator, keyType, kType, "MAP");
+ 
+     RelDataType valueType = valType.deriveType(validator, true);
+ 
+@@ -70,18 +80,20 @@ public SqlDataTypeSpec getValType() {
+     writer.keyword("MAP");
+     SqlWriter.Frame frame = writer.startList(SqlWriter.FrameTypeEnum.FUN_CALL, "<", ">");
+     writer.sep(","); // configures the writer
+-    keyType.unparse(writer, leftPrec, rightPrec);
+-    // Default is not null.
+-    if (Boolean.TRUE.equals(keyType.getNullable())) {
+-      writer.keyword("NULL");
+-    }
++    unparseEntryType(writer, leftPrec, rightPrec, keyType);
+     writer.sep(",");
+-    valType.unparse(writer, leftPrec, rightPrec);
+-    // Default is not null.
+-    if (Boolean.TRUE.equals(valType.getNullable())) {
++    unparseEntryType(writer, leftPrec, rightPrec, valType);
++    writer.endList(frame);
++  }
++
++  private void unparseEntryType(SqlWriter writer, int leftPrec, int rightPrec,
++      SqlDataTypeSpec type) {
++    type.unparse(writer, leftPrec, rightPrec);
++    if (Boolean.TRUE.equals(type.getNullable())) {
+       writer.keyword("NULL");
++    } else if (unparseNotNull && Boolean.FALSE.equals(type.getNullable())) {
++      writer.keyword("NOT NULL");
+     }
+-    writer.endList(frame);
+   }
+ 
+   @Override public boolean equalsDeep(SqlTypeNameSpec spec, Litmus litmus) {
+diff --git a/core/src/main/java/org/apache/calcite/sql/SqlUtil.java b/core/src/main/java/org/apache/calcite/sql/SqlUtil.java
+index 107125af5..7a8d31a3c 100644
+--- a/core/src/main/java/org/apache/calcite/sql/SqlUtil.java
++++ b/core/src/main/java/org/apache/calcite/sql/SqlUtil.java
+@@ -1082,6 +1082,16 @@ public static void validateCharset(ByteString value, Charset charset) {
+     return node;
+   }
+ 
++  /** Strips sort direction and null ordering from an ORDER BY expression. */
++  public static SqlNode stripOrderModifiers(SqlNode node) {
++    while (node instanceof SqlCall
++        && (node.getKind() == SqlKind.DESCENDING || node.getKind() == SqlKind.NULLS_FIRST
++            || node.getKind() == SqlKind.NULLS_LAST)) {
++      node = ((SqlCall) node).operand(0);
++    }
++    return node;
++  }
++
+   /** Modifies a list of nodes, removing AS from each if present.
+    *
+    * @see #stripAs */
+diff --git a/core/src/main/java/org/apache/calcite/sql/SqlWindow.java b/core/src/main/java/org/apache/calcite/sql/SqlWindow.java
+index 66c4f8d7b..ab104456e 100644
+--- a/core/src/main/java/org/apache/calcite/sql/SqlWindow.java
++++ b/core/src/main/java/org/apache/calcite/sql/SqlWindow.java
+@@ -637,6 +637,8 @@ public boolean isAllowPartial() {
+       }
+ 
+       partitionItem.validateExpr(validator, operandScope);
++      SqlValidatorUtil.validateGeographyHashKey(validator, partitionItem,
++          validator.deriveType(operandScope, partitionItem), "PARTITION BY");
+     }
+ 
+     for (SqlNode orderItem : orderList) {
+@@ -652,6 +654,7 @@ public boolean isAllowPartial() {
+ 
+       try {
+         orderItem.validateExpr(validator, scope);
++        SqlValidatorUtil.validateGeographyOrderKey(validator, scope, orderItem);
+       } finally {
+         validator.transform(config ->
+             config.withColumnReferenceExpansion(savedColumnReferenceExpansion));
+diff --git a/core/src/main/java/org/apache/calcite/sql/fun/SqlInOperator.java b/core/src/main/java/org/apache/calcite/sql/fun/SqlInOperator.java
+index 28cbf5173..91fe7ea60 100644
+--- a/core/src/main/java/org/apache/calcite/sql/fun/SqlInOperator.java
++++ b/core/src/main/java/org/apache/calcite/sql/fun/SqlInOperator.java
+@@ -176,6 +176,10 @@ private static SqlBinaryOperator of(SqlKind kind) {
+             rightType,
+             null);
+ 
++    if (this instanceof SqlQuantifyOperator) {
++      ((SqlQuantifyOperator) this).validateGeographyOrdering(validator, call,
++          leftRowType, rightRowType);
++    }
+     final ComparableOperandTypeChecker checker =
+         (ComparableOperandTypeChecker)
+             OperandTypes.COMPARABLE_UNORDERED_COMPARABLE_UNORDERED;
+diff --git a/core/src/main/java/org/apache/calcite/sql/fun/SqlLibraryOperators.java b/core/src/main/java/org/apache/calcite/sql/fun/SqlLibraryOperators.java
+index f8f4e9273..093e59565 100644
+--- a/core/src/main/java/org/apache/calcite/sql/fun/SqlLibraryOperators.java
++++ b/core/src/main/java/org/apache/calcite/sql/fun/SqlLibraryOperators.java
+@@ -490,11 +490,21 @@ static RelDataType deriveTypeSplit(SqlOperatorBinding operatorBinding,
+           OperandTypes.STRING_STRING,
+           SqlFunctionCategory.STRING);
+ 
++  private static SqlReturnTypeInference geographyOrderChecked(SqlReturnTypeInference inference) {
++    return binding -> {
++      if (binding.collectOperandTypes().stream().anyMatch(SqlTypeUtil::containsGeography)) {
++        throw binding.newError(RESOURCE.geographyOrderKey());
++      }
++      return inference.inferReturnType(binding);
++    };
++  }
++
+   /** The "GREATEST(value, value)" function. */
+   @LibraryOperator(libraries = {BIG_QUERY, ORACLE, HIVE})
+   public static final SqlFunction GREATEST =
+       SqlBasicFunction.create(SqlKind.GREATEST,
+-          ReturnTypes.LEAST_RESTRICTIVE.andThen(SqlTypeTransforms.TO_NULLABLE),
++          geographyOrderChecked(
++              ReturnTypes.LEAST_RESTRICTIVE.andThen(SqlTypeTransforms.TO_NULLABLE)),
+           OperandTypes.SAME_VARIADIC);
+ 
+   /** The "GREATEST(value, value)" function. Identical to the standard <code>GREATEST</code>
+@@ -502,14 +512,16 @@ static RelDataType deriveTypeSplit(SqlOperatorBinding operatorBinding,
+   @LibraryOperator(libraries = {POSTGRESQL, SPARK})
+   public static final SqlFunction GREATEST_PG =
+       SqlBasicFunction.create("GREATEST", SqlKind.GREATEST_PG,
+-          ReturnTypes.LEAST_RESTRICTIVE.andThen(SqlTypeTransforms.TO_NULLABLE),
++          geographyOrderChecked(
++              ReturnTypes.LEAST_RESTRICTIVE.andThen(SqlTypeTransforms.TO_NULLABLE)),
+           OperandTypes.SAME_VARIADIC);
+ 
+   /** The "LEAST(value, value)" function. */
+   @LibraryOperator(libraries = {BIG_QUERY, ORACLE, HIVE})
+   public static final SqlFunction LEAST =
+       SqlBasicFunction.create(SqlKind.LEAST,
+-          ReturnTypes.LEAST_RESTRICTIVE.andThen(SqlTypeTransforms.TO_NULLABLE),
++          geographyOrderChecked(
++              ReturnTypes.LEAST_RESTRICTIVE.andThen(SqlTypeTransforms.TO_NULLABLE)),
+           OperandTypes.SAME_VARIADIC);
+ 
+   /** The "LEAST(value, value)" function. Identical to the standard <code>LEAST</code>
+@@ -517,7 +529,8 @@ static RelDataType deriveTypeSplit(SqlOperatorBinding operatorBinding,
+   @LibraryOperator(libraries = {POSTGRESQL, SPARK})
+   public static final SqlFunction LEAST_PG =
+       SqlBasicFunction.create("LEAST", SqlKind.LEAST_PG,
+-          ReturnTypes.LEAST_RESTRICTIVE.andThen(SqlTypeTransforms.TO_NULLABLE),
++          geographyOrderChecked(
++              ReturnTypes.LEAST_RESTRICTIVE.andThen(SqlTypeTransforms.TO_NULLABLE)),
+           OperandTypes.SAME_VARIADIC);
+ 
+   /** The "CEIL(value)" function. Identical to the standard <code>CEIL</code> function
+@@ -1759,7 +1772,7 @@ private static RelDataType deriveTypeArraysZip(SqlOperatorBinding opBinding) {
+   @LibraryOperator(libraries = {SPARK})
+   public static final SqlFunction SORT_ARRAY =
+       SqlBasicFunction.create(SqlKind.SORT_ARRAY,
+-          ReturnTypes.ARG0_NULLABLE,
++          geographyOrderChecked(ReturnTypes.ARG0_NULLABLE),
+           OperandTypes.ARRAY.or(OperandTypes.ARRAY_BOOLEAN_LITERAL));
+ 
+   private static RelDataType deriveTypeMapConcat(SqlOperatorBinding opBinding) {
+diff --git a/core/src/main/java/org/apache/calcite/sql/fun/SqlQuantifyOperator.java b/core/src/main/java/org/apache/calcite/sql/fun/SqlQuantifyOperator.java
+index aeb770acb..537d34b6f 100644
+--- a/core/src/main/java/org/apache/calcite/sql/fun/SqlQuantifyOperator.java
++++ b/core/src/main/java/org/apache/calcite/sql/fun/SqlQuantifyOperator.java
+@@ -112,6 +112,7 @@ public class SqlQuantifyOperator extends SqlInOperator {
+       if (SqlTypeUtil.isCollection(rightType)) {
+         RelDataType componentRightType = requireNonNull(rightType.getComponentType());
+         RelDataType leftType = validator.deriveType(scope, left);
++        validateGeographyOrdering(validator, call, leftType, componentRightType);
+         boolean isCompatibleType = isCompatibleType(componentRightType, leftType);
+         SqlCall sqlCall =
+             new SqlBasicCall(call.getOperator(),
+@@ -147,6 +148,14 @@ public class SqlQuantifyOperator extends SqlInOperator {
+     return null;
+   }
+ 
++  void validateGeographyOrdering(SqlValidator validator, SqlCall call,
++      RelDataType leftType, RelDataType rightType) {
++    if (comparisonKind != SqlKind.EQUALS && comparisonKind != SqlKind.NOT_EQUALS
++        && (SqlTypeUtil.containsGeography(leftType) || SqlTypeUtil.containsGeography(rightType))) {
++      throw validator.newValidationError(call, RESOURCE.geographyOrderKey());
++    }
++  }
++
+   private static boolean isCompatibleType(RelDataType leftType, RelDataType rightType) {
+     return SqlTypeUtil.sameNamedType(rightType, leftType)
+         || SqlTypeUtil.isNull(leftType)
+diff --git a/core/src/main/java/org/apache/calcite/sql/type/SqlTypeAssignmentRule.java b/core/src/main/java/org/apache/calcite/sql/type/SqlTypeAssignmentRule.java
+index f90db45d6..fe3638245 100644
+--- a/core/src/main/java/org/apache/calcite/sql/type/SqlTypeAssignmentRule.java
++++ b/core/src/main/java/org/apache/calcite/sql/type/SqlTypeAssignmentRule.java
+@@ -247,6 +247,8 @@ private SqlTypeAssignmentRule(
+     rule.add(SqlTypeName.VARCHAR);
+     rules.add(SqlTypeName.GEOMETRY, rule);
+ 
++    rules.add(SqlTypeName.GEOGRAPHY, EnumSet.of(SqlTypeName.GEOGRAPHY));
++
+     // ARRAY is assignable from ...
+     rules.add(SqlTypeName.ARRAY, EnumSet.of(SqlTypeName.ARRAY));
+ 
+diff --git a/core/src/main/java/org/apache/calcite/sql/type/SqlTypeFactoryImpl.java b/core/src/main/java/org/apache/calcite/sql/type/SqlTypeFactoryImpl.java
+index 3dde2b430..be14ace4e 100644
+--- a/core/src/main/java/org/apache/calcite/sql/type/SqlTypeFactoryImpl.java
++++ b/core/src/main/java/org/apache/calcite/sql/type/SqlTypeFactoryImpl.java
+@@ -61,6 +61,9 @@ public SqlTypeFactoryImpl(RelDataTypeSystem typeSystem) {
+   @Override public RelDataType createSqlType(
+       SqlTypeName typeName,
+       int precision) {
++    if (typeName == SqlTypeName.GEOGRAPHY && precision != RelDataType.PRECISION_NOT_SPECIFIED) {
++      BasicSqlType.checkPrecScale(typeName, true, false);
++    }
+     if (typeName.allowsScale()) {
+       return createSqlType(typeName, precision, typeSystem.getDefaultScale(typeName));
+     }
+@@ -296,6 +299,7 @@ private static void assertBasic(SqlTypeName typeName) {
+     int nullableCount = 0;
+     int javaCount = 0;
+     int anyCount = 0;
++    int geographyCount = 0;
+ 
+     for (RelDataType type : types) {
+       final SqlTypeName typeName = type.getSqlTypeName();
+@@ -305,6 +309,9 @@ private static void assertBasic(SqlTypeName typeName) {
+       if (typeName == SqlTypeName.ANY) {
+         anyCount++;
+       }
++      if (typeName == SqlTypeName.GEOGRAPHY) {
++        geographyCount++;
++      }
+       if (type.isNullable()) {
+         ++nullableCount;
+       }
+@@ -321,6 +328,10 @@ private static void assertBasic(SqlTypeName typeName) {
+       return createTypeWithNullability(createSqlType(SqlTypeName.ANY),
+           nullCount > 0 || nullableCount > 0);
+     }
++    // Date/time shortcuts below can return before checking every input family.
++    if (geographyCount > 0 && geographyCount + nullCount < types.size()) {
++      return null;
++    }
+ 
+     for (int i = 0; i < types.size(); ++i) {
+       RelDataType type = types.get(i);
+diff --git a/core/src/main/java/org/apache/calcite/sql/type/SqlTypeFamily.java b/core/src/main/java/org/apache/calcite/sql/type/SqlTypeFamily.java
+index 0e9b14e35..f2a0b3f8e 100644
+--- a/core/src/main/java/org/apache/calcite/sql/type/SqlTypeFamily.java
++++ b/core/src/main/java/org/apache/calcite/sql/type/SqlTypeFamily.java
+@@ -59,6 +59,7 @@ public enum SqlTypeFamily implements RelDataTypeFamily {
+   BOOLEAN,
+   INTERVAL_YEAR_MONTH,
+   INTERVAL_DAY_TIME,
++  GEOGRAPHY,
+ 
+   // Secondary families.
+ 
+@@ -212,6 +213,8 @@ public Collection<SqlTypeName> getTypeNames() {
+       return SqlTypeName.INTERVAL_TYPES;
+     case GEO:
+       return SqlTypeName.GEOMETRY_TYPES;
++    case GEOGRAPHY:
++      return ImmutableList.of(SqlTypeName.GEOGRAPHY);
+     case MULTISET:
+       return ImmutableList.of(SqlTypeName.MULTISET);
+     case ARRAY:
+@@ -274,6 +277,8 @@ public Collection<SqlTypeName> getTypeNames() {
+           new SqlIntervalQualifier(TimeUnit.YEAR, TimeUnit.MONTH, SqlParserPos.ZERO));
+     case GEO:
+       return factory.createSqlType(SqlTypeName.GEOMETRY);
++    case GEOGRAPHY:
++      return factory.createSqlType(SqlTypeName.GEOGRAPHY);
+     case MULTISET:
+       return factory.createMultisetType(factory.createSqlType(SqlTypeName.ANY), -1);
+     case ARRAY:
+diff --git a/core/src/main/java/org/apache/calcite/sql/type/SqlTypeName.java b/core/src/main/java/org/apache/calcite/sql/type/SqlTypeName.java
+index 73557737c..f9cfb22ea 100644
+--- a/core/src/main/java/org/apache/calcite/sql/type/SqlTypeName.java
++++ b/core/src/main/java/org/apache/calcite/sql/type/SqlTypeName.java
+@@ -135,6 +135,8 @@ public enum SqlTypeName {
+   /** Spatial type. Though not standard, it is common to several DBs, so we
+    * do not flag it 'special' (internal). */
+   GEOMETRY(PrecScale.NO_NO, false, ExtraSqlTypes.GEOMETRY, SqlTypeFamily.GEO),
++  /** Geographic spatial type. */
++  GEOGRAPHY(PrecScale.NO_NO, false, Types.OTHER, SqlTypeFamily.GEOGRAPHY),
+   MEASURE(PrecScale.NO_NO, true, Types.OTHER, SqlTypeFamily.ANY),
+   FUNCTION(PrecScale.NO_NO, true, Types.OTHER, SqlTypeFamily.FUNCTION),
+   SARG(PrecScale.NO_NO, true, Types.OTHER, SqlTypeFamily.ANY),
+@@ -175,7 +177,7 @@ public enum SqlTypeName {
+           INTERVAL_SECOND, TIME_WITH_LOCAL_TIME_ZONE, TIME_TZ,
+           TIMESTAMP_WITH_LOCAL_TIME_ZONE, TIMESTAMP_TZ,
+           FLOAT, MULTISET, DISTINCT, STRUCTURED, ROW, CURSOR, COLUMN_LIST, UUID, VARIANT,
+-          UTINYINT, USMALLINT, UINTEGER, UBIGINT);
++          UTINYINT, USMALLINT, UINTEGER, UBIGINT, GEOGRAPHY);
+ 
+   public static final List<SqlTypeName> BOOLEAN_TYPES =
+       ImmutableList.of(BOOLEAN);
+diff --git a/core/src/main/java/org/apache/calcite/sql/type/SqlTypeUtil.java b/core/src/main/java/org/apache/calcite/sql/type/SqlTypeUtil.java
+index 122708a41..4e3fd86a6 100644
+--- a/core/src/main/java/org/apache/calcite/sql/type/SqlTypeUtil.java
++++ b/core/src/main/java/org/apache/calcite/sql/type/SqlTypeUtil.java
+@@ -1020,6 +1020,27 @@ public static boolean canAssignFrom(
+       return canAssignFrom(getComponentTypeOrThrow(toType), getComponentTypeOrThrow(fromType));
+     }
+ 
++    if (containsGeography(toType) || containsGeography(fromType)) {
++      final SqlTypeName typeName = toType.getSqlTypeName();
++      if (typeName != fromType.getSqlTypeName()) {
++        return false;
++      }
++      if (typeName == SqlTypeName.MULTISET) {
++        return canAssignFrom(getComponentTypeOrThrow(toType), getComponentTypeOrThrow(fromType));
++      }
++      if (typeName == SqlTypeName.MAP) {
++        return canAssignFrom(requireNonNull(toType.getKeyType()),
++            requireNonNull(fromType.getKeyType()))
++            && canAssignFrom(requireNonNull(toType.getValueType()),
++                requireNonNull(fromType.getValueType()));
++      }
++      if (typeName == SqlTypeName.ROW) {
++        return toType.getFieldCount() == fromType.getFieldCount()
++            && Pair.zip(toType.getFieldList(), fromType.getFieldList()).stream()
++                .allMatch(p -> canAssignFrom(p.left.getType(), p.right.getType()));
++      }
++    }
++
+     if (areCharacterSetsMismatched(toType, fromType)) {
+       return false;
+     }
+@@ -1115,6 +1136,20 @@ public static boolean canCastFrom(
+     if (toTypeName == SqlTypeName.UNKNOWN) {
+       return true;
+     }
++    if (toTypeName == SqlTypeName.GEOGRAPHY || fromTypeName == SqlTypeName.GEOGRAPHY) {
++      return toTypeName == fromTypeName || fromTypeName == SqlTypeName.NULL
++          || fromTypeName == SqlTypeName.UNKNOWN;
++    }
++    if (toTypeName == SqlTypeName.MAP && fromTypeName == SqlTypeName.MAP
++        && (containsGeography(toType) || containsGeography(fromType))) {
++      return canCastFrom(requireNonNull(toType.getKeyType()),
++          requireNonNull(fromType.getKeyType()), typeMappingRule)
++          && canCastFrom(requireNonNull(toType.getValueType()),
++              requireNonNull(fromType.getValueType()), typeMappingRule);
++    }
++    if (fromType.getFamily() == SqlTypeFamily.CHARACTER && containsGeography(toType)) {
++      return false;
++    }
+     if (toType.getSqlTypeName() == SqlTypeName.UUID) {
+       return fromType.getSqlTypeName() == SqlTypeName.NULL
+           || fromType.getSqlTypeName() == SqlTypeName.UUID
+@@ -1191,6 +1226,19 @@ public static boolean canCastFrom(
+     return typeMappingRule.canApplyFrom(toTypeName, fromTypeName);
+   }
+ 
++  /** Returns whether a type is GEOGRAPHY or contains a GEOGRAPHY leaf. */
++  public static boolean containsGeography(RelDataType type) {
++    final RelDataType componentType = type.getComponentType();
++    final RelDataType keyType = type.getKeyType();
++    final RelDataType valueType = type.getValueType();
++    return type.getSqlTypeName() == SqlTypeName.GEOGRAPHY
++        || componentType != null && containsGeography(componentType)
++        || keyType != null && containsGeography(keyType)
++        || valueType != null && containsGeography(valueType)
++        || type.isStruct() && type.getFieldList().stream()
++            .anyMatch(field -> containsGeography(field.getType()));
++  }
++
+   /**
+    * Flattens a record type by recursively expanding any fields which are
+    * themselves record types. For each record type, a representative null
+@@ -1324,6 +1372,7 @@ public static SqlDataTypeSpec convertTypeToSpec(RelDataType type,
+     if (isAtomic(type) || isNull(type)
+         || type.getSqlTypeName() == SqlTypeName.UNKNOWN
+         || type.getSqlTypeName() == SqlTypeName.GEOMETRY
++        || type.getSqlTypeName() == SqlTypeName.GEOGRAPHY
+         || SqlTypeUtil.isInterval(type)) {
+       int precision =
+           typeName.allowsPrec() ? type.getPrecision() : RelDataType.PRECISION_NOT_SPECIFIED;
+@@ -1363,7 +1412,8 @@ public static SqlDataTypeSpec convertTypeToSpec(RelDataType type,
+           requireNonNull(type.getValueType(), () -> "valueType of " + type);
+       final SqlDataTypeSpec keyTypeSpec = convertTypeToSpec(keyType);
+       final SqlDataTypeSpec valueTypeSpec = convertTypeToSpec(valueType);
+-      typeNameSpec = new SqlMapTypeNameSpec(keyTypeSpec, valueTypeSpec, SqlParserPos.ZERO);
++      typeNameSpec = new SqlMapTypeNameSpec(keyTypeSpec, valueTypeSpec, SqlParserPos.ZERO,
++          containsGeography(type));
+     } else {
+       throw new UnsupportedOperationException(
+           "Unsupported type when convertTypeToSpec: " + typeName);
+diff --git a/core/src/main/java/org/apache/calcite/sql/validate/SetopNamespace.java b/core/src/main/java/org/apache/calcite/sql/validate/SetopNamespace.java
+index 58c381e80..dd0f3defa 100644
+--- a/core/src/main/java/org/apache/calcite/sql/validate/SetopNamespace.java
++++ b/core/src/main/java/org/apache/calcite/sql/validate/SetopNamespace.java
+@@ -20,6 +20,7 @@
+ import org.apache.calcite.sql.SqlCall;
+ import org.apache.calcite.sql.SqlKind;
+ import org.apache.calcite.sql.SqlNode;
++import org.apache.calcite.sql.SqlSetOperator;
+ import org.apache.calcite.util.Util;
+ 
+ import org.checkerframework.checker.nullness.qual.Nullable;
+@@ -112,10 +113,12 @@ private static SqlMonotonicity combine(@Nullable SqlMonotonicity m0,
+         }
+         validator.validateQuery(operand, scope, targetRowType);
+       }
+-      return call.getOperator().deriveType(
+-          validator,
+-          scope,
+-          call);
++      final SqlSetOperator op = (SqlSetOperator) call.getOperator();
++      final RelDataType type = op.deriveType(validator, scope, call);
++      if (!op.isAll() || call.getKind() != SqlKind.UNION) {
++        SqlValidatorUtil.validateGeographyHashKey(validator, call, type, op.getName());
++      }
++      return type;
+     default:
+       throw new AssertionError("Not a query: " + call.getKind());
+     }
+diff --git a/core/src/main/java/org/apache/calcite/sql/validate/SqlConformance.java b/core/src/main/java/org/apache/calcite/sql/validate/SqlConformance.java
+index 5e652be9b..251eddd43 100644
+--- a/core/src/main/java/org/apache/calcite/sql/validate/SqlConformance.java
++++ b/core/src/main/java/org/apache/calcite/sql/validate/SqlConformance.java
+@@ -507,6 +507,17 @@ enum SelectAliasLookup {
+    */
+   boolean allowGeometry();
+ 
++  /**
++   * Whether to allow the {@code GEOGRAPHY} data type.
++   *
++   * <p>Among the built-in conformance levels, true in
++   * {@link SqlConformanceEnum#BABEL} and {@link SqlConformanceEnum#LENIENT};
++   * false otherwise.
++   */
++  default boolean allowGeography() {
++    return false;
++  }
++
+   /**
+    * Whether the least restrictive type of a number of CHAR types of different
+    * lengths should be a VARCHAR type. And similarly BINARY to VARBINARY.
+diff --git a/core/src/main/java/org/apache/calcite/sql/validate/SqlConformanceEnum.java b/core/src/main/java/org/apache/calcite/sql/validate/SqlConformanceEnum.java
+index 8d7d0b530..aa0d50071 100644
+--- a/core/src/main/java/org/apache/calcite/sql/validate/SqlConformanceEnum.java
++++ b/core/src/main/java/org/apache/calcite/sql/validate/SqlConformanceEnum.java
+@@ -377,6 +377,10 @@ public enum SqlConformanceEnum implements SqlConformance {
+     }
+   }
+ 
++  @Override public boolean allowGeography() {
++    return this == BABEL || this == LENIENT;
++  }
++
+   @Override public boolean shouldConvertRaggedUnionTypesToVarying() {
+     switch (this) {
+     case PRAGMATIC_99:
+diff --git a/core/src/main/java/org/apache/calcite/sql/validate/SqlDelegatingConformance.java b/core/src/main/java/org/apache/calcite/sql/validate/SqlDelegatingConformance.java
+index 00a77b0ee..d33aaa50f 100644
+--- a/core/src/main/java/org/apache/calcite/sql/validate/SqlDelegatingConformance.java
++++ b/core/src/main/java/org/apache/calcite/sql/validate/SqlDelegatingConformance.java
+@@ -138,6 +138,10 @@ protected SqlDelegatingConformance(SqlConformance delegate) {
+     return delegate.allowGeometry();
+   }
+ 
++  @Override public boolean allowGeography() {
++    return delegate.allowGeography();
++  }
++
+   @Override public boolean shouldConvertRaggedUnionTypesToVarying() {
+     return delegate.shouldConvertRaggedUnionTypesToVarying();
+   }
+diff --git a/core/src/main/java/org/apache/calcite/sql/validate/SqlValidatorImpl.java b/core/src/main/java/org/apache/calcite/sql/validate/SqlValidatorImpl.java
+index 03e8978ef..b3067c6d0 100644
+--- a/core/src/main/java/org/apache/calcite/sql/validate/SqlValidatorImpl.java
++++ b/core/src/main/java/org/apache/calcite/sql/validate/SqlValidatorImpl.java
+@@ -1934,6 +1934,7 @@ protected SqlSelect createSourceSelectForDelete(SqlDelete call) {
+       // a known type with the unknown type
+       return;
+     }
++    SqlValidatorUtil.validateGeographyMapKeys(this, node, type);
+     nodeToTypeMap.put(node, type);
+   }
+ 
+@@ -4125,6 +4126,10 @@ protected void validateSelect(
+     // window name in the WINDOW clause etc.
+     final RelDataType rowType =
+         validateSelectList(selectItems, select, targetRowType);
++    if (select.isDistinct()) {
++      SqlValidatorUtil.validateGeographyHashKey(this,
++          requireNonNull(select.getModifierNode(SqlSelectKeyword.DISTINCT)), rowType, "DISTINCT");
++    }
+     ns.setType(rowType);
+     validateHavingClause(select);
+ 
+@@ -4910,6 +4915,9 @@ private void validateOrderItem(SqlSelect select, SqlNode orderItem) {
+ 
+     final SqlValidatorScope orderScope = getOrderScope(select);
+     validateExpr(orderItem, orderScope);
++    final SqlNode key = SqlUtil.stripOrderModifiers(orderItem);
++    SqlValidatorUtil.validateGeographyOrderKey(this, key,
++        deriveType(orderScope, expandOrderExpr(select, key)));
+   }
+ 
+   @Override public SqlNode expandOrderExpr(SqlSelect select, SqlNode orderExpr) {
+@@ -5021,9 +5029,13 @@ private void validateGroupItem(SqlValidatorScope groupScope,
+       break;
+     default:
+       if (groupItem instanceof SqlNodeList) {
++        for (SqlNode item : (SqlNodeList) groupItem) {
++          validateGroupItem(groupScope, aggregatingScope, item);
++        }
+         break;
+       }
+       final RelDataType type = deriveType(groupScope, groupItem);
++      SqlValidatorUtil.validateGeographyHashKey(this, groupItem, type, "GROUP BY");
+       setValidatedNodeType(groupItem, type);
+     }
+   }
+@@ -6147,6 +6159,7 @@ public void setOriginal(SqlNode expr, SqlNode original) {
+       SqlIdentifier identifier = (SqlIdentifier) node;
+       identifier.validate(this, scope);
+       RelDataType type = deriveType(scope, identifier);
++      SqlValidatorUtil.validateGeographyHashKey(this, identifier, type, "PARTITION BY");
+       String name = identifier.names.get(1);
+       typeBuilder.add(name, type);
+     }
+@@ -6154,6 +6167,7 @@ public void setOriginal(SqlNode expr, SqlNode original) {
+     // parse ORDER BY column
+     for (SqlNode node : matchRecognize.getOrderList()) {
+       node.validate(this, scope);
++      SqlValidatorUtil.validateGeographyOrderKey(this, scope, node);
+       SqlIdentifier identifier;
+       if (node instanceof SqlBasicCall) {
+         identifier = ((SqlBasicCall) node).operand(0);
+@@ -6640,6 +6654,8 @@ private SqlNode navigationInDefine(SqlNode node, String alpha) {
+           throw newValidationError(aggCall,
+               RESOURCE.aggregateInWithinDistinctIllegal());
+         }
++        SqlValidatorUtil.validateGeographyHashKey(this, param,
++            deriveType(scope, param), "WITHIN DISTINCT");
+       }
+     }
+     if (orderList != null) {
+@@ -6648,10 +6664,22 @@ private SqlNode navigationInDefine(SqlNode node, String alpha) {
+           throw newValidationError(aggCall,
+               RESOURCE.aggregateInWithinGroupIllegal());
+         }
++        SqlValidatorUtil.validateGeographyOrderKey(this, scope, param);
+       }
+     }
+ 
+     final SqlAggFunction op = (SqlAggFunction) aggCall.getOperator();
++    final SqlLiteral quantifier = aggCall.getFunctionQuantifier();
++    if ((quantifier != null && quantifier.getValue() == SqlSelectKeyword.DISTINCT
++        && op.getDistinctOptionality() != Optionality.IGNORED)
++        || op == SqlStdOperatorTable.APPROX_COUNT_DISTINCT || op.getKind() == SqlKind.MODE) {
++      for (SqlNode param : aggCall.getOperandList()) {
++        if (!(param instanceof SqlIdentifier) || !((SqlIdentifier) param).isStar()) {
++          SqlValidatorUtil.validateGeographyHashKey(this, param,
++              deriveType(scope, param), op.getName());
++        }
++      }
++    }
+     switch (op.requiresGroupOrder()) {
+     case MANDATORY:
+       if (orderList == null || orderList.isEmpty()) {
+diff --git a/core/src/main/java/org/apache/calcite/sql/validate/SqlValidatorUtil.java b/core/src/main/java/org/apache/calcite/sql/validate/SqlValidatorUtil.java
+index ebfc011b3..bf315c14b 100644
+--- a/core/src/main/java/org/apache/calcite/sql/validate/SqlValidatorUtil.java
++++ b/core/src/main/java/org/apache/calcite/sql/validate/SqlValidatorUtil.java
+@@ -97,6 +97,48 @@
+  * Utility methods related to validation.
+  */
+ public class SqlValidatorUtil {
++  /** Validates an ordering key after the caller has resolved its scope. */
++  public static void validateGeographyOrderKey(SqlValidator validator,
++      SqlValidatorScope scope, SqlNode item) {
++    final SqlNode key = SqlUtil.stripOrderModifiers(item);
++    validateGeographyOrderKey(validator, key, validator.deriveType(scope, key));
++  }
++
++  static void validateGeographyOrderKey(SqlValidator validator, SqlNode key, RelDataType type) {
++    if (SqlTypeUtil.containsGeography(type)) {
++      throw validator.newValidationError(key, RESOURCE.geographyOrderKey());
++    }
++  }
++
++  /** Validates a key for an operation that requires value equality and hashing. */
++  public static void validateGeographyHashKey(SqlValidator validator, SqlNode node,
++      RelDataType type, String context) {
++    if (SqlTypeUtil.containsGeography(type)) {
++      throw validator.newValidationError(node, RESOURCE.geographyHashKey(context));
++    }
++  }
++
++  /** Rejects GEOGRAPHY keys in any MAP contained in a validated type. */
++  static void validateGeographyMapKeys(SqlValidator validator, SqlNode node, RelDataType type) {
++    final RelDataType key = type.getKeyType();
++    if (key != null) {
++      validateGeographyHashKey(validator, node, key, "MAP");
++    }
++    final RelDataType value = type.getValueType();
++    if (value != null) {
++      validateGeographyMapKeys(validator, node, value);
++    }
++    final RelDataType component = type.getComponentType();
++    if (component != null) {
++      validateGeographyMapKeys(validator, node, component);
++    }
++    if (type.isStruct()) {
++      for (RelDataTypeField field : type.getFieldList()) {
++        validateGeographyMapKeys(validator, node, field.getType());
++      }
++    }
++  }
++
+   private SqlValidatorUtil() {}
+ 
+   //~ Methods ----------------------------------------------------------------
+diff --git a/core/src/main/java/org/apache/calcite/sql/validate/implicit/AbstractTypeCoercion.java b/core/src/main/java/org/apache/calcite/sql/validate/implicit/AbstractTypeCoercion.java
+index 32d39229b..03ace3f24 100644
+--- a/core/src/main/java/org/apache/calcite/sql/validate/implicit/AbstractTypeCoercion.java
++++ b/core/src/main/java/org/apache/calcite/sql/validate/implicit/AbstractTypeCoercion.java
+@@ -305,6 +305,9 @@ protected boolean needToCast(SqlValidatorScope scope, SqlNode node,
+     if (SqlTypeUtil.equalSansNullability(factory, fromType, toType)) {
+       return false;
+     }
++    if (SqlTypeUtil.containsGeography(toType) || SqlTypeUtil.containsGeography(fromType)) {
++      return SqlTypeUtil.canCastFrom(toType, fromType, mappingRule);
++    }
+     // Should keep sync with rules in SqlTypeCoercionRule.
+     assert SqlTypeUtil.canCastFrom(toType, fromType, mappingRule);
+     return true;
+@@ -964,6 +967,7 @@ protected Boolean coerceStringToArray(
+     if (validator.config().conformance().allowLenientCoercion()
+         && SqlTypeUtil.isString(fromType)
+         && SqlTypeUtil.isArray(targetType)
++        && !SqlTypeUtil.containsGeography(targetType)
+         && operand instanceof SqlCharStringLiteral) {
+       try {
+         SqlNode arrayValue =
+diff --git a/core/src/main/resources/org/apache/calcite/runtime/CalciteResource.properties b/core/src/main/resources/org/apache/calcite/runtime/CalciteResource.properties
+index 124e133a1..41654055a 100644
+--- a/core/src/main/resources/org/apache/calcite/runtime/CalciteResource.properties
++++ b/core/src/main/resources/org/apache/calcite/runtime/CalciteResource.properties
+@@ -30,6 +30,9 @@ IdentifierTooLong=Length of identifier ''{0}'' must be less than or equal to {1,
+ BadFormat=not in format ''{0}''
+ BetweenWithoutAnd=BETWEEN operator has no terminating AND
+ GeometryDisabled=Geo-spatial extensions and the GEOMETRY data type are not enabled
++GeographyDisabled=The GEOGRAPHY data type is not enabled in the current SQL conformance
++GeographyOrderKey=GEOGRAPHY cannot be used as an ordering key
++GeographyHashKey=GEOGRAPHY cannot be used as a key in {0}
+ UnsignedDisabled=Support for UNSIGNED data types is not enabled
+ Proj4jEpsgIsMissing=Proj4J EPSG is missing from the classpath; to resolve this problem, download the EPSG data set and agree to its terms of use
+ IllegalIntervalLiteral=Illegal INTERVAL literal {0}; at {1}

@@ -1,0 +1,59 @@
+{
+  "_license": "Licensed to the Apache Software Foundation (ASF) under one\nor more contributor license agreements. See the NOTICE file\ndistributed with this work for additional information\nregarding copyright ownership. The ASF licenses this file\nto you under the Apache License, Version 2.0 (the\n\"License\"); you may not use this file except in compliance\nwith the License. You may obtain a copy of the License at\nhttp://www.apache.org/licenses/LICENSE-2.0\nUnless required by applicable law or agreed to in writing, software\ndistributed under the License is distributed on an \"AS IS\" BASIS,\nWITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.\nSee the License for the specific language governing permissions and\nlimitations under the License.",
+  "kind": "bigquery#queryResponse",
+  "schema": {
+    "fields": [
+      {
+        "name": "row_count",
+        "type": "INTEGER",
+        "mode": "NULLABLE"
+      },
+      {
+        "name": "scalar_nulls",
+        "type": "INTEGER",
+        "mode": "NULLABLE"
+      },
+      {
+        "name": "scalar_empties",
+        "type": "INTEGER",
+        "mode": "NULLABLE"
+      }
+    ]
+  },
+  "jobReference": {
+    "projectId": "healthy-skill-501608-t7",
+    "jobId": "job_eKvVlkjAO1fJZTXnksgaBWKdndmt",
+    "location": "US"
+  },
+  "totalRows": "1",
+  "rows": [
+    {
+      "f": [
+        {
+          "v": "47"
+        },
+        {
+          "v": "1"
+        },
+        {
+          "v": "22"
+        }
+      ]
+    }
+  ],
+  "totalBytesProcessed": "4744",
+  "jobComplete": true,
+  "cacheHit": false,
+  "queryId": "job_eKvVlkjAO1fJZTXnksgaBWKdndmt",
+  "jobCreationReason": {
+    "code": "REQUESTED"
+  },
+  "totalBytesBilled": "10485760",
+  "totalSlotMs": "233",
+  "location": "US",
+  "creationTime": "1795505995498",
+  "startTime": "1795505995895",
+  "endTime": "1795505996684",
+  "pageRowCount": "1",
+  "statementType": "SELECT"
+}
