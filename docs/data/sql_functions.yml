@@ -16,91 +16,96 @@
 # under the License
 
 comparison:
-  - sql: value1 = value2
-    table: value1 === value2
-    description: Returns TRUE if value1 is equal to value2; returns UNKNOWN if value1 or value2 is NULL.
-  - sql: value1 <> value2
-    table: value1 !== value2
-    description: Returns TRUE if value1 is not equal to value2; returns UNKNOWN if value1 or value2 is NULL.
-  - sql: value1 > value2
-    table: value1 > value2
-    description: Returns TRUE if value1 is greater than value2; returns UNKNOWN if value1 or value2 is NULL.
-  - sql: value1 >= value2
-    table: value1 >= value2
-    description: Returns TRUE if value1 is greater than or equal to value2; returns UNKNOWN if value1 or value2 is NULL.
-  - sql: value1 < value2
-    table: value1 < value2
-    description: Returns TRUE if value1 is less than value2; returns UNKNOWN if value1 or value2 is NULL.
-  - sql: value1 <= value2
-    table: value1 <= value2
-    description: Returns TRUE if value1 is less than or equal to value2; returns UNKNOWN if value1 or value2 is NULL.
-  - sql: value IS NULL
-    table: value.isNull
-    description: Returns TRUE if value is NULL.
-  - sql: value IS NOT NULL
-    table: value.isNotNull
-    description: Returns TRUE if value is not NULL.
-  - sql: value1 IS DISTINCT FROM value2
-    description: Returns TRUE if two values are different. NULL values are treated as identical here. E.g., 1 IS DISTINCT FROM NULL returns TRUE; NULL IS DISTINCT FROM NULL returns FALSE.
-  - sql: value1 IS NOT DISTINCT FROM value2
-    description: Returns TRUE if two values are equal. NULL values are treated as identical here. E.g., 1 IS NOT DISTINCT FROM NULL returns FALSE; NULL IS NOT DISTINCT FROM NULL returns TRUE.
-  - sql: value1 BETWEEN [ ASYMMETRIC | SYMMETRIC ] value2 AND value3
-    description: By default (or with the ASYMMETRIC keyword), returns TRUE if value1 is greater than or equal to value2 and less than or equal to value3. With the SYMMETRIC keyword, returns TRUE if value1 is inclusively between value2 and value3. When either value2 or value3 is NULL, returns FALSE or UNKNOWN. E.g., 12 BETWEEN 15 AND 12 returns FALSE; 12 BETWEEN SYMMETRIC 15 AND 12 returns TRUE; 12 BETWEEN 10 AND NULL returns UNKNOWN; 12 BETWEEN NULL AND 10 returns FALSE; 12 BETWEEN SYMMETRIC NULL AND 12 returns UNKNOWN.
-  - sql: value1 NOT BETWEEN [ ASYMMETRIC | SYMMETRIC ] value2 AND value3
-    description: By default (or with the ASYMMETRIC keyword), returns TRUE if value1 is less than value2 or greater than value3. With the SYMMETRIC keyword, returns TRUE if value1 is not inclusively between value2 and value3. When either value2 or value3 is NULL, returns TRUE or UNKNOWN. E.g., 12 NOT BETWEEN 15 AND 12 returns TRUE; 12 NOT BETWEEN SYMMETRIC 15 AND 12 returns FALSE; 12 NOT BETWEEN NULL AND 15 returns UNKNOWN; 12 NOT BETWEEN 15 AND NULL returns TRUE; 12 NOT BETWEEN SYMMETRIC 12 AND NULL returns UNKNOWN.
+  - sql: expr BETWEEN [ ASYMMETRIC | SYMMETRIC ] lower_bound AND upper_bound
+    table: expr.between(lowerBound, upperBound)
+    page: between
+  - sql: expr NOT BETWEEN [ ASYMMETRIC | SYMMETRIC ] lower_bound AND upper_bound
+    table: expr.notBetween(lowerBound, upperBound)
+    page: between
+  - table: expr.between(lowerBound, upperBound)
+    page: between
+  - table: expr.notBetween(lowerBound, upperBound)
+    page: between
+  - sql: expr1 = expr2
+    table: expr1.isEqual(expr2)
+    page: comparison-operators
+  - sql: expr1 <> expr2
+    table: expr1.isNotEqual(expr2)
+    page: comparison-operators
+  - sql: expr1 > expr2
+    table: expr1.isGreater(expr2)
+    page: comparison-operators
+  - sql: expr1 >= expr2
+    table: expr1.isGreaterOrEqual(expr2)
+    page: comparison-operators
+  - sql: expr1 < expr2
+    table: expr1.isLess(expr2)
+    page: comparison-operators
+  - sql: expr1 <= expr2
+    table: expr1.isLessOrEqual(expr2)
+    page: comparison-operators
+  - sql: EXISTS (sub-query)
+    page: exists
+  - sql: expr IN (expr1 [, expr2]* )
+    table: expr.in(expr1, expr2)
+    page: in
+  - sql: expr NOT IN (expr1 [, expr2]* )
+    page: in
+  - sql: expr IN (sub-query)
+    table: expr.in(TABLE)
+    page: in
+  - sql: expr NOT IN (sub-query)
+    page: in
+  - sql: expr1 IS DISTINCT FROM expr2
+    page: is-distinct-from
+  - sql: expr1 IS NOT DISTINCT FROM expr2
+    page: is-distinct-from
+  - sql: expr IS NULL
+    table: expr.isNull()
+    page: is-null
+  - sql: expr IS NOT NULL
+    table: expr.isNotNull()
+    page: is-null
+  - sql: IS_NAN(value)
+    table: value.isNan()
+    page: is-nan
   - sql: string1 LIKE string2 [ ESCAPE char ]
     table: string1.like(string2[, char])
-    description: Returns TRUE if string1 matches pattern string2; returns UNKNOWN if string1 or string2 is NULL. An escape character consisting of a single char can be defined using the ESCAPE clause if necessary. There is no default escape character.
+    page: like
   - sql: string1 NOT LIKE string2 [ ESCAPE char ]
-    description: Returns TRUE if string1 does not match pattern string2; returns UNKNOWN if string1 or string2 is NULL. An escape character consisting of a single char can be defined using the ESCAPE clause if necessary. There is no default escape character.
+    page: like
   - sql: string1 SIMILAR TO string2 [ ESCAPE char ]
     table: string1.similar(string2)
-    description: Returns TRUE if string1 matches SQL regular expression string2; returns UNKNOWN if string1 or string2 is NULL. An escape character can be defined if necessary. The escape character has not been supported yet.
+    page: similar-to
   - sql: string1 NOT SIMILAR TO string2 [ ESCAPE char ]
-    description: Returns TRUE if string1 does not match SQL regular expression string2; returns UNKNOWN if string1 or string2 is NULL. An escape character can be defined if necessary. The escape character has not been supported yet.
-  - sql: value1 IN (value2 [, value3]* )
-    table: value1.in(value2)
-    description: Returns TRUE if value1 exists in the given list (value2, value3, ...). When (value2, value3, ...). contains NULL, returns TRUE if the element can be found and UNKNOWN otherwise. Always returns UNKNOWN if value1 is NULL. E.g., 4 IN (1, 2, 3) returns FALSE; 1 IN (1, 2, NULL) returns TRUE; 4 IN (1, 2, NULL) returns UNKNOWN.
-  - sql: value1 NOT IN (value2 [, value3]* )
-    description: Returns TRUE if value1 does not exist in the given list (value2, value3, ...). When (value2, value3, ...). contains NULL, returns FALSE if value1 can be found and UNKNOWN otherwise. Always returns UNKNOWN if value1 is NULL. E.g., 4 NOT IN (1, 2, 3) returns TRUE; 1 NOT IN (1, 2, NULL) returns FALSE; 4 NOT IN (1, 2, NULL) returns UNKNOWN.
-  - sql: EXISTS (sub-query)
-    description: Returns TRUE if sub-query returns at least one row. Only supported if the operation can be rewritten in a join and group operation. For streaming queries the operation is rewritten in a join and group operation. The required state to compute the query result might grow infinitely depending on the number of distinct input rows. Please provide a query configuration with valid retention interval to prevent excessive state size.
-  - sql: value IN (sub-query)
-    table: value.in(TABLE)
-    description: Returns TRUE if value is equal to a row returned by sub-query.
-  - sql: value NOT IN (sub-query)
-    description: Returns TRUE if value is not equal to a row returned by sub-query.
-  - table: value1.between(value2, value3)
-    description: Returns TRUE if value1 is greater than or equal to value2 and less than or equal to value3. When either value2 or value3 is NULL, returns FALSE or UNKNOWN.
-  - table: value1.notBetween(value2, value3)
-    description: Returns FALSE if value1 is greater than or equal to value2 and less than or equal to value3. When either value2 or value3 is NULL, returns TRUE or UNKNOWN.
+    page: similar-to
 
 logical:
-  - sql: boolean1 OR boolean2
-    table: BOOLEAN1 || BOOLEAN2
-    description: Returns TRUE if BOOLEAN1 is TRUE or BOOLEAN2 is TRUE. Supports three-valued logic. E.g., true || Null(BOOLEAN) returns TRUE.
-  - sql: boolean1 AND boolean2
-    table: BOOLEAN1 && BOOLEAN2
-    description: Returns TRUE if BOOLEAN1 and BOOLEAN2 are both TRUE. Supports three-valued logic. E.g., true && Null(BOOLEAN) returns UNKNOWN.
-  - sql: NOT boolean
-    table: BOOLEAN.not(), not(BOOLEAN), or '!BOOLEAN' (Scala only)
-    description: Returns TRUE if boolean is FALSE; returns FALSE if boolean is TRUE; returns UNKNOWN if boolean is UNKNOWN.
-  - sql: boolean IS FALSE
-    table: BOOLEAN.isFalse
-    description: Returns TRUE if boolean is FALSE; returns FALSE if boolean is TRUE or UNKNOWN.
-  - sql: boolean IS NOT FALSE
-    table: BOOLEAN.isNotFalse
-    description: Returns TRUE if BOOLEAN is TRUE or UNKNOWN; returns FALSE if BOOLEAN is FALSE.
-  - sql: boolean IS TRUE
-    table: BOOLEAN.isTrue
-    description: Returns TRUE if BOOLEAN is TRUE; returns FALSE if BOOLEAN is FALSE or UNKNOWN.
-  - sql: boolean IS NOT TRUE
-    table: BOOLEAN.isNotTrue
-    description: Returns TRUE if boolean is FALSE or UNKNOWN; returns FALSE if boolean is TRUE.
-  - sql: boolean IS UNKNOWN
-    description: Returns TRUE if boolean is UNKNOWN; returns FALSE if boolean is TRUE or FALSE.
-  - sql: boolean IS NOT UNKNOWN
-    description: Returns TRUE if boolean is TRUE or FALSE; returns FALSE if boolean is UNKNOWN.
+  - sql: expr IS FALSE
+    table: expr.isFalse
+    page: is-false
+  - sql: expr IS NOT FALSE
+    table: expr.isNotFalse
+    page: is-false
+  - sql: expr IS TRUE
+    table: expr.isTrue
+    page: is-true
+  - sql: expr IS NOT TRUE
+    table: expr.isNotTrue
+    page: is-true
+  - sql: expr IS UNKNOWN
+    page: is-unknown
+  - sql: expr IS NOT UNKNOWN
+    page: is-unknown
+  - sql: expr1 AND expr2
+    table: expr1.and(expr2)
+    page: logical-operators
+  - sql: expr1 OR expr2
+    table: expr1.or(expr2)
+    page: logical-operators
+  - sql: NOT expr
+    table: expr.not()
+    page: logical-operators
 
 arithmetic:
   - sql: + numeric
@@ -225,29 +230,6 @@ arithmetic:
   - sql: RAND_INTEGER(INT1, INT2)
     table: randInteger(INT1, INT2)
     description: Returns a pseudorandom integer value in the range [0, INT2) with an initial seed INT1. Two RAND_INTEGER functions will return identical sequences of numbers if they have the same initial seed and bound.
-  - sql: UUID()
-    table: uuid()
-    description: Returns an UUID (Universally Unique Identifier) string (e.g., "3d3c68f7-f608-473f-b60c-b0c44ad4cc4e") according to RFC 4122 type 4 (pseudo randomly generated) UUID. The UUID is generated using a cryptographically strong pseudo random number generator.
-  - sql: BIN(INT)
-    table: INT.bin()
-    description: Returns a string representation of INTEGER in binary format. Returns NULL if INTEGER is NULL. E.g., 4.bin() returns "100" and 12.bin() returns "1100".
-  - sql: |
-      HEX(numeric)
-      HEX(string)
-    table: |
-      NUMERIC.hex()
-      STRING.hex()
-    description: Returns a string representation of an integer NUMERIC value or a STRING in hex format. Returns NULL if the argument is NULL. E.g. a numeric 20 leads to "14", a numeric 100 leads to "64", a string "hello,world" leads to "68656C6C6F2C776F726C64".
-  - sql: UNHEX(expr)
-    table: expr.unhex()
-    description: |
-      Converts hexadecimal string expr to BINARY. If the length of expr is odd, the first character is discarded and the result is left padded with a null byte. 
-      
-      E.g., SELECT DECODE(UNHEX('466C696E6B') , 'UTF-8' ) or '466C696E6B'.unhex().decode('UTF-8') returns "Flink".
-      
-      expr <CHAR | VARCHAR>
-      
-      Returns a BINARY. `NULL` if expr is `NULL` or expr contains non-hex characters.
   - sql: TRUNCATE(numeric1, integer2)
     table: NUMERIC1.truncate(INTEGER2)
     description: Returns a numeric of truncated to integer2 decimal places. Returns NULL if numeric1 or integer2 is NULL. If integer2 is 0, the result has no decimal point or fractional part. integer2 can be negative to cause integer2 digits left of the decimal point of the value to become zero. This function can also pass in only one numeric1 parameter and not set integer2 to use. If integer2 is not set, the function truncates as if integer2 were 0. E.g. 42.324.truncate(2) to 42.32. and 42.324.truncate() to 42.0.
@@ -323,18 +305,6 @@ string:
   - sql: REPEAT(string, int)
     table: STRING.repeat(INT)
     description: Returns a string that repeats the base string integer times. E.g., REPEAT('This is a test String.', 2) returns "This is a test String.This is a test String.".
-  - sql: REGEXP_REPLACE(str, regex, replacement)
-    table: str.regexpReplace(regex, replacement)
-    description: |
-      Returns a version of str with every substring that matches the Java regular expression regex replaced by replacement.
-
-      If regex is a non-`NULL` literal that fails to compile, the function throws a `ValidationException` at planning time. A non-literal regex (for example a column value) that fails to compile at runtime makes the function return `NULL`.
-
-      E.g. REGEXP_REPLACE('foobar', 'oo|ar', '') returns "fb".
-
-      `str <CHAR | VARCHAR>, regex <CHAR | VARCHAR>, replacement <CHAR | VARCHAR>`
-
-      Returns a `STRING`. `NULL` if any of the arguments are `NULL`, or if a non-literal regex is invalid.
   - sql: OVERLAY(string1 PLACING string2 FROM integer1 [ FOR integer2 ])
     table: |
       STRING1.overlay(STRING2, INT1)
@@ -372,56 +342,6 @@ string:
   - sql: REPLACE(string1, string2, string3)
     table: STRING1.replace(STRING2, STRING3)
     description: Returns a new string which replaces all the occurrences of STRING2 with STRING3 (non-overlapping) from STRING1. E.g., 'hello world'.replace('world', 'flink') returns 'hello flink'; 'ababab'.replace('abab', 'z') returns 'zab'.
-  - sql: REGEXP_COUNT(str, regex)
-    table: str.regexpCount(regex)
-    description: |
-      Returns the number of times str matches the regex pattern. regex must be a Java regular expression.
-      
-      `str <CHAR | VARCHAR>, regex <CHAR | VARCHAR>`
-      
-      Returns an `INTEGER` representation of the number of matches. `NULL` if any of the arguments are `NULL` or regex is invalid.
-  - sql: REGEXP_EXTRACT(str, regex[, extractIndex])
-    table: str.regexpExtract(regex[, extractIndex])
-    description: |
-      Returns the substring in str captured by the group at position extractIndex of the Java regular expression regex.
-
-      extractIndex starts from 1, and 0 means matching the whole regex. It defaults to 0 when not specified and must not exceed the number of capturing groups in regex.
-
-      If regex is a non-`NULL` literal that fails to compile, the function throws a `ValidationException` at planning time. A non-literal regex (for example a column value) that fails to compile at runtime makes the function return `NULL`.
-
-      E.g. REGEXP_EXTRACT('foothebar', 'foo(.*?)(bar)', 2) returns "bar".
-
-      `str <CHAR | VARCHAR>, regex <CHAR | VARCHAR>, extractIndex <INTEGER>`
-
-      Returns a `STRING` representation of the captured substring. `NULL` if any of the arguments are `NULL`, if extractIndex exceeds the number of capturing groups, if there is no match, or if a non-literal regex is invalid.
-  - sql: REGEXP_EXTRACT_ALL(str, regex[, extractIndex])
-    table: str.regexpExtractAll(regex[, extractIndex])
-    description: |
-      Extracts all the substrings in str that match the regex expression and correspond to the regex group extractIndex.
-      
-      regex may contain multiple groups. extractIndex indicates which regex group to extract and starts from 1, also the default value if not specified. 0 means matching the entire regular expression.
-      
-      `str <CHAR | VARCHAR>, regex <CHAR | VARCHAR>, extractIndex <TINYINT | SMALLINT | INTEGER | BIGINT>`
-      
-      Returns an `ARRAY<STRING>` representation of all the matched substrings. `NULL` if any of the arguments are `NULL` or invalid.
-  - sql: REGEXP_INSTR(str, regex)
-    table: str.regexpInstr(regex)
-    description: |
-      Returns the position of the first substring in str that matches regex.
-      
-      Result indexes begin at 1, 0 if there is no match.
-      
-      `str <CHAR | VARCHAR>, regex <CHAR | VARCHAR>`
-      
-      Returns an `INTEGER` representation of the first matched substring index. `NULL` if any of the arguments are `NULL` or regex is invalid.
-  - sql: REGEXP_SUBSTR(str, regex)
-    table: str.regexpSubstr(regex)
-    description: |
-      Returns the first substring in str that matches regex.
-      
-      `str <CHAR | VARCHAR>, regex <CHAR | VARCHAR>`
-      
-      Returns an `STRING` representation of the first matched substring. `NULL` if any of the arguments are `NULL` or regex is invalid or pattern is not found.
   - sql: TRANSLATE(expr, fromStr, toStr)
     table: expr.translate(fromStr, toStr)
     description: |
@@ -453,12 +373,32 @@ string:
   - sql: TO_BASE64(string)
     table: STRING.toBase64()
     description: Returns the base64-encoded result from string; returns NULL if string is NULL. E.g., TO_BASE64('hello world') returns "aGVsbG8gd29ybGQ=".
+  - sql: BIN(INT)
+    table: INT.bin()
+    description: Returns a string representation of INTEGER in binary format. Returns NULL if INTEGER is NULL. E.g., 4.bin() returns "100" and 12.bin() returns "1100".
+  - sql: |
+      HEX(numeric)
+      HEX(string)
+    table: |
+      NUMERIC.hex()
+      STRING.hex()
+    description: Returns a string representation of an integer NUMERIC value or a STRING in hex format. Returns NULL if the argument is NULL. E.g. a numeric 20 leads to "14", a numeric 100 leads to "64", a string "hello,world" leads to "68656C6C6F2C776F726C64".
+  - sql: UNHEX(expr)
+    table: expr.unhex()
+    description: |
+      Converts hexadecimal string expr to BINARY. If the length of expr is odd, the first character is discarded and the result is left padded with a null byte. 
+      
+      E.g., SELECT DECODE(UNHEX('466C696E6B') , 'UTF-8' ) or '466C696E6B'.unhex().decode('UTF-8') returns "Flink".
+      
+      expr <CHAR | VARCHAR>
+      
+      Returns a BINARY. `NULL` if expr is `NULL` or expr contains non-hex characters.
   - sql: ASCII(string)
     table: STRING.ascii()
     description: Returns the numeric value of the first character of string. Returns NULL if string is NULL. E.g., ascii('abc') returns 97, and ascii(CAST(NULL AS VARCHAR)) returns NULL.
   - sql: CHR(integer)
     table: INT.chr()
-    description: Returns the ASCII character having the binary equivalent to integer. If integer is larger than 255, we will get the modulus of integer divided by 255 first, and returns CHR of the modulus. Returns NULL if integer is NULL. E.g., chr(97) returns a, chr(353) returns a, and ascii(CAST(NULL AS VARCHAR)) returns NULL.
+    description: Returns the ASCII character having the binary equivalent to integer. If integer is larger than 255, we will get the modulus of integer divided by 256 first, and returns CHR of the modulus. Returns NULL if integer is NULL. E.g., chr(97) returns a, chr(353) returns a, and chr(CAST(NULL AS INT)) returns NULL.
   - sql: DECODE(binary, string)
     table: BINARY.decode(STRING)
     description: Decodes the first argument into a String using the provided character set (one of 'US-ASCII', 'ISO-8859-1', 'UTF-8', 'UTF-16BE', 'UTF-16LE', 'UTF-16'). If either argument is null, the result will also be null.
@@ -515,22 +455,16 @@ string:
       Also a value of a particular key in QUERY can be extracted by providing the key as the third argument string3.
 
       E.g., parse_url('http://facebook.com/path1/p.php?k1=v1&k2=v2#Ref1', 'QUERY', 'k1') returns 'v1'. 
-  - sql: REGEXP(str, regex)
-    table: str.regexp(regex)
-    description: |
-      Returns `TRUE` if any substring of str matches the Java regular expression regex, otherwise `FALSE`.
-
-      If regex is a non-`NULL` literal that fails to compile, the function throws a `ValidationException` at planning time. A non-literal regex (for example a column value) that fails to compile at runtime, or an empty regex, makes the function return `FALSE` rather than `NULL`.
-
-      `str <CHAR | VARCHAR>, regex <CHAR | VARCHAR>`
-
-      Returns a `BOOLEAN`. `NULL` if any of the arguments are `NULL`.
   - sql: REVERSE(string)
     table: STRING.reverse()
     description: Returns the reversed string. Returns NULL if string is NULL.
   - sql: SPLIT_INDEX(string1, string2, integer1)
     table: STRING1.splitIndex(STRING2, INTEGER1)
     description: Splits string1 by the delimiter string2, returns the integerth (zero-based) string of the split strings. Returns NULL if integer is negative. Returns NULL if any of arguments is NULL.
+  - sql: SPLIT(string, delimiter)
+    table: string.split(delimiter)
+    description: Returns an array of substrings by splitting the input string based on the given delimiter. If the delimiter is not found in the string, the original string is returned as the only element in the array. If the delimiter is empty, every character in the string is split. If the string or delimiter is null, a null value is returned. If the delimiter is found at the beginning or end of the string, or there are contiguous delimiters, then an empty string is added to the array.
+
   - sql: STR_TO_MAP(string1[, string2, string3])
     table: STRING1.strToMap([STRING2, STRING3])
     description: |
@@ -539,12 +473,6 @@ string:
   - sql: SUBSTR(string, integer1[, integer2])
     table: STRING.substr(INTEGER1[, INTEGER2])
     description: Returns a substring of string starting from position integer1 with length integer2 (to the end by default).
-  - sql: JSON_QUOTE(string)
-    table: STRING.JsonQuote()
-    description: Quotes a string as a JSON value by wrapping it with double quote characters, escaping interior quote and special characters (`"`, `\`, `/`, `\b`, `\f`, `\n`, `\r`, `\t`), and returning the result as a string. If the argument is NULL, the function returns NULL.
-  - sql: JSON_UNQUOTE(string)
-    table: STRING.JsonUnquote()
-    description: Unquotes JSON value, unescapes escaped special characters (`"`, `\`, `/`, `\b`, `\f`, `\n`, `\r`, `\t`, `\u` hex hex hex hex), and returns the result as a string. If the argument is NULL, returns NULL. If the value does not start and end with double quotes or if it starts and ends with double quotes but is not a valid JSON string literal, the value is passed through unmodified.
   - sql: ELT(index, expr[, exprs]*)
     table: index.elt(expr, exprs...)
     description: |
@@ -557,6 +485,52 @@ string:
       index <TINYINT | SMALLINT | INTEGER | BIGINT>, expr <BINARY | VARBINARY>, exprs <BINARY | VARBINARY>
       
       The result has the type of the least common type of all expressions. `NULL` if index is `NULL` or out of range.
+
+  - sql: IS_ALPHA(string)
+    description: Returns true if all characters in string are letter, otherwise false.
+  - sql: IS_DECIMAL(string)
+    description: Returns true if string can be parsed to a valid numeric, otherwise false.
+  - sql: IS_DIGIT(string)
+    description: Returns true if all characters in string are digit, otherwise false.
+  - sql: IS_VALID_UTF8(bytes)
+    table: BYTES.isValidUtf8()
+    description: |
+      Returns `TRUE` if the input is well-formed UTF-8, `FALSE` otherwise. Specifically rejects: truncated multi-byte sequences (missing continuation bytes), "overlong" encodings (using more bytes than necessary for the code point), code points above the Unicode maximum U+10FFFF, and UTF-16 surrogate values U+D800-U+DFFF (which have no UTF-8 representation). Returns `NULL` if the input is `NULL`.
+
+      Useful for filtering records with invalid UTF-8: `WHERE IS_VALID_UTF8(payload)` keeps clean rows; `WHERE NOT IS_VALID_UTF8(payload)` selects the rejects.
+
+      E.g., `IS_VALID_UTF8(x'48656C6C6F')` returns `TRUE`; `IS_VALID_UTF8(x'80')` returns `FALSE`.
+  - sql: MAKE_VALID_UTF8(bytes)
+    table: BYTES.makeValidUtf8()
+    description: |
+      Decodes the input as UTF-8, replacing each invalid sequence with the Unicode replacement character `U+FFFD` (rendered as `�`). The substitution is lossy and irreversible. Returns `NULL` if the input is `NULL`.
+
+      `MAKE_VALID_UTF8()` can fully replace a `CAST(bytes AS STRING)` which would error in case of invalid UTF-8.
+
+      E.g., `MAKE_VALID_UTF8(x'48656C6C6F')` returns `'Hello'`; `MAKE_VALID_UTF8(x'80')` returns `'�'` (the `U+FFFD` replacement character).
+
+regex:
+  - sql: REGEXP(str, regex)
+    table: str.regexp(regex)
+    page: regexp
+  - sql: REGEXP_COUNT(str, regex)
+    table: str.regexpCount(regex)
+    page: regexp-count
+  - sql: REGEXP_EXTRACT(str, regex[, extractIndex])
+    table: str.regexpExtract(regex[, extractIndex])
+    page: regexp-extract
+  - sql: REGEXP_EXTRACT_ALL(str, regex[, extractIndex])
+    table: str.regexpExtractAll(regex[, extractIndex])
+    page: regexp-extract-all
+  - sql: REGEXP_INSTR(str, regex)
+    table: str.regexpInstr(regex)
+    page: regexp-instr
+  - sql: REGEXP_REPLACE(str, regex, replacement)
+    table: str.regexpReplace(regex, replacement)
+    page: regexp-replace
+  - sql: REGEXP_SUBSTR(str, regex)
+    table: str.regexpSubstr(regex)
+    page: regexp-substr
 
 temporal:
   - sql: DATE string
@@ -767,89 +741,42 @@ conditional:
         (WHEN value2_1 [, value2_2 ]* THEN result_2)*
         (ELSE result_z)
       END
-    description: Returns resultX when the first time value is contained in (valueX_1, valueX_2, ...). When no value matches, returns result_z if it is provided and returns NULL otherwise.
+    page: case
   - sql: |
       CASE 
         WHEN condition1 THEN result1
         (WHEN condition2 THEN result2)*
         (ELSE result_z)
       END
-    description: Returns resultX when the first conditionX is met. When no condition is met, returns result_z if it is provided and returns NULL otherwise.
-  - sql: NULLIF(value1, value2)
-    description: Returns NULL if value1 is equal to value2; returns value1 otherwise. E.g., NULLIF(5, 5) returns NULL; NULLIF(5, 0) returns 5.
+    page: case
   - sql: COALESCE(value1 [, value2]*)
-    table: coalesce(value1, [, value2]*)
-    description: |
-      Returns the first argument that is not NULL.
-
-      If all arguments are NULL, it returns NULL as well. The return type is the least restrictive, common type of all of its arguments.
-      The return type is nullable if all arguments are nullable as well.
-
-      ```sql
-      -- Returns 'default'
-      COALESCE(NULL, 'default')
-
-      -- Returns the first non-null value among f0 and f1,
-      -- or 'default' if f0 and f1 are both NULL
-      COALESCE(f0, f1, 'default')
-      ```
+    table: coalesce(value1 [, value2]*)
+    page: coalesce
+  - sql: GREATEST(value1[, value2]*)
+    page: greatest
   - sql: IF(condition, true_value, false_value)
-    description: Returns the true_value if condition is met, otherwise false_value. E.g., IF(5 > 3, 5, 3) returns 5.
+    table: BOOLEAN.then(VALUE1, VALUE2)
+    page: if
   - sql: IFNULL(input, null_replacement)
     table: input.ifNull(nullReplacement)
-    description: |
-      Returns null_replacement if input is NULL; otherwise input is returned. 
-
-      Compared to COALESCE or CASE WHEN, this function returns a data type that is very specific in terms of nullability. The returned type is the common type of both arguments but only nullable if the null_replacement is nullable.
-
-      The function allows to pass nullable columns into a function or table that is declared with a NOT NULL constraint.
-
-      E.g., IFNULL(nullable_column, 5) returns never NULL.
-  - sql: IS_ALPHA(string)
-    description: Returns true if all characters in string are letter, otherwise false.
-  - sql: IS_DECIMAL(string)
-    description: Returns true if string can be parsed to a valid numeric, otherwise false.
-  - sql: IS_DIGIT(string)
-    description: Returns true if all characters in string are digit, otherwise false.
-  - table: BOOLEAN.?(VALUE1, VALUE2)
-    description: Returns VALUE1 if BOOLEAN evaluates to TRUE; returns VALUE2 otherwise. E.g., (42 > 5).?('A', 'B') returns "A".
-  - sql: GREATEST(value1[, value2]*)
-    description: Returns the greatest value of the list of arguments. Returns NULL if any argument is NULL.
+    page: ifnull
   - sql: LEAST(value1[, value2]*)
-    description: Returns the least value of the list of arguments. Returns NULL if any argument is NULL.
+    page: least
+  - sql: NULLIF(value1, value2)
+    page: nullif
 
 conversion:
   - sql: CAST(value AS type)
     table: ANY.cast(TYPE)
-    description: Returns a new value being cast to type type. A CAST error throws an exception and fails the job. When performing a cast operation that may fail, like STRING to INT, one should rather use TRY_CAST, in order to handle errors. If "table.exec.legacy-cast-behaviour" is enabled, CAST behaves like TRY_CAST. E.g., CAST('42' AS INT) returns 42; CAST(NULL AS STRING) returns NULL of type STRING; CAST('non-number' AS INT) throws an exception and fails the job. Casting BINARY/VARBINARY/BYTES to a CHAR/VARCHAR/STRING type validates that the input is well-formed UTF-8 and throws on invalid sequences. Use MAKE_VALID_UTF8 to substitute the Unicode replacement character U+FFFD for invalid bytes, TRY_CAST to return NULL, or set "table.exec.legacy-bytes-to-string-cast" to "true" to restore the prior silent-substitution behavior.
+    page: cast
   - sql: TRY_CAST(value AS type)
     table: ANY.tryCast(TYPE)
-    description: Like CAST, but in case of error, returns NULL rather than failing the job. E.g., TRY_CAST('42' AS INT) returns 42; TRY_CAST(NULL AS STRING) returns NULL of type STRING; TRY_CAST('non-number' AS INT) returns NULL of type INT; COALESCE(TRY_CAST('non-number' AS INT), 0) returns 0 of type INT.
-  - sql: |
-      TYPEOF(input)
-      TYPEOF(input, force_serializable)
-    table: |
-      call("TYPEOF", input)
-      call("TYPEOF", input, force_serializable)
-    description: Returns the string representation of the input expression's data type. By default, the returned string is a summary string that might omit certain details for readability. If force_serializable is set to TRUE, the string represents a full data type that could be persisted in a catalog. Note that especially anonymous, inline data types have no serializable string representation. In this case, NULL is returned.
-  - sql: IS_VALID_UTF8(bytes)
-    table: BYTES.isValidUtf8()
-    description: |
-      Returns `TRUE` if the input is well-formed UTF-8, `FALSE` otherwise. Specifically rejects: truncated multi-byte sequences (missing continuation bytes), "overlong" encodings (using more bytes than necessary for the code point), code points above the Unicode maximum U+10FFFF, and UTF-16 surrogate values U+D800-U+DFFF (which have no UTF-8 representation). Returns `NULL` if the input is `NULL`.
-
-      Useful for filtering records with invalid UTF-8: `WHERE IS_VALID_UTF8(payload)` keeps clean rows; `WHERE NOT IS_VALID_UTF8(payload)` selects the rejects.
-
-      E.g., `IS_VALID_UTF8(x'48656C6C6F')` returns `TRUE`; `IS_VALID_UTF8(x'80')` returns `FALSE`.
-  - sql: MAKE_VALID_UTF8(bytes)
-    table: BYTES.makeValidUtf8()
-    description: |
-      Decodes the input as UTF-8, replacing each invalid sequence with the Unicode replacement character `U+FFFD` (rendered as `�`). The substitution is lossy and irreversible. Returns `NULL` if the input is `NULL`.
-
-      `MAKE_VALID_UTF8()` can fully replace a `CAST(bytes AS STRING)` which would error in case of invalid UTF-8.
-
-      E.g., `MAKE_VALID_UTF8(x'48656C6C6F')` returns `'Hello'`; `MAKE_VALID_UTF8(x'80')` returns `'�'` (the `U+FFFD` replacement character).
+    page: try-cast
 
 collection:
+  - sql: ARRAY '[' value1 [, value2 ]* ']'
+    table: array(ANY1, ANY2, ...)
+    description: Returns an array created from a list of values (value1, value2, ...).
   - sql: CARDINALITY(array)
     table: ARRAY.cardinality()
     description: Returns the number of elements in array.
@@ -859,6 +786,9 @@ collection:
   - sql: ELEMENT(array)
     table: ARRAY.element()
     description: Returns the sole element of array (whose cardinality should be one); returns NULL if array is empty. Throws an exception if array has more than one element.
+  - sql: MAP '[' value1, value2 [, value3, value4 ]* ']'
+    table: map(ANY1, ANY2, ANY3, ANY4, ...)
+    description: Returns a map created from a list of key-value pairs ((value1, value2), (value3, value4), ...).
   - sql: CARDINALITY(map)
     table: MAP.cardinality()
     description: Returns the number of entries in map.
@@ -925,334 +855,120 @@ collection:
   - sql: MAP_ENTRIES(map)
     table: MAP.mapEntries()
     description: Returns an array of all entries in the given map. No order guaranteed.
+  - sql: MAP_CONTAINS_KEY(map, key)
+    table: MAP.mapContainsKey(key)
+    description: |
+      Returns TRUE if the given key exists in the map, FALSE otherwise. Returns NULL if the map is
+      NULL. 
+      
+      If the search key is NULL, the function returns TRUE when the map contains a NULL key.
+      The given key is cast implicitly to the map's key type where Flink's implicit casting rules
+      allow it; otherwise the call fails validation.
+      
+      Examples
+        -- TRUE
+        MAP_CONTAINS_KEY(MAP['a', 1, 'b', 2], 'a')
+        -- FALSE
+        MAP_CONTAINS_KEY(MAP['a', 1, 'b', 2], 'z')
+        -- TRUE
+        MAP_CONTAINS_KEY(MAP[CAST(NULL AS STRING), 1], CAST(NULL AS STRING))
+        -- TRUE, the TINYINT key is cast to the map's INT key type
+        MAP_CONTAINS_KEY(MAP[1, 'a'], CAST(1 AS TINYINT))
   - sql: MAP_FROM_ARRAYS(array_of_keys, array_of_values)
     table: mapFromArrays(array_of_keys, array_of_values)
     description: Returns a map created from an arrays of keys and values. Note that the lengths of two arrays should be the same.
-  - sql: SPLIT(string, delimiter)
-    table: string.split(delimiter)
-    description: Returns an array of substrings by splitting the input string based on the given delimiter. If the delimiter is not found in the string, the original string is returned as the only element in the array. If the delimiter is empty, every character in the string is split. If the string or delimiter is null, a null value is returned. If the delimiter is found at the beginning or end of the string, or there are contiguous delimiters, then an empty string is added to the array.
+  - sql: MAP_FROM_ENTRIES(array_of_entries)
+    table: array.mapFromEntries()
+    description: |
+      Returns a map created from the given array of entries. Each entry must be a ROW with exactly
+      two fields, where the first field becomes the key and the second one the value.
+
+      If there are duplicate keys, the value of the last entry with that key wins; NULL keys are
+      treated as equal and collapse into a single entry. If the array itself or any of its entries
+      is NULL, NULL is returned.
+
+      ```sql
+      -- Returns {1=one, 2=two}
+      MAP_FROM_ENTRIES(ARRAY[ROW(1, 'one'), ROW(2, 'two')])
+
+      -- Returns {1=uno, 2=two}
+      MAP_FROM_ENTRIES(ARRAY[ROW(1, 'one'), ROW(2, 'two'), ROW(1, 'uno')])
+
+      -- Returns {NULL=b}
+      MAP_FROM_ENTRIES(ARRAY[ROW(CAST(NULL AS INT), 'a'), ROW(CAST(NULL AS INT), 'b')])
+
+      -- Returns NULL
+      MAP_FROM_ENTRIES(ARRAY[ROW(1, 'one'), CAST(NULL AS ROW(k INT, v STRING))])
+      ```
 
 json:
   - sql: IS JSON [ { VALUE | SCALAR | ARRAY | OBJECT } ]
     table: STRING.isJson([JsonType type])
-    description: |
-      Determine whether a given string is valid JSON.
-
-      Specifying the optional type argument puts a constraint on which type of JSON object is
-      allowed. If the string is valid JSON, but not that type, `false` is returned. The default is
-      `VALUE`.
-
-      ```sql
-      -- TRUE
-      '1' IS JSON
-      '[]' IS JSON
-      '{}' IS JSON
-
-      -- TRUE
-      '"abc"' IS JSON
-      -- FALSE
-      'abc' IS JSON
-      NULL IS JSON
-
-      -- TRUE
-      '1' IS JSON SCALAR
-      -- FALSE
-      '1' IS JSON ARRAY
-      -- FALSE
-      '1' IS JSON OBJECT
-
-      -- FALSE
-      '{}' IS JSON SCALAR
-      -- FALSE
-      '{}' IS JSON ARRAY
-      -- TRUE
-      '{}' IS JSON OBJECT
-      ```
-  - sql: JSON_EXISTS(jsonValue, path [ { TRUE | FALSE | UNKNOWN | ERROR } ON ERROR ])
-    table: STRING.jsonExists(STRING path [, JsonExistsOnError onError])
-    description: |
-      Determines whether a JSON string satisfies a given path search criterion.
-
-      If the error behavior is omitted, `FALSE ON ERROR` is assumed as the default.
-
-      ```sql
-      -- TRUE
-      SELECT JSON_EXISTS('{"a": true}', '$.a');
-      -- FALSE
-      SELECT JSON_EXISTS('{"a": true}', '$.b');
-      -- TRUE
-      SELECT JSON_EXISTS('{"a": [{ "b": 1 }]}',
-        '$.a[0].b');
-
-      -- TRUE
-      SELECT JSON_EXISTS('{"a": true}',
-        'strict $.b' TRUE ON ERROR);
-      -- FALSE
-      SELECT JSON_EXISTS('{"a": true}',
-        'strict $.b' FALSE ON ERROR);
-      ```
-  - sql: JSON_STRING(value)
-    table: jsonString(value)
-    description: |
-      Serializes a value into JSON.
-
-      This function returns a JSON string containing the serialized value. If the value is `NULL`,
-      the function returns `NULL`.
-
-      ```sql
-      -- NULL
-      JSON_STRING(CAST(NULL AS INT))
-
-      -- '1'
-      JSON_STRING(1)
-      -- 'true'
-      JSON_STRING(TRUE)
-      -- '"Hello, World!"'
-      JSON_STRING('Hello, World!')
-      -- '[1,2]'
-      JSON_STRING(ARRAY[1, 2])
-      -- '{"k1":"v1"}'
-      JSON_STRING(PARSE_JSON('{"k1":"v1"}'))
-      ```
-  - sql: JSON_VALUE(jsonValue, path [RETURNING <dataType>] [ { NULL | ERROR | DEFAULT <defaultExpr> } ON EMPTY ] [ { NULL | ERROR | DEFAULT <defaultExpr> } ON ERROR ])
-    table: STRING.jsonValue(STRING path [, returnType, onEmpty, defaultOnEmpty, onError, defaultOnError])
-    description: |
-      Extracts a scalar from a JSON string.
-
-      This method searches a JSON string for a given path expression and returns the value if the
-      value at that path is scalar. Non-scalar values cannot be returned. By default, the value is
-      returned as `STRING`. Using `dataType` a different type can be chosen, with the following
-      types being supported:
-
-      * `VARCHAR` / `STRING`
-      * `BOOLEAN`
-      * `INTEGER`
-      * `DOUBLE`
-
-      For empty path expressions or errors a behavior can be defined to either return `null`, raise
-      an error or return a defined default value instead. When omitted, the default is
-      `NULL ON EMPTY` or `NULL ON ERROR`, respectively. The default value may be a literal or an
-      expression. If the default value itself raises an error, it falls through to the error
-      behavior for `ON EMPTY`, and raises an error for `ON ERROR`.
-      
-      For path contains special characters such as spaces, you can use `['property']` or `["property"]` 
-      to select the specified property in a parent object. Be sure to put single or double quotes around the property name.
-      When using JSON_VALUE in SQL, the path is a character parameter which is already single quoted, 
-      so you have to escape the single quotes around property name, such as `JSON_VALUE('{"a b": "true"}', '$.[''a b'']')`.
-
-      ```sql
-      -- "true"
-      JSON_VALUE('{"a": true}', '$.a')
-
-      -- TRUE
-      JSON_VALUE('{"a": true}', '$.a' RETURNING BOOLEAN)
-
-      -- "false"
-      JSON_VALUE('{"a": true}', 'lax $.b'
-          DEFAULT FALSE ON EMPTY)
-
-      -- "false"
-      JSON_VALUE('{"a": true}', 'strict $.b'
-          DEFAULT FALSE ON ERROR)
-
-      -- 0.998D
-      JSON_VALUE('{"a.b": [0.998,0.996]}','$.["a.b"][0]' 
-          RETURNING DOUBLE)
-      
-      -- "right"
-      JSON_VALUE('{"contains blank": "right"}', 'strict $.[''contains blank'']' NULL ON EMPTY DEFAULT 'wrong' ON ERROR)
-      ```
-  - sql: JSON_QUERY(jsonValue, path [RETURNING <dataType>] [ { WITHOUT | WITH CONDITIONAL | WITH UNCONDITIONAL } [ ARRAY ] WRAPPER ] [ { NULL | EMPTY ARRAY | EMPTY OBJECT | ERROR } ON EMPTY ] [ { NULL | EMPTY ARRAY | EMPTY OBJECT | ERROR } ON ERROR ])
-    table: STRING.jsonQuery(path [, returnType [, JsonQueryWrapper [, JsonQueryOnEmptyOrError, JsonQueryOnEmptyOrError ] ] ])
-    description: |
-      Extracts JSON values from a JSON string.
-
-      The result is returned as a `STRING` or `ARRAY<STRING>`. This can be controlled with the `RETURNING` clause.
-
-      The `wrappingBehavior` determines whether the extracted value should be wrapped into an array,
-      and whether to do so unconditionally or only if the value itself isn't an array already.
-
-      `onEmpty` and `onError` determine the behavior in case the path expression is empty, or in
-      case an error was raised, respectively. By default, in both cases `null` is returned. Other
-      choices are to use an empty array, an empty object, or to raise an error.
-
-      ```sql
-      -- '{ "b": 1 }'
-      JSON_QUERY('{ "a": { "b": 1 } }', '$.a')
-      -- '[1, 2]'
-      JSON_QUERY('[1, 2]', '$')
-      -- NULL
-      JSON_QUERY(CAST(NULL AS STRING), '$')
-      -- '["c1","c2"]'
-      JSON_QUERY('{"a":[{"c":"c1"},{"c":"c2"}]}',
-          'lax $.a[*].c')
-      -- ['c1','c2']
-      JSON_QUERY('{"a":[{"c":"c1"},{"c":"c2"}]}', 'lax $.a[*].c' RETURNING ARRAY<STRING>)
-
-      -- Wrap result into an array
-      -- '[{}]'
-      JSON_QUERY('{}', '$' WITH CONDITIONAL ARRAY WRAPPER)
-      -- '[1, 2]'
-      JSON_QUERY('[1, 2]', '$' WITH CONDITIONAL ARRAY WRAPPER)
-      -- '[[1, 2]]'
-      JSON_QUERY('[1, 2]', '$' WITH UNCONDITIONAL ARRAY WRAPPER)
-
-      -- Scalars must be wrapped to be returned
-      -- NULL
-      JSON_QUERY(1, '$')
-      -- '[1]'
-      JSON_QUERY(1, '$' WITH CONDITIONAL ARRAY WRAPPER)
-
-      -- Behavior if path expression is empty / there is an error
-      -- '{}'
-      JSON_QUERY('{}', 'lax $.invalid' EMPTY OBJECT ON EMPTY)
-      -- '[]'
-      JSON_QUERY('{}', 'strict $.invalid' EMPTY ARRAY ON ERROR)
-      ```
-  - sql: JSON_OBJECT([[KEY] key VALUE value]* [ { NULL | ABSENT } ON NULL ])
-    table: jsonObject(JsonOnNull, keyValues...)
-    description: |
-      Builds a JSON object string from a list of key-value pairs.
-
-      Note that keys must be non-`NULL` string literals, while values may be arbitrary expressions.
-
-      This function returns a JSON string. The `ON NULL` behavior defines how to treat `NULL`
-      values. If omitted, `NULL ON NULL` is assumed by default.
-
-      Values which are created from another JSON construction function call (`JSON_OBJECT`,
-      `JSON_ARRAY`) are inserted directly rather than as a string. This allows building nested JSON
-      structures.
-
-      ```sql
-      -- '{}'
-      JSON_OBJECT()
-
-      -- '{"K1":"V1","K2":"V2"}'
-      JSON_OBJECT('K1' VALUE 'V1', 'K2' VALUE 'V2')
-
-      -- Expressions as values
-      JSON_OBJECT('orderNo' VALUE orders.orderId)
-
-      -- ON NULL
-      JSON_OBJECT(KEY 'K1' VALUE CAST(NULL AS STRING) NULL ON NULL)   -- '{"K1":null}'
-      JSON_OBJECT(KEY 'K1' VALUE CAST(NULL AS STRING) ABSENT ON NULL) -- '{}'
-
-      -- '{"K1":{"nested_json":{"value":42}}}'
-      JSON_OBJECT('K1' VALUE JSON('{"nested_json": {"value": 42}}'))
-      
-      -- '{"K1":{"K2":"V"}}'
-      JSON_OBJECT(
-        KEY 'K1'
-        VALUE JSON_OBJECT(
-          KEY 'K2'
-          VALUE 'V'
-        )
-      )
-      ```
+    page: is-json
   - sql: JSON(value)
     table: json(value)  
-    description: |
-      Expects a raw, pre-formatted JSON string and returns its values as-is without escaping it as a string.
-
-      This function can currently only be used within the `JSON_OBJECT` and `JSON_ARRAY` functions. 
-      It allows passing pre-formatted JSON strings that will be inserted directly into the 
-      resulting JSON structure rather than being escaped as a string value. This allows storing 
-      nested JSON structures in a `JSON_OBJECT` or `JSON_ARRAY` without processing them as strings, 
-      which is often useful when ingesting already formatted json data. If the value is NULL or empty, 
-      the function returns NULL.
-
-      ```sql
-      -- {"K":{"K2":42}}
-      JSON_OBJECT('K' VALUE JSON('{"K2": 42}'))
-
-      -- {"K":{"K2":{"K3":42}}}
-      JSON_OBJECT('K' VALUE JSON('{"K2":{"K3":42}}'))
-
-      -- {"K": null}
-      JSON_OBJECT('K' VALUE JSON(''))
-      
-      -- [{"K2":42}]
-      JSON_ARRAY(JSON('{"K2": 42}'))
-
-      -- [{"K":{"K1":42}}]
-      JSON_ARRAY(JSON('{"K":{"K1":42}}'))
-
-      -- [{"K":{"K1":42}}, {"K":{"K1":87}}]
-      JSON_ARRAY(JSON('{"K":{"K1":42}}'), JSON('{"K":{"K1":87}}'))
-      
-      -- [null]
-      JSON_ARRAY(JSON('') NULL ON NULL)
-
-      -- Invalid - JSON function can only be used within JSON_OBJECT
-      JSON('{"value": 42}')
-      ```
+    page: json
   - sql: JSON_ARRAY([value]* [ { NULL | ABSENT } ON NULL ])
     table: jsonArray(JsonOnNull, values...)
-    description: |
-      Builds a JSON array string from a list of values.
-
-      This function returns a JSON string. The values can be arbitrary expressions. The `ON NULL`
-      behavior defines how to treat `NULL` values. If omitted, `ABSENT ON NULL` is assumed by
-      default.
-
-      Elements which are created from another JSON construction function call (`JSON_OBJECT`,
-      `JSON_ARRAY`) are inserted directly rather than as a string. This allows building nested JSON
-      structures.
-
-      ```sql
-      -- '[]'
-      JSON_ARRAY()
-      -- '[1,"2"]'
-      JSON_ARRAY(1, '2')
-
-      -- Expressions as values
-      JSON_ARRAY(orders.orderId)
-
-      -- ON NULL
-      JSON_ARRAY(CAST(NULL AS STRING) NULL ON NULL) -- '[null]'
-      JSON_ARRAY(CAST(NULL AS STRING) ABSENT ON NULL) -- '[]'
-
-      -- '[[1]]'
-      JSON_ARRAY(JSON_ARRAY(1))
-      
-      -- [{"nested_json":{"value":42}}]
-      JSON_ARRAY(JSON('{"nested_json": {"value": 42}}'))
-      ```
+    page: json-array
+  - sql: JSON_EXISTS(jsonValue, path [ { TRUE | FALSE | UNKNOWN | ERROR } ON ERROR ])
+    table: STRING.jsonExists(STRING path [, JsonExistsOnError onError])
+    page: json-exists
+  - sql: JSON_LENGTH(json_doc[, path])
+    table: STRING.jsonLength([path])
+    page: json-length
+  - sql: JSON_OBJECT([[KEY] key VALUE value]* [ { NULL | ABSENT } ON NULL ])
+    table: jsonObject(JsonOnNull, keyValues...)
+    page: json-object
+  - sql: JSON_QUERY(jsonValue, path [RETURNING <dataType>] [ { WITHOUT | WITH CONDITIONAL | WITH UNCONDITIONAL } [ ARRAY ] WRAPPER ] [ { NULL | EMPTY ARRAY | EMPTY OBJECT | ERROR } ON EMPTY ] [ { NULL | EMPTY ARRAY | EMPTY OBJECT | ERROR } ON ERROR ])
+    table: STRING.jsonQuery(path [, returnType [, JsonQueryWrapper [, JsonQueryOnEmptyOrError, JsonQueryOnEmptyOrError ] ] ])
+    page: json-query
+  - sql: JSON_QUOTE(string)
+    table: STRING.jsonQuote()
+    page: json-quote
+  - sql: JSON_STRING(value)
+    table: jsonString(value)
+    page: json-string
+  - sql: JSON_TYPE(jsonValue[, path])
+    table: STRING.jsonType([path])
+    page: json-type
+  - sql: JSON_UNQUOTE(string)
+    table: STRING.jsonUnquote()
+    page: json-unquote
+  - sql: JSON_VALUE(jsonValue, path [RETURNING <dataType>] [ { NULL | ERROR | DEFAULT <defaultExpr> } ON EMPTY ] [ { NULL | ERROR | DEFAULT <defaultExpr> } ON ERROR ])
+    table: STRING.jsonValue(STRING path [, returnType, onEmpty, defaultOnEmpty, onError, defaultOnError])
+    page: json-value
 
 variant:
   - sql: PARSE_JSON(json_string[, allow_duplicate_keys])
-    description: |
-      Parse a JSON string into a Variant. If the JSON string is invalid, an error will be thrown. 
-      To return NULL instead of an error, use the `TRY_PARSE_JSON` function.
-      
-      If there are duplicate keys in the input JSON string, when `allowDuplicateKeys` is true, the 
-      parser will keep the last occurrence of all fields with the same key, otherwise when 
-      `allowDuplicateKeys` is false it will throw an error. The default value of 
-      `allowDuplicateKeys` is false.
+    table: STRING.parseJson([allowDuplicateKeys])
+    page: parse-json
+  - sql: PARSE_XML(xml_string[, force_array])
+    table: STRING.parseXml([forceArray])
+    page: parse-xml
   - sql: TRY_PARSE_JSON(json_string[, allow_duplicate_keys])
-    description: |
-      Try to parse a JSON string into a Variant if possible. If the JSON string is invalid, return 
-      NULL. To throw an error instead of returning NULL, use the `PARSE_JSON` function.
-
-      If there are duplicate keys in the input JSON string, when `allowDuplicateKeys` is true, the 
-      parser will keep the last occurrence of all fields with the same key, otherwise when 
-      `allowDuplicateKeys` is false it will throw an error. The default value of 
-      `allowDuplicateKeys` is false.
-  - sql: JSON_STRING(variant)
-    description: |
-      Generate a json string from a Variant object.
+    table: STRING.tryParseJson([allowDuplicateKeys])
+    page: try-parse-json
+  - sql: TRY_PARSE_XML(xml_string[, force_array])
+    table: STRING.tryParseXml([forceArray])
+    page: try-parse-xml
+  - sql: TRY_VARIANT_GET(variant, path[, returnType])
+    table: VARIANT.tryVariantGet(path[, returnType])
+    page: try-variant-get
   - sql: variant '[' INT ']'
     table: VARIANT.at(INT)
-    description: |
-      If the VARIANT is an ARRAY value, returns a VARIANT whose value is the element at
-      the specified index. The index starts from 1, If the index is out of range, it returns NULL.
+    page: variant-subscript
   - sql: variant '[' STRING ']'
     table: VARIANT.at(STRING)
-    description: |
-      If the VARIANT is a MAP value that has an element with this key, a VARIANT holding
-      the associated value is returned. Otherwise, NULL is returned.
+    page: variant-subscript
+  - sql: VARIANT_GET(variant, path[, returnType])
+    table: VARIANT.variantGet(path[, returnType])
+    page: variant-get
+  - sql: XML_STRING(variant)
+    table: VARIANT.xmlString()
+    page: xml-string
 
-valueconstruction:
+structured:
   - sql: |
       **implicit** constructor with parenthesis 
       
@@ -1266,22 +982,6 @@ valueconstruction:
       Returns a row created from a list of values (value1, value2,...).
 
       The implicit row constructor requires at least two fields. The explicit row constructor can deal with an arbitrary number of fields. Both of them support arbitrary expressions as fields.
-  - sql: ARRAY '[' value1 [, value2 ]* ']'
-    table: array(ANY1, ANY2, ...)
-    description: Returns an array created from a list of values (value1, value2, ...).
-  - sql: MAP '[' value1, value2 [, value3, value4 ]* ']'
-    table: map(ANY1, ANY2, ANY3, ANY4, ...)
-    description: Returns a map created from a list of key-value pairs ((value1, value2), (value3, value4), ...).
-  - sql: DESCRIPTOR '(' identifier1 [, identifier2  ]* ')'
-    table: descriptor(STRING1, STRING2, ...)
-    description: |
-      Returns a literal describing an arbitrary, unvalidated list of column names. Passing a list of columns
-      can be useful for parameterizing a function. In particular, it enables declaring the `on_time` argument
-      for process table functions (PTFs).
-
-      ```sql
-      f(columns => DESCRIPTOR(`col1`, `col2`), on_time => DESCRIPTOR(`ts`))
-      ```
   - sql: OBJECT_OF(className, [key, value [, key, value , ...]])
     table: objectOf(STRING, Object...)
     description: |
@@ -1300,10 +1000,15 @@ valueconstruction:
       -- Creates a User object with complex fields "name", "age", and "address"
       OBJECT_OF('com.example.User', 'name', 'Bob', 'age', 21, 'address', OBJECT_OF('com.example.Address', 'street', 'primary', 'city', 'Berlin'))
       ```
-  - table: NUMERIC.rows
-    description: Creates a NUMERIC interval of rows (commonly used in window creation).
+  - sql: tableName.compositeType.field
+    table: |
+      COMPOSITE.get(STRING)
+      COMPOSITE.get(INT)
+    description: Returns the value of a field from a Flink composite type (e.g., Tuple, POJO) by name.
+  - sql: tableName.compositeType.*
+    table: ANY.flatten()
+    description: Returns a flat representation of a Flink composite type (e.g., Tuple, POJO) that converts each of its direct subtype into a separate field. In most cases the fields of the flat representation are named similarly to the original fields but with a dollar separator (e.g., mypojo$mytuple$f0).
 
-valuemodification:
   - sql: OBJECT_UPDATE(object, key, value [, key, value , ...])
     table: OBJECT.objectUpdate(key, value [, key, value , ...])
     description: |
@@ -1330,16 +1035,6 @@ valuemodification:
       -- Returns: User{name='Alice', age=30}
       ```
 
-valueaccess:
-  - sql: tableName.compositeType.field
-    table: |
-      COMPOSITE.get(STRING)
-      COMPOSITE.get(INT)
-    description: Returns the value of a field from a Flink composite type (e.g., Tuple, POJO) by name.
-  - sql: tableName.compositeType.*
-    table: ANY.flatten()
-    description: Returns a flat representation of a Flink composite type (e.g., Tuple, POJO) that converts each of its direct subtype into a separate field. In most cases the fields of the flat representation are named similarly to the original fields but with a dollar separator (e.g., mypojo$mytuple$f0).
-
 grouping:
   - sql: GROUP_ID()
     description: Returns an integer that uniquely identifies the combination of grouping keys.
@@ -1351,25 +1046,25 @@ grouping:
 hashfunctions:
   - sql: MD5(string)
     table: STRING.md5()
-    description: Returns the MD5 hash of string as a string of 32 hexadecimal digits; returns NULL if string is NULL.
+    page: md5
   - sql: SHA1(string)
     table: STRING.sha1()
-    description: Returns the SHA-1 hash of string as a string of 40 hexadecimal digits; returns NULL if string is NULL.
-  - sql: SHA224(string)
-    table: STRING.sha224()
-    description: Returns the SHA-224 hash of string as a string of 56 hexadecimal digits; returns NULL if string is NULL.
-  - sql: SHA256(string)
-    table: STRING.sha256()
-    description: Returns the SHA-256 hash of string as a string of 64 hexadecimal digits; returns NULL if string is NULL.
-  - sql: SHA384(string)
-    table: STRING.sha384()
-    description: Returns the SHA-384 hash of string as a string of 96 hexadecimal digits; returns NULL if string is NULL.
-  - sql: SHA512(string)
-    table: STRING.sha512()
-    description: Returns the SHA-512 hash of string as a string of 128 hexadecimal digits; returns NULL if string is NULL.
+    page: sha1
   - sql: SHA2(string, hashLength)
     table: STRING.sha2(INT)
-    description: Returns the hash using the SHA-2 family of hash functions (SHA-224, SHA-256, SHA-384, or SHA-512). The first argument string is the string to be hashed and the second argument hashLength is the bit length of the result (224, 256, 384, or 512). Returns NULL if string or hashLength is NULL.
+    page: sha2
+  - sql: SHA224(string)
+    table: STRING.sha224()
+    page: sha224
+  - sql: SHA256(string)
+    table: STRING.sha256()
+    page: sha256
+  - sql: SHA384(string)
+    table: STRING.sha384()
+    page: sha384
+  - sql: SHA512(string)
+    table: STRING.sha512()
+    page: sha512
 
 bitmap:
   - sql: BITMAP_AND(bitmap1, bitmap2)
@@ -1463,20 +1158,6 @@ bitmap:
       
       Returns a `BITMAP`. `NULL` if any of the arguments are `NULL`.
 
-auxiliary:
-  - table: callSql(STRING)
-    description: |
-      A call to a SQL expression.
-
-      The given string is parsed and translated into a Table API expression during planning. Only the translated expression is evaluated during runtime.
-
-      Currently, calls are limited to simple scalar expressions. Calls to aggregate or table-valued functions are not supported. Sub-queries are also not allowed.
-
-      E.g. table.select(callSql("UPPER(myColumn)").substring(3))
-
-  - table: ANY.as(NAME1, NAME2, ...)
-    description: Specifies a name for ANY (a field). Additional names can be specified if the expression expands to multiple fields.
-
 aggregate:
   - sql: COUNT([ ALL ] expression | DISTINCT expression1 [, expression2]*)
     description: By default or with ALL, returns the number of input rows for which expression is not NULL. Use DISTINCT for one unique instance of each value.
@@ -1516,18 +1197,6 @@ aggregate:
     description: By default or with keyword ALL, returns a multiset of expression across all input rows. NULL values will be ignored. Use DISTINCT for one unique instance of each value.
   - sql: VARIANCE([ ALL | DISTINCT ] expression)
     description: Synonyms for VAR_SAMP().
-  - sql: RANK()
-    description: Returns the rank of a value in a group of values. The result is one plus the number of rows preceding or equal to the current row in the ordering of the partition. The values will produce gaps in the sequence.
-  - sql: DENSE_RANK()
-    description: Returns the rank of a value in a group of values. The result is one plus the previously assigned rank value. Unlike the function rank, dense_rank will not produce gaps in the ranking sequence.
-  - sql: ROW_NUMBER()
-    description: Assigns a unique, sequential number to each row, starting with one, according to the ordering of rows within the window partition. ROW_NUMBER and RANK are similar. ROW_NUMBER numbers all rows sequentially (for example 1, 2, 3, 4, 5). RANK provides the same numeric value for ties (for example 1, 2, 2, 4, 5).
-  - sql: LEAD(expression [, offset] [, default])
-    table: lead(expression [, offset] [, default])
-    description: Returns the value of expression at the offsetth row after the current row in the window. The default value of offset is 1 and the default value of default is NULL.
-  - sql: LAG(expression [, offset] [, default])
-    table: lag(expression [, offset] [, default])
-    description: Returns the value of expression at the offsetth row before the current row in the window. The default value of offset is 1 and the default value of default is NULL.
   - sql: FIRST_VALUE(expression)
     table: FIELD.firstValue
     description: Returns the first value in an ordered set of values.
@@ -1537,15 +1206,6 @@ aggregate:
   - sql: LISTAGG(expression [, separator])
     table: FIELD.listagg
     description: Concatenates the values of string expressions and places separator values between them. The separator is not added at the end of string. The default value of separator is ','.
-  - sql: CUME_DIST()
-    description: Return the cumulative distribution of a value in a group of values. The result is the number of rows preceding or equal to the current row in the ordering of the partition divided by the number of rows in the window partition.
-  - sql: PERCENT_RANK()
-    description: Return the percentage ranking of a value in a group of values. The result is the rank value minus one, divided by the number of rows in the partition minus one. If the partition only contains one row, the function will return 0.
-  - sql: NTILE(n)
-    description: |
-      Divides the rows for each window partition into `n` buckets ranging from 1 to at most `n`.
-      If the number of rows in the window partition doesn't divide evenly into the number of buckets, then the remainder values are distributed one per bucket, starting with the first bucket.
-      For example, with 6 rows and 4 buckets, the bucket values would be as follows: 1 1 2 2 3 4
   - sql: ARRAY_AGG([ ALL | DISTINCT ] expression [ RESPECT NULLS | IGNORE NULLS ])
     table: FIELD.arrayAgg
     description: |
@@ -1611,6 +1271,28 @@ aggregate:
       `(NUMERIC: INTEGER_NUMERIC, FLOAT, DOUBLE, DECIMAL)`
       
       Returns a `DOUBLE` if percentage is numeric, or an `ARRAY<DOUBLE>` if percentage is an array. `NULL` if percentage is an empty array.
+
+window:
+  - sql: CUME_DIST()
+    page: cume-dist
+  - sql: DENSE_RANK()
+    page: dense-rank
+  - sql: LAG(expression [, offset] [, default])
+    table: lag(expression [, offset] [, default])
+    page: lag
+  - sql: LEAD(expression [, offset] [, default])
+    table: lead(expression [, offset] [, default])
+    page: lead
+  - sql: NTILE(n)
+    page: ntile
+  - sql: PERCENT_RANK()
+    page: percent-rank
+  - sql: RANK()
+    page: rank
+  - sql: ROW_NUMBER()
+    page: row-number
+  - table: rowInterval(LONG)
+    page: row-interval
 
 bitmapagg:
   - sql: BITMAP_AND_AGG(bitmap)
@@ -1686,7 +1368,30 @@ bitmapagg:
       
       Returns a `BIGINT`.
 
-catalog:
+utility:
+  - table: ANY.as(NAME1, NAME2, ...)
+    page: as
+  - table: callSql(STRING)
+    page: call-sql
   - sql: CURRENT_DATABASE()
     table: currentDatabase()
-    description: Return the current database.
+    page: current-database
+  - sql: DESCRIPTOR '(' identifier1 [, identifier2  ]* ')'
+    table: descriptor(STRING1, STRING2, ...)
+    page: descriptor
+  - sql: |
+      TYPEOF(input)
+      TYPEOF(input, force_serializable)
+    table: |
+      call("TYPEOF", input)
+      call("TYPEOF", input, force_serializable)
+    page: typeof
+  - sql: UUID()
+    table: uuid()
+    page: uuid
+  - sql: UUID_V4()
+    table: uuidV4()
+    page: uuid-v4
+  - sql: UUID_V7()
+    table: uuidV7()
+    page: uuid-v7

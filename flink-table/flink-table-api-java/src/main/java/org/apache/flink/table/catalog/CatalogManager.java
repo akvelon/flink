@@ -140,6 +140,13 @@ public final class CatalogManager implements CatalogRegistry, AutoCloseable {
     private DefaultSchemaResolver schemaResolver;
     private Parser parser;
 
+    /**
+     * Views resolved while an outermost view resolution is in progress; {@code null} otherwise.
+     * Resolving a view parses its query, which looks up each referenced view several times, so
+     * without reuse the cost grows exponentially with the nesting depth of views.
+     */
+    private @Nullable Map<ViewResolutionKey, ResolvedCatalogView> viewResolutionCache;
+
     // The name of the built-in catalog
     private final String builtInCatalogName;
 
@@ -348,7 +355,8 @@ public final class CatalogManager implements CatalogRegistry, AutoCloseable {
                 throw new ValidationException(
                         String.format(
                                 "Invalid default start mode '%s'. "
-                                        + "Only parameterless start modes are supported as defaults."));
+                                        + "Only parameterless start modes are supported as defaults.",
+                                startModeKind));
             }
 
             final StartMode startMode = StartMode.of(startModeKind);
@@ -749,7 +757,7 @@ public final class CatalogManager implements CatalogRegistry, AutoCloseable {
         CatalogBaseTable temporaryTable = temporaryTables.get(objectIdentifier);
         if (temporaryTable != null) {
             final ResolvedCatalogBaseTable<?> resolvedTable =
-                    resolveCatalogBaseTable(temporaryTable);
+                    resolveCatalogBaseTable(temporaryTable, objectIdentifier);
             return Optional.of(ContextResolvedTable.temporary(objectIdentifier, resolvedTable));
         } else {
             return getPermanentTable(objectIdentifier, null);
@@ -770,7 +778,7 @@ public final class CatalogManager implements CatalogRegistry, AutoCloseable {
         CatalogBaseTable temporaryTable = temporaryTables.get(objectIdentifier);
         if (temporaryTable != null) {
             final ResolvedCatalogBaseTable<?> resolvedTable =
-                    resolveCatalogBaseTable(temporaryTable);
+                    resolveCatalogBaseTable(temporaryTable, objectIdentifier);
             return Optional.of(ContextResolvedTable.temporary(objectIdentifier, resolvedTable));
         } else {
             return getPermanentTable(objectIdentifier, timestamp);
@@ -860,7 +868,8 @@ public final class CatalogManager implements CatalogRegistry, AutoCloseable {
                 } else {
                     table = currentCatalog.getTable(objectPath);
                 }
-                final ResolvedCatalogBaseTable<?> resolvedTable = resolveCatalogBaseTable(table);
+                final ResolvedCatalogBaseTable<?> resolvedTable =
+                        resolveCatalogBaseTable(table, objectIdentifier);
                 return Optional.of(
                         ContextResolvedTable.permanent(
                                 objectIdentifier, currentCatalog, resolvedTable));
@@ -871,7 +880,15 @@ public final class CatalogManager implements CatalogRegistry, AutoCloseable {
         return Optional.empty();
     }
 
-    private Optional<CatalogBaseTable> getUnresolvedTable(ObjectIdentifier objectIdentifier) {
+    /**
+     * Retrieves the permanent catalog object in the given fully qualified path without resolving
+     * it. Temporary objects are ignored.
+     *
+     * @param objectIdentifier full path of the object to retrieve
+     * @return the unresolved permanent object, or empty if the catalog does not exist or holds no
+     *     object in the given path
+     */
+    public Optional<CatalogBaseTable> getUnresolvedTable(ObjectIdentifier objectIdentifier) {
         Optional<Catalog> currentCatalog = getCatalog(objectIdentifier.getCatalogName());
         ObjectPath objectPath = objectIdentifier.toObjectPath();
         if (currentCatalog.isPresent()) {
@@ -1114,7 +1131,21 @@ public final class CatalogManager implements CatalogRegistry, AutoCloseable {
     }
 
     private boolean permanentDatabaseExists(String catalogName, String databaseName) {
-        return getCatalog(catalogName).map(c -> c.databaseExists(databaseName)).orElse(false);
+        return getCatalog(catalogName)
+                .map(
+                        c -> {
+                            try {
+                                return c.databaseExists(databaseName);
+                            } catch (CatalogException e) {
+                                LOG.warn(
+                                        "Unable to check whether database '{}' exists in catalog '{}'.",
+                                        databaseName,
+                                        catalogName,
+                                        e);
+                                return false;
+                            }
+                        })
+                .orElse(false);
     }
 
     /**
@@ -1910,6 +1941,18 @@ public final class CatalogManager implements CatalogRegistry, AutoCloseable {
         }
     }
 
+    /** Get a connection from the catalog with contextual metadata. */
+    public Optional<ContextResolvedConnection> getResolvedConnection(
+            ObjectIdentifier objectIdentifier) {
+        return getConnection(objectIdentifier)
+                .map(
+                        connection ->
+                                ContextResolvedConnection.of(
+                                        objectIdentifier,
+                                        connection,
+                                        temporaryConnections.containsKey(objectIdentifier)));
+    }
+
     /**
      * List all connections in the given catalog and database.
      *
@@ -1918,7 +1961,7 @@ public final class CatalogManager implements CatalogRegistry, AutoCloseable {
      * @return A set of connection names.
      */
     public Set<String> listConnections(String catalogName, String databaseName) {
-        Catalog catalog = getCatalogOrError(catalogName);
+        Catalog catalog = getCatalogOrThrowException(catalogName);
         try {
             Set<String> connections = new HashSet<>(catalog.listConnections(databaseName));
 
@@ -2247,13 +2290,27 @@ public final class CatalogManager implements CatalogRegistry, AutoCloseable {
 
     /** Resolves a {@link CatalogBaseTable} to a validated {@link ResolvedCatalogBaseTable}. */
     public ResolvedCatalogBaseTable<?> resolveCatalogBaseTable(CatalogBaseTable baseTable) {
+        return resolveCatalogBaseTable(baseTable, null);
+    }
+
+    /**
+     * Resolves a {@link CatalogBaseTable} to a validated {@link ResolvedCatalogBaseTable}.
+     *
+     * @param baseTable the table to resolve
+     * @param objectIdentifier the identifier the table is stored under, used to resolve unqualified
+     *     references in a {@link CatalogView}'s expanded query against the view's own
+     *     catalog/database; may be {@code null} when unknown, in which case the current session
+     *     catalog/database is used
+     */
+    public ResolvedCatalogBaseTable<?> resolveCatalogBaseTable(
+            CatalogBaseTable baseTable, @Nullable ObjectIdentifier objectIdentifier) {
         Preconditions.checkNotNull(schemaResolver, "Schema resolver is not initialized.");
         if (baseTable instanceof CatalogTable) {
             return resolveCatalogTable((CatalogTable) baseTable);
         } else if (baseTable instanceof CatalogMaterializedTable) {
             return resolveCatalogMaterializedTable((CatalogMaterializedTable) baseTable);
         } else if (baseTable instanceof CatalogView) {
-            return resolveCatalogView((CatalogView) baseTable);
+            return resolveCatalogView((CatalogView) baseTable, objectIdentifier);
         }
         throw new IllegalArgumentException(
                 "Unknown kind of catalog base table: " + baseTable.getClass());
@@ -2368,6 +2425,21 @@ public final class CatalogManager implements CatalogRegistry, AutoCloseable {
 
     /** Resolves a {@link CatalogView} to a validated {@link ResolvedCatalogView}. */
     public ResolvedCatalogView resolveCatalogView(CatalogView view) {
+        return resolveCatalogView(view, null);
+    }
+
+    /**
+     * Resolves a {@link CatalogView} to a validated {@link ResolvedCatalogView}.
+     *
+     * @param view the view to resolve
+     * @param viewIdentifier the identifier the view is stored under. When non-{@code null}, the
+     *     view's expanded query is parsed against the view's own catalog/database so that
+     *     unqualified references resolve hermetically (see FLIP-71) instead of falling back to the
+     *     current session database. When {@code null}, the current session catalog/database is
+     *     used.
+     */
+    public ResolvedCatalogView resolveCatalogView(
+            CatalogView view, @Nullable ObjectIdentifier viewIdentifier) {
         Preconditions.checkNotNull(schemaResolver, "Schema resolver is not initialized.");
         if (view instanceof ResolvedCatalogView) {
             return (ResolvedCatalogView) view;
@@ -2379,10 +2451,43 @@ public final class CatalogManager implements CatalogRegistry, AutoCloseable {
             return new ResolvedCatalogView(view, queryOperation.getResolvedSchema());
         }
 
+        // Without an identifier the query is parsed against the current catalog/database, which
+        // can differ between lookups of the same view.
+        if (viewIdentifier == null) {
+            return resolveCatalogViewQuery(view, null);
+        }
+
+        final boolean outermost = viewResolutionCache == null;
+        if (outermost) {
+            viewResolutionCache = new HashMap<>();
+        }
+        try {
+            final ViewResolutionKey key = new ViewResolutionKey(viewIdentifier, view);
+            final ResolvedCatalogView cached = viewResolutionCache.get(key);
+            if (cached != null) {
+                return cached;
+            }
+            // Not computeIfAbsent: resolving the view recursively adds the views it references.
+            final ResolvedCatalogView resolved = resolveCatalogViewQuery(view, viewIdentifier);
+            viewResolutionCache.put(key, resolved);
+            return resolved;
+        } finally {
+            if (outermost) {
+                viewResolutionCache = null;
+            }
+        }
+    }
+
+    /**
+     * Resolves a {@link CatalogView} by parsing and validating its expanded query, so that the
+     * resolved schema keeps the query's time attributes.
+     */
+    private ResolvedCatalogView resolveCatalogViewQuery(
+            CatalogView view, @Nullable ObjectIdentifier viewIdentifier) {
         final ResolvedSchema resolvedSchema = view.getUnresolvedSchema().resolve(schemaResolver);
         final List<Operation> parse;
         try {
-            parse = parser.parse(view.getExpandedQuery());
+            parse = parseViewQuery(view.getExpandedQuery(), viewIdentifier);
         } catch (Throwable e) {
             // in case of a failure during parsing, let the lower layers fail
             return new ResolvedCatalogView(view, resolvedSchema);
@@ -2420,6 +2525,31 @@ public final class CatalogManager implements CatalogRegistry, AutoCloseable {
                     // pass a view that has the query parsed and
                     // validated already
                     new QueryOperationCatalogView(operation, view), renamedQuerySchema);
+        }
+    }
+
+    /**
+     * Parses a view's expanded query. When {@code viewIdentifier} is non-{@code null}, parsing
+     * happens with the current catalog/database temporarily switched to the view's own
+     * catalog/database, so that unqualified references in the query resolve hermetically against
+     * the view rather than falling back to the current session database (FLIP-71). External
+     * catalogs (e.g. Iceberg) may return portable, unqualified SQL from {@link
+     * CatalogView#getExpandedQuery()} for which this matters.
+     */
+    private List<Operation> parseViewQuery(
+            String expandedQuery, @Nullable ObjectIdentifier viewIdentifier) {
+        if (viewIdentifier == null) {
+            return parser.parse(expandedQuery);
+        }
+        final String savedCurrentCatalog = currentCatalogName;
+        final String savedCurrentDatabase = currentDatabaseName;
+        try {
+            currentCatalogName = viewIdentifier.getCatalogName();
+            currentDatabaseName = viewIdentifier.getDatabaseName();
+            return parser.parse(expandedQuery);
+        } finally {
+            currentCatalogName = savedCurrentCatalog;
+            currentDatabaseName = savedCurrentDatabase;
         }
     }
 
@@ -2514,5 +2644,36 @@ public final class CatalogManager implements CatalogRegistry, AutoCloseable {
                                         databaseName,
                                         newDatabase,
                                         ignoreIfNotExists)));
+    }
+
+    /**
+     * Identifies a view definition whose resolution can be reused. The unresolved schema is left
+     * out because it may hold {@code UnresolvedDataType}s, which have no value equality.
+     */
+    private static final class ViewResolutionKey {
+        private final ObjectIdentifier identifier;
+        private final String expandedQuery;
+
+        private ViewResolutionKey(ObjectIdentifier identifier, CatalogView view) {
+            this.identifier = identifier;
+            this.expandedQuery = view.getExpandedQuery();
+        }
+
+        @Override
+        public boolean equals(Object o) {
+            if (this == o) {
+                return true;
+            }
+            if (o == null || getClass() != o.getClass()) {
+                return false;
+            }
+            final ViewResolutionKey that = (ViewResolutionKey) o;
+            return identifier.equals(that.identifier) && expandedQuery.equals(that.expandedQuery);
+        }
+
+        @Override
+        public int hashCode() {
+            return Objects.hash(identifier, expandedQuery);
+        }
     }
 }

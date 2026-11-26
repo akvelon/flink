@@ -81,6 +81,8 @@ AS <select_statement>
 }
 ```
 
+In continuous mode, if the refresh job starts but the catalog cannot record it, CREATE cancels the job and drops the table. If the job cannot be cancelled either, the error names it, so you can cancel it before you run CREATE again.
+
 ## PRIMARY KEY
 
 `PRIMARY KEY` defines an optional list of columns that uniquely identifies each row within the table. The column as the primary key must be non-null.
@@ -214,14 +216,14 @@ CREATE MATERIALIZED TABLE my_materialized_table
     FRESHNESS = INTERVAL '1' HOUR
     REFRESH_MODE = CONTINUOUS
     AS SELECT
-       ...
+       ...;
 
 -- The refresh mode of the created materialized table is FULL, and the job's schedule cycle is 10 minutes.
 CREATE MATERIALIZED TABLE my_materialized_table
     FRESHNESS = INTERVAL '10' MINUTE
     REFRESH_MODE = FULL
     AS SELECT
-       ...
+       ...;
 ```
 
 ## AS <select_statement>
@@ -364,6 +366,10 @@ CREATE OR ALTER MATERIALIZED TABLE user_spending (
 ```
 
 Because the schema, primary key, and watermark all come from the statement and its query, not from the existing table, the result is fully defined by the DDL. The same statement always produces the same materialized table. Running it again after the conversion matches the now-existing materialized table and produces the same result.
+
+**Partition keys**
+
+A partitioned table keeps its partition keys, so the data it already holds still matches them. The statement must declare the same keys in `PARTITIONED BY`, in the same order, or the conversion fails. An unpartitioned table takes the partition keys from the statement's `PARTITIONED BY` clause.
 
 **Using the converted table as a regular table**
 
@@ -673,6 +679,8 @@ ALTER MATERIALIZED TABLE my_materialized_table RESUME;
 ALTER MATERIALIZED TABLE my_materialized_table RESUME WITH ('sink.parallelism'='10');
 ```
 
+In continuous mode, if the refresh job starts but the catalog cannot record it, the job is cancelled. If the job cannot be cancelled either, the error names it, so you can cancel it before you retry.
+
 ## SET
 
 ```
@@ -696,7 +704,7 @@ ALTER MATERIALIZED TABLE my_materialized_table SET ('format' = 'json', 'sink.par
 ALTER MATERIALIZED TABLE my_materialized_table SET ('format' = 'json', 'format' = 'csv');
 ```
 
-<span class="label label-danger">Note</span> When run through the Flink SQL Gateway, the behavior depends on the refresh mode and current refresh status:
+<span class="label label-danger">Note</span> When run through the Flink SQL Gateway or a `TableEnvironment`, the behavior depends on the refresh mode and current refresh status:
 - `FULL` mode: the change is applied to the catalog. The refresh workflow is not touched.
 - `CONTINUOUS` mode, `ACTIVATED` status: the running refresh job is stopped with savepoint, the change is applied to the catalog, and a new refresh job is started using the updated options. The new job does **not** restore from the savepoint taken during suspend, so streaming state is reset.
 - `CONTINUOUS` mode, `SUSPENDED` status: the change is applied to the catalog and the savepoint stored in the refresh handler is cleared, so the next `RESUME` will also start a fresh job.
@@ -730,7 +738,7 @@ ALTER MATERIALIZED TABLE my_materialized_table RESET ('format', 'sink.parallelis
 ALTER MATERIALIZED TABLE my_materialized_table RESET ('format', 'format');
 ```
 
-<span class="label label-danger">Note</span> When run through the Flink SQL Gateway, the behavior depends on the refresh mode and current refresh status:
+<span class="label label-danger">Note</span> When run through the Flink SQL Gateway or a `TableEnvironment`, the behavior depends on the refresh mode and current refresh status:
 - `FULL` mode: the change is applied to the catalog. The refresh workflow is not touched.
 - `CONTINUOUS` mode, `ACTIVATED` status: the running refresh job is stopped with savepoint, the change is applied to the catalog, and a new refresh job is started using the updated options. The new job does **not** restore from the savepoint taken during suspend, so streaming state is reset.
 - `CONTINUOUS` mode, `SUSPENDED` status: the change is applied to the catalog and the savepoint stored in the refresh handler is cleared, so the next `RESUME` will also start a fresh job.
@@ -781,6 +789,8 @@ The modification process depends on the refresh mode of the materialized table:
 3. Start a new refresh job to refresh the materialized table:
    - The new refresh job starts from the beginning and does not restore from the previous state.
    - The starting offset of the data source is determined by the connector’s default implementation or the [dynamic hint]({{< ref "docs/sql/reference/queries/hints" >}}#dynamic-table-options) specified in the query.
+
+If the new refresh job starts but the catalog cannot record it, the job is cancelled and the old job restarts from its savepoint. If that cancel fails, the table is rolled back and left SUSPENDED instead of restarting the old job.
 
 **Example:**
 

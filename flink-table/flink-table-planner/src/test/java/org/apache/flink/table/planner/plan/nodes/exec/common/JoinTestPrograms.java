@@ -18,11 +18,13 @@
 
 package org.apache.flink.table.planner.plan.nodes.exec.common;
 
+import org.apache.flink.table.api.config.ExecutionConfigOptions;
 import org.apache.flink.table.planner.plan.nodes.exec.stream.StreamExecJoin;
 import org.apache.flink.table.test.program.SinkTestStep;
 import org.apache.flink.table.test.program.SourceTestStep;
 import org.apache.flink.table.test.program.TableTestProgram;
 import org.apache.flink.types.Row;
+import org.apache.flink.types.RowKind;
 
 /** {@link TableTestProgram} definitions for testing {@link StreamExecJoin}. */
 public class JoinTestPrograms {
@@ -41,6 +43,13 @@ public class JoinTestPrograms {
     public static final TableTestProgram ANTI_JOIN;
     public static final TableTestProgram JOIN_WITH_STATE_TTL_HINT;
     public static final TableTestProgram SEMI_ANTI_JOIN_WITH_LITERAL_AGG;
+    public static final TableTestProgram LEFT_JOIN_UPSERT_INPUT_NON_EQUI;
+    public static final TableTestProgram LEFT_JOIN_UPSERT_INPUT_NON_EQUI_PRE_2_4;
+    public static final TableTestProgram INNER_JOIN_KEY_ONLY_DELETES_NON_EQUI;
+    public static final TableTestProgram SEMI_JOIN_UPSERT_INPUTS_NON_EQUI;
+    public static final TableTestProgram SEMI_JOIN_UPSERT_INPUTS_NON_EQUI_PRE_2_4;
+    public static final TableTestProgram INNER_JOIN_WITH_TIED_UPSERT_KEYS;
+    public static final TableTestProgram SORT_MERGE_JOIN;
 
     static final SourceTestStep EMPLOYEE =
             SourceTestStep.newBuilder("EMPLOYEE")
@@ -501,5 +510,237 @@ public class JoinTestPrograms {
                                         + " WHEN a NOT IN (SELECT CAST(j AS INTEGER) FROM source_t3) THEN 2 ELSE 3 END)"
                                         + " NOT IN (SELECT d FROM source_t2 WHERE source_t1.c = source_t2.f)")
                         .build();
+
+        LEFT_JOIN_UPSERT_INPUT_NON_EQUI =
+                leftJoinWithUpsertInputAndNonEquiCondition(
+                        "join-left-join-upsert-input-non-equi",
+                        "left join with an upsert input and a non-equi condition");
+
+        // its plan and savepoint are compiled with Flink 2.3, whose plans have no input changelog
+        // modes
+        LEFT_JOIN_UPSERT_INPUT_NON_EQUI_PRE_2_4 =
+                leftJoinWithUpsertInputAndNonEquiCondition(
+                        "join-left-join-upsert-input-non-equi-pre-2-4",
+                        "left join with an upsert input and a non-equi condition restored from a Flink 2.3 plan");
+
+        // the full image of the deleted line is only in the restored state
+        INNER_JOIN_KEY_ONLY_DELETES_NON_EQUI =
+                TableTestProgram.of(
+                                "join-inner-join-key-only-deletes-non-equi",
+                                "inner join with an input that deletes by key and a non-equi condition")
+                        .setupTableSource(
+                                SourceTestStep.newBuilder("orders")
+                                        .addSchema(
+                                                "order_id INT PRIMARY KEY NOT ENFORCED",
+                                                "excluded_status STRING")
+                                        .producedBeforeRestore(Row.of(1, "cancelled"))
+                                        .build())
+                        .setupTableSource(
+                                SourceTestStep.newBuilder("lines")
+                                        .addSchema(
+                                                "order_id INT",
+                                                "line_id STRING",
+                                                "status STRING",
+                                                "PRIMARY KEY (order_id, line_id) NOT ENFORCED")
+                                        .addOption("changelog-mode", "I,UA,D")
+                                        .addOption("source.produces-delete-by-key", "true")
+                                        .producedBeforeRestore(
+                                                Row.ofKind(RowKind.INSERT, 1, "l1", "new"))
+                                        .producedAfterRestore(
+                                                Row.ofKind(RowKind.DELETE, 1, "l1", null),
+                                                Row.ofKind(RowKind.INSERT, 1, "l2", "paid"))
+                                        .build())
+                        .setupTableSink(
+                                SinkTestStep.newBuilder("MySink")
+                                        .addSchema(
+                                                "order_id INT",
+                                                "line_id STRING",
+                                                "status STRING",
+                                                "excluded_status STRING",
+                                                "PRIMARY KEY (order_id, line_id) NOT ENFORCED")
+                                        .addOption("changelog-mode", "I,UA,D")
+                                        .addOption("sink.supports-delete-by-key", "true")
+                                        .consumedBeforeRestore("+I[1, l1, new, cancelled]")
+                                        .consumedAfterRestore(
+                                                "-D[1, l1, null, null]",
+                                                "+I[1, l2, paid, cancelled]")
+                                        .build())
+                        .runSql(
+                                "INSERT INTO MySink SELECT l.order_id, l.line_id, l.status, o.excluded_status "
+                                        + "FROM orders o JOIN lines l "
+                                        + "ON o.order_id = l.order_id AND l.status <> o.excluded_status")
+                        .build();
+
+        SEMI_JOIN_UPSERT_INPUTS_NON_EQUI =
+                semiJoinWithUpsertInputsAndNonEquiCondition(
+                        "join-semi-join-upsert-inputs-non-equi",
+                        "semi join with upsert inputs that delete by key and a non-equi condition");
+
+        // its plan and savepoint are compiled with Flink 2.3, whose plans have no input changelog
+        // modes
+        SEMI_JOIN_UPSERT_INPUTS_NON_EQUI_PRE_2_4 =
+                semiJoinWithUpsertInputsAndNonEquiCondition(
+                        "join-semi-join-upsert-inputs-non-equi-pre-2-4",
+                        "semi join with upsert inputs that delete by key and a non-equi condition restored from a Flink 2.3 plan");
+
+        // a JOIN b is 1:1, so the left input of the second join has the upsert keys {a1}, {b1}
+        // and {a1, b1}, none of them in its join key. The join state is keyed by the first of
+        // the shortest keys in the compiled plan, so the restore must pick the same one.
+        INNER_JOIN_WITH_TIED_UPSERT_KEYS =
+                TableTestProgram.of(
+                                "join-inner-join-with-tied-upsert-keys",
+                                "inner join with an input that has several shortest upsert keys outside the join key")
+                        .setupTableSource(
+                                SourceTestStep.newBuilder("a")
+                                        .addSchema(
+                                                "a1 BIGINT PRIMARY KEY NOT ENFORCED", "a2 STRING")
+                                        .addOption("changelog-mode", "I,UA,D")
+                                        .producedBeforeRestore(Row.of(1L, "x"))
+                                        .producedAfterRestore(
+                                                Row.ofKind(RowKind.UPDATE_AFTER, 1L, "y"))
+                                        .build())
+                        .setupTableSource(
+                                SourceTestStep.newBuilder("b")
+                                        .addSchema(
+                                                "b1 BIGINT PRIMARY KEY NOT ENFORCED", "b2 STRING")
+                                        .addOption("changelog-mode", "I,UA,D")
+                                        .producedBeforeRestore(Row.of(1L, "p"))
+                                        .build())
+                        .setupTableSource(
+                                SourceTestStep.newBuilder("c")
+                                        .addSchema("c1 STRING", "c2 STRING")
+                                        .producedBeforeRestore(Row.of("x", "C1"), Row.of("y", "C2"))
+                                        .build())
+                        .setupTableSink(
+                                SinkTestStep.newBuilder("MySink")
+                                        .addSchema("a1 BIGINT", "b1 BIGINT", "c2 STRING")
+                                        .consumedBeforeRestore("+I[1, 1, C1]")
+                                        .consumedAfterRestore("-U[1, 1, C1]", "+U[1, 1, C2]")
+                                        .build())
+                        .runSql(
+                                "INSERT INTO MySink SELECT a1, b1, c2 FROM "
+                                        + "(SELECT * FROM a JOIN b ON a1 = b1) JOIN c ON a2 = c1")
+                        .build();
+
+        // batch only, the other join operators are disabled so that the planner picks SortMergeJoin
+        SORT_MERGE_JOIN =
+                TableTestProgram.of("join-sort-merge-join", "sort merge join")
+                        .setupConfig(
+                                ExecutionConfigOptions.TABLE_EXEC_DISABLED_OPERATORS,
+                                "ShuffleHashJoin,BroadcastHashJoin,NestedLoopJoin")
+                        .setupTableSource(EMPLOYEE)
+                        .setupTableSource(DEPARTMENT)
+                        .setupTableSink(
+                                SinkTestStep.newBuilder("MySink")
+                                        .addSchema("name varchar", "department_name varchar")
+                                        .consumedBeforeRestore(
+                                                Row.of("Baker", "Research"),
+                                                Row.of("Charlie", "Human Resources"),
+                                                Row.of("Charlie", "HR"),
+                                                Row.of("Don", "Sales"))
+                                        .consumedAfterRestore(
+                                                Row.of("Helena", "Engineering"),
+                                                Row.of("Juliet", "Engineering"),
+                                                Row.of("Ivana", "Research"),
+                                                Row.of("Charlie", "People Operations"))
+                                        .build())
+                        .runSql(
+                                "insert into MySink "
+                                        + "SELECT name, department_name FROM EMPLOYEE JOIN DEPARTMENT ON deptno = department_num")
+                        .build();
+    }
+
+    /**
+     * The line of order 1 is updated without UPDATE_BEFORE and deleted by key, the replaced version
+     * of the line is only in the restored state; order 2 stops matching its line.
+     */
+    private static TableTestProgram semiJoinWithUpsertInputsAndNonEquiCondition(
+            String id, String description) {
+        return TableTestProgram.of(id, description)
+                .setupTableSource(
+                        SourceTestStep.newBuilder("orders")
+                                .addSchema(
+                                        "order_id INT PRIMARY KEY NOT ENFORCED",
+                                        "excluded_status STRING")
+                                .addOption("changelog-mode", "I,UA,D")
+                                .addOption("source.produces-delete-by-key", "true")
+                                .producedBeforeRestore(
+                                        Row.ofKind(RowKind.INSERT, 1, "cancelled"),
+                                        Row.ofKind(RowKind.INSERT, 2, "cancelled"))
+                                .producedAfterRestore(Row.ofKind(RowKind.UPDATE_AFTER, 2, "paid"))
+                                .build())
+                .setupTableSource(
+                        SourceTestStep.newBuilder("lines")
+                                .addSchema("order_id INT PRIMARY KEY NOT ENFORCED", "status STRING")
+                                .addOption("changelog-mode", "I,UA,D")
+                                .addOption("source.produces-delete-by-key", "true")
+                                .producedBeforeRestore(
+                                        Row.ofKind(RowKind.INSERT, 1, "new"),
+                                        Row.ofKind(RowKind.INSERT, 2, "paid"))
+                                .producedAfterRestore(
+                                        Row.ofKind(RowKind.UPDATE_AFTER, 1, "paid"),
+                                        Row.ofKind(RowKind.DELETE, 1, null))
+                                .build())
+                .setupTableSink(
+                        SinkTestStep.newBuilder("MySink")
+                                .addSchema(
+                                        "order_id INT PRIMARY KEY NOT ENFORCED",
+                                        "excluded_status STRING")
+                                .addOption("changelog-mode", "I,UA,D")
+                                .addOption("sink.supports-delete-by-key", "true")
+                                .consumedBeforeRestore("+I[1, cancelled]", "+I[2, cancelled]")
+                                .consumedAfterRestore("-D[2, cancelled]", "-D[1, cancelled]")
+                                .build())
+                .runSql(
+                        "INSERT INTO MySink SELECT * FROM orders o WHERE EXISTS ("
+                                + "SELECT 1 FROM lines l WHERE l.order_id = o.order_id "
+                                + "AND l.status <> o.excluded_status)")
+                .build();
+    }
+
+    /**
+     * An updated line that no longer satisfies the non-equi condition after the restore retracts
+     * its match, before a further update matches again.
+     */
+    private static TableTestProgram leftJoinWithUpsertInputAndNonEquiCondition(
+            String id, String description) {
+        return TableTestProgram.of(id, description)
+                .setupTableSource(
+                        SourceTestStep.newBuilder("orders")
+                                .addSchema(
+                                        "order_id INT PRIMARY KEY NOT ENFORCED",
+                                        "excluded_status STRING")
+                                .producedBeforeRestore(Row.of(1, "cancelled"))
+                                .build())
+                .setupTableSource(
+                        SourceTestStep.newBuilder("lines")
+                                .addSchema(
+                                        "order_id INT",
+                                        "line_id STRING",
+                                        "status STRING",
+                                        "PRIMARY KEY (order_id, line_id) NOT ENFORCED")
+                                .addOption("changelog-mode", "I,UA,D")
+                                .producedBeforeRestore(Row.ofKind(RowKind.INSERT, 1, "l1", "new"))
+                                .producedAfterRestore(
+                                        Row.ofKind(RowKind.UPDATE_AFTER, 1, "l1", "cancelled"),
+                                        Row.ofKind(RowKind.UPDATE_AFTER, 1, "l1", "paid"))
+                                .build())
+                .setupTableSink(
+                        SinkTestStep.newBuilder("MySink")
+                                .addSchema(
+                                        "order_id INT",
+                                        "line_order_id INT",
+                                        "line_id STRING",
+                                        "status STRING")
+                                .addOption("sink-changelog-mode-enforced", "I,UA,D")
+                                .consumedBeforeRestore(Row.of(1, 1, "l1", "new"))
+                                .consumedAfterRestore(Row.of(1, 1, "l1", "paid"))
+                                .testMaterializedData()
+                                .deduplicatedFieldIndices(new int[] {0})
+                                .build())
+                .runSql(
+                        "INSERT INTO MySink SELECT o.order_id, l.* FROM orders o "
+                                + "LEFT JOIN lines l ON o.order_id = l.order_id AND l.status <> o.excluded_status")
+                .build();
     }
 }

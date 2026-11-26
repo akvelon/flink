@@ -166,6 +166,7 @@ public class SinkTestPrograms {
             TableTestProgram.of(
                             "sink-upsert-key-differs-from-pk-without-on-conflict",
                             "When upsert key differs from sink PK, ON CONFLICT must be specified.")
+                    .setupConfig(ExecutionConfigOptions.TABLE_EXEC_SINK_REQUIRE_ON_CONFLICT, true)
                     .setupTableSource(
                             SourceTestStep.newBuilder("source_t")
                                     .addSchema("person STRING", "votes INT")
@@ -255,6 +256,7 @@ public class SinkTestPrograms {
             TableTestProgram.of(
                             "sink-append-only-with-pk-without-on-conflict",
                             "Append-only query to sink with PK requires ON CONFLICT to specify duplicate handling.")
+                    .setupConfig(ExecutionConfigOptions.TABLE_EXEC_SINK_REQUIRE_ON_CONFLICT, true)
                     .setupTableSource(
                             SourceTestStep.newBuilder("source_t")
                                     .addSchema("a INT", "b BIGINT")
@@ -296,7 +298,6 @@ public class SinkTestPrograms {
             TableTestProgram.of(
                             "sink-upsert-key-differs-from-pk-without-on-conflict-disabled",
                             "When require-on-conflict config is disabled, no ON CONFLICT is needed even if upsert key differs from PK.")
-                    .setupConfig(ExecutionConfigOptions.TABLE_EXEC_SINK_REQUIRE_ON_CONFLICT, false)
                     .setupTableSource(
                             SourceTestStep.newBuilder("source_t")
                                     .addSchema("a INT", "b BIGINT")
@@ -397,5 +398,82 @@ public class SinkTestPrograms {
                             "INSERT INTO sink_t SELECT a, b FROM source_t ON CONFLICT DO ERROR",
                             ValidationException.class,
                             "requires all source tables to define watermarks")
+                    .build();
+
+    public static final TableTestProgram TOP_N_ROW_MOVES_UP_INTO_SINK_KEYED_BY_INPUT_KEY =
+            TableTestProgram.of(
+                            "sink-top-n-row-moves-up-keyed-by-input-key",
+                            "Rows that move up in a Top-N with row number reach a sink keyed by the input key.")
+                    .setupTableSource(
+                            SourceTestStep.newBuilder("source_t")
+                                    .addSchema("id BIGINT PRIMARY KEY NOT ENFORCED", "score INT")
+                                    .addOption("changelog-mode", "I,UB,UA,D")
+                                    .producedValues(
+                                            Row.ofKind(RowKind.INSERT, 1L, 100),
+                                            Row.ofKind(RowKind.INSERT, 2L, 90),
+                                            Row.ofKind(RowKind.INSERT, 3L, 80),
+                                            Row.ofKind(RowKind.DELETE, 1L, 100))
+                                    .build())
+                    .setupTableSink(
+                            SinkTestStep.newBuilder("sink_t")
+                                    .addSchema("id BIGINT PRIMARY KEY NOT ENFORCED", "rn BIGINT")
+                                    .consumedValues("+I[2, 1]", "+I[3, 2]")
+                                    .testMaterializedData()
+                                    .build())
+                    .runSql(
+                            "INSERT INTO sink_t SELECT id, rn FROM ("
+                                    + "SELECT *, ROW_NUMBER() OVER (ORDER BY score DESC) AS rn "
+                                    + "FROM source_t) WHERE rn <= 3")
+                    .build();
+
+    public static final TableTestProgram TOP_N_ROW_DROPS_OUT_INTO_SINK_KEYED_BY_INPUT_KEY =
+            TableTestProgram.of(
+                            "sink-top-n-row-drops-out-keyed-by-input-key",
+                            "Rows that drop out of a Top-N with row number are removed from a sink keyed by the input key.")
+                    .setupTableSource(
+                            SourceTestStep.newBuilder("source_t")
+                                    .addSchema("id BIGINT PRIMARY KEY NOT ENFORCED", "score INT")
+                                    .addOption("changelog-mode", "I")
+                                    .producedValues(
+                                            Row.ofKind(RowKind.INSERT, 1L, 100),
+                                            Row.ofKind(RowKind.INSERT, 2L, 90),
+                                            Row.ofKind(RowKind.INSERT, 3L, 95))
+                                    .build())
+                    .setupTableSink(
+                            SinkTestStep.newBuilder("sink_t")
+                                    .addSchema("id BIGINT PRIMARY KEY NOT ENFORCED", "rn BIGINT")
+                                    .consumedValues("+I[1, 1]", "+I[3, 2]")
+                                    .testMaterializedData()
+                                    .build())
+                    .runSql(
+                            "INSERT INTO sink_t SELECT id, rn FROM ("
+                                    + "SELECT *, ROW_NUMBER() OVER (ORDER BY score DESC) AS rn "
+                                    + "FROM source_t) WHERE rn <= 2")
+                    .build();
+
+    public static final TableTestProgram TOP_N_WITH_OFFSET_INTO_SINK_KEYED_BY_INPUT_KEY =
+            TableTestProgram.of(
+                            "sink-top-n-with-offset-keyed-by-input-key",
+                            "Rows that drop out of a Top-N with offset are removed from a sink keyed by the input key.")
+                    .setupTableSource(
+                            SourceTestStep.newBuilder("source_t")
+                                    .addSchema("id BIGINT PRIMARY KEY NOT ENFORCED", "score INT")
+                                    .addOption("changelog-mode", "I")
+                                    .producedValues(
+                                            Row.ofKind(RowKind.INSERT, 1L, 100),
+                                            Row.ofKind(RowKind.INSERT, 2L, 90),
+                                            Row.ofKind(RowKind.INSERT, 3L, 80),
+                                            Row.ofKind(RowKind.INSERT, 4L, 95))
+                                    .build())
+                    .setupTableSink(
+                            SinkTestStep.newBuilder("sink_t")
+                                    .addSchema("id BIGINT PRIMARY KEY NOT ENFORCED", "score INT")
+                                    .consumedValues("+I[2, 90]", "+I[4, 95]")
+                                    .testMaterializedData()
+                                    .build())
+                    .runSql(
+                            "INSERT INTO sink_t SELECT id, score FROM ("
+                                    + "SELECT *, ROW_NUMBER() OVER (ORDER BY score DESC) AS rn "
+                                    + "FROM source_t) WHERE rn BETWEEN 2 AND 3")
                     .build();
 }

@@ -162,9 +162,15 @@ class ArrayDataConverter(ListDataConverter):
         super(ArrayDataConverter, self).__init__(field_converter)
 
     def to_internal(self, value) -> IN:
+        if value is None:
+            return None
+
         return tuple(super(ArrayDataConverter, self).to_internal(value))
 
     def to_external(self, value) -> OUT:
+        if value is None:
+            return None
+
         return tuple(super(ArrayDataConverter, self).to_external(value))
 
 
@@ -234,7 +240,7 @@ def from_type_info_proto(type_info):
     elif type_name in (type_info_name.BASIC_ARRAY,
                        type_info_name.OBJECT_ARRAY):
         return ArrayDataConverter(from_type_info_proto(type_info.collection_element_type))
-    elif type_info == type_info_name.LIST:
+    elif type_name == type_info_name.LIST:
         return ListDataConverter(from_type_info_proto(type_info.collection_element_type))
     elif type_name == type_info_name.MAP:
         return DictDataConverter(from_type_info_proto(type_info.map_type_info.key_type),
@@ -249,6 +255,12 @@ def from_schema_proto(schema, one_arg_optimized=False):
         return field_converters[0]
     else:
         return FlattenRowDataConverter(field_converters)
+
+
+def from_row_schema_proto(schema):
+    return RowDataConverter(
+        [from_field_type_proto(f.type) for f in schema.fields],
+        [f.name for f in schema.fields])
 
 
 def from_field_type_proto(field_type):

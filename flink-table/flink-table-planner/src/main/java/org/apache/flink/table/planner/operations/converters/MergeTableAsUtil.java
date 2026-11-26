@@ -28,39 +28,40 @@ import org.apache.flink.sql.parser.ddl.position.SqlTableColumnPosition;
 import org.apache.flink.table.api.Schema;
 import org.apache.flink.table.api.Schema.UnresolvedColumn;
 import org.apache.flink.table.api.Schema.UnresolvedPhysicalColumn;
-import org.apache.flink.table.api.TableException;
 import org.apache.flink.table.api.ValidationException;
-import org.apache.flink.table.catalog.CatalogManager;
 import org.apache.flink.table.catalog.DataTypeFactory;
 import org.apache.flink.table.catalog.ResolvedCatalogBaseTable;
 import org.apache.flink.table.catalog.ResolvedSchema;
+import org.apache.flink.table.operations.utils.AsQuerySchemaMerger;
 import org.apache.flink.table.planner.calcite.FlinkCalciteSqlValidator;
-import org.apache.flink.table.planner.calcite.FlinkPlannerImpl;
 import org.apache.flink.table.planner.calcite.FlinkTypeFactory;
-import org.apache.flink.table.planner.calcite.SqlRewriterUtils;
 import org.apache.flink.table.planner.operations.PlannerQueryOperation;
-import org.apache.flink.table.planner.operations.SqlNodeToOperationConversion;
 import org.apache.flink.table.planner.operations.converters.SqlNodeConverter.ConvertContext;
 import org.apache.flink.table.types.logical.LogicalType;
 import org.apache.flink.table.types.logical.RowType;
 
+import org.apache.calcite.plan.RelOptCluster;
+import org.apache.calcite.rel.RelNode;
+import org.apache.calcite.rel.core.RelFactories;
 import org.apache.calcite.rel.type.RelDataType;
-import org.apache.calcite.sql.SqlCall;
+import org.apache.calcite.rex.RexBuilder;
+import org.apache.calcite.rex.RexNode;
 import org.apache.calcite.sql.SqlIdentifier;
-import org.apache.calcite.sql.SqlLiteral;
 import org.apache.calcite.sql.SqlNode;
 import org.apache.calcite.sql.SqlNodeList;
-import org.apache.calcite.sql.parser.SqlParserPos;
 import org.apache.calcite.sql.validate.SqlValidator;
+import org.apache.calcite.tools.RelBuilder;
 
 import javax.annotation.Nullable;
 
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
@@ -88,80 +89,70 @@ public class MergeTableAsUtil {
     }
 
     /**
-     * Rewrites the query operation to include only the fields that may be persisted in the sink.
+     * Reshapes the query so its output columns line up with the sink's persistable columns:
+     * reordering them and filling sink columns the query does not produce with {@code NULL}.
+     * Returns the query unchanged when it already matches the sink 1:1. A sink column the query
+     * does not produce that is declared {@code NOT NULL} raises a {@link ValidationException}.
      */
     public PlannerQueryOperation maybeRewriteQuery(
-            CatalogManager catalogManager,
-            FlinkPlannerImpl flinkPlanner,
             PlannerQueryOperation origQueryOperation,
             SqlNode origQueryNode,
             ResolvedCatalogBaseTable<?> sinkTable) {
-        FlinkCalciteSqlValidator sqlValidator = flinkPlanner.getOrCreateSqlValidator();
-        SqlRewriterUtils rewriterUtils = new SqlRewriterUtils(sqlValidator);
-        FlinkTypeFactory typeFactory = (FlinkTypeFactory) sqlValidator.getTypeFactory();
+        final RelNode queryRelNode = origQueryOperation.getCalciteTree();
+        final RelOptCluster cluster = queryRelNode.getCluster();
+        final RexBuilder rexBuilder = cluster.getRexBuilder();
+        final FlinkTypeFactory typeFactory = (FlinkTypeFactory) cluster.getTypeFactory();
 
-        // Only fields that may be persisted will be included in the select query
-        RowType sinkRowType =
-                ((RowType) sinkTable.getResolvedSchema().toSinkRowDataType().getLogicalType());
+        // Only fields that may be persisted are included in the sink.
+        final RowType sinkRowType =
+                (RowType) sinkTable.getResolvedSchema().toSinkRowDataType().getLogicalType();
 
-        Map<String, Integer> sourceFields =
-                IntStream.range(0, origQueryOperation.getResolvedSchema().getColumnNames().size())
+        final List<String> sourceColumns = origQueryOperation.getResolvedSchema().getColumnNames();
+        final Map<String, Integer> sourceFields =
+                IntStream.range(0, sourceColumns.size())
                         .boxed()
-                        .collect(
-                                Collectors.toMap(
-                                        origQueryOperation.getResolvedSchema().getColumnNames()
-                                                ::get,
-                                        Function.identity()));
+                        .collect(Collectors.toMap(sourceColumns::get, Function.identity()));
 
-        // assignedFields contains the new sink fields that are not present in the source
-        // and that will be included in the select query
-        LinkedHashMap<Integer, SqlNode> assignedFields = new LinkedHashMap<>();
+        final List<RexNode> projects = new ArrayList<>();
+        final List<String> fieldNames = new ArrayList<>();
+        // The projection is a no-op when the query already produces the sink columns 1:1 in order.
+        boolean rewriteNeeded = sinkRowType.getFieldCount() != sourceColumns.size();
 
-        // targetPositions contains the positions of the source fields that will be
-        // included in the select query
-        List<Object> targetPositions = new ArrayList<>();
-
+        // The loop cannot stop once a rewrite is detected: the projection must cover every sink
+        // field, and every missing NOT NULL column must still be validated.
         int pos = -1;
         for (RowType.RowField targetField : sinkRowType.getFields()) {
             pos++;
+            fieldNames.add(targetField.getName());
 
-            if (!sourceFields.containsKey(targetField.getName())) {
+            final Integer sourcePos = sourceFields.get(targetField.getName());
+            if (sourcePos == null) {
                 if (!targetField.getType().isNullable()) {
                     throw new ValidationException(
                             "Column '"
                                     + targetField.getName()
                                     + "' has no default value and does not allow NULLs.");
                 }
-
-                assignedFields.put(
-                        pos,
-                        validator.maybeCast(
-                                SqlLiteral.createNull(SqlParserPos.ZERO),
-                                typeFactory.createUnknownType(),
+                projects.add(
+                        rexBuilder.makeNullLiteral(
                                 typeFactory.createFieldTypeFromLogicalType(targetField.getType())));
+                rewriteNeeded = true;
             } else {
-                targetPositions.add(sourceFields.get(targetField.getName()));
+                projects.add(rexBuilder.makeInputRef(queryRelNode, sourcePos));
+                if (sourcePos != pos) {
+                    rewriteNeeded = true;
+                }
             }
         }
 
-        // rewrite query
-        SqlCall newSelect =
-                rewriterUtils.rewriteCall(
-                        rewriterUtils,
-                        sqlValidator,
-                        (SqlCall) origQueryNode,
-                        typeFactory.buildRelNodeRowType(sinkRowType),
-                        assignedFields,
-                        targetPositions,
-                        () -> "Unsupported node type " + origQueryNode.getKind());
+        if (!rewriteNeeded) {
+            return origQueryOperation;
+        }
 
-        return (PlannerQueryOperation)
-                SqlNodeToOperationConversion.convert(flinkPlanner, catalogManager, newSelect)
-                        .orElseThrow(
-                                () ->
-                                        new TableException(
-                                                "Unsupported node type "
-                                                        + newSelect.getClass().getSimpleName()));
+        final RelBuilder relBuilder = RelFactories.LOGICAL_BUILDER.create(cluster, null);
+        final RelNode projected =
+                relBuilder.push(queryRelNode).project(projects, fieldNames, true).build();
+        return new PlannerQueryOperation(projected, () -> escapeExpression.apply(origQueryNode));
     }
 
     /**
@@ -253,34 +244,16 @@ public class MergeTableAsUtil {
             this.typeFactory = typeFactory;
         }
 
-        /**
-         * Merges the sink columns with the source columns. The resulted schema will contain columns
-         * of the sink schema first, followed by the columns of the source schema.
-         *
-         * <p>If a column in the sink schema is already defined in the source schema, then the types
-         * of the columns overrides the types of the columns in the source schema. The column
-         * position in the schema stays the same as defined in the source schema.
-         *
-         * <p>Column types overridden follows the same implicit cast rules defined for INSERT INTO
-         * statements.
-         */
+        /** Merges the sink columns onto the source columns; see {@link AsQuerySchemaMerger}. */
         private void mergeColumns(List<SqlNode> sinkCols, List<UnresolvedColumn> sourceCols) {
-            Map<String, UnresolvedColumn> sinkSchemaCols = new LinkedHashMap<>();
-            Map<String, UnresolvedColumn> sourceSchemaCols = new LinkedHashMap<>();
-
-            populateColumnsFromSource(sourceCols, sourceSchemaCols);
+            final AsQuerySchemaMerger merger = new AsQuerySchemaMerger(sourceCols, dataTypeFactory);
+            registerSourceFieldTypes(sourceCols);
 
             int sinkColumnPos = -1;
             for (SqlNode sinkColumn : sinkCols) {
                 final SqlTableColumn column = toSqlTableColumn(sinkColumn);
                 String name = column.getName().getSimple();
                 sinkColumnPos++;
-
-                if (sinkSchemaCols.containsKey(name)) {
-                    throw new ValidationException(
-                            String.format(
-                                    "A column named '%s' already exists in the schema. ", name));
-                }
 
                 final UnresolvedColumn unresolvedSinkColumn;
                 final RelDataType relDataType;
@@ -305,28 +278,13 @@ public class MergeTableAsUtil {
 
                 regularAndMetadataFieldNamesToTypes.put(name, relDataType);
 
-                if (sourceSchemaCols.containsKey(name)) {
-                    // If the column is already defined in the source schema, then check if
-                    // the types are compatible.
-                    validateImplicitCastCompatibility(
-                            dataTypeFactory,
-                            name,
-                            sinkColumnPos,
-                            sourceSchemaCols.get(name),
-                            unresolvedSinkColumn);
-
-                    // Replace the source schema column with the new sink schema column, which
-                    // keeps the position of the source schema column but with the data type
-                    // of the sink column.
-                    sourceSchemaCols.put(name, unresolvedSinkColumn);
-                } else {
-                    sinkSchemaCols.put(name, unresolvedSinkColumn);
-                }
+                merger.addDeclaredColumn(unresolvedSinkColumn, sinkColumnPos);
             }
 
             columns.clear();
-            columns.putAll(sinkSchemaCols);
-            columns.putAll(sourceSchemaCols);
+            for (UnresolvedColumn mergedColumn : merger.getMergedColumns()) {
+                columns.put(mergedColumn.getName(), mergedColumn);
+            }
         }
 
         private SqlTableColumn toSqlTableColumn(SqlNode sinkColumn) {
@@ -342,7 +300,20 @@ public class MergeTableAsUtil {
             Map<String, UnresolvedColumn> sinkSchemaCols = new LinkedHashMap<>();
             Map<String, UnresolvedColumn> sourceSchemaCols = new LinkedHashMap<>();
 
-            populateColumnsFromSource(sourceCols, sourceSchemaCols);
+            final AsQuerySchemaMerger merger = new AsQuerySchemaMerger(sourceCols, dataTypeFactory);
+            for (UnresolvedColumn sourceColumn : merger.getMergedColumns()) {
+                sourceSchemaCols.put(sourceColumn.getName(), sourceColumn);
+            }
+
+            final Set<String> listedNames = new HashSet<>();
+            for (SqlNode identifier : identifiers) {
+                final String name = ((SqlIdentifier) identifier).getSimple();
+                if (!listedNames.add(name)) {
+                    throw new ValidationException(
+                            String.format(
+                                    "A column named '%s' already exists in the schema.", name));
+                }
+            }
 
             if (identifiers.size() != sourceCols.size()) {
                 throw new ValidationException(
@@ -364,31 +335,12 @@ public class MergeTableAsUtil {
             columns.putAll(sinkSchemaCols);
         }
 
-        /**
-         * Populates the schema columns from the source schema. The source schema is expected to
-         * contain only physical columns.
-         */
-        private void populateColumnsFromSource(
-                List<UnresolvedColumn> columns, Map<String, UnresolvedColumn> schemaCols) {
+        private void registerSourceFieldTypes(List<UnresolvedColumn> columns) {
             for (UnresolvedColumn column : columns) {
-                if (!(column instanceof UnresolvedPhysicalColumn)) {
-                    throw new ValidationException(
-                            "Computed columns and metadata columns are not expected "
-                                    + "in the source schema.");
-                }
-
-                if (schemaCols.containsKey(column.getName())) {
-                    throw new ValidationException(
-                            String.format(
-                                    "A column named '%s' already exists in the schema. ",
-                                    column.getName()));
-                }
-
                 String name = column.getName();
                 LogicalType sourceColumnType =
                         getLogicalType(dataTypeFactory, ((UnresolvedPhysicalColumn) column));
 
-                schemaCols.put(column.getName(), column);
                 regularAndMetadataFieldNamesToTypes.put(
                         name, typeFactory.createFieldTypeFromLogicalType(sourceColumnType));
             }

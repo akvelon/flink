@@ -72,6 +72,31 @@ Calc(select=[EXPR$0 AS a, b, EXPR$1 AS c])
 ]]>
     </Resource>
   </TestCase>
+  <TestCase name="testInSubQueryKeepsOuterOrderBy">
+    <Resource name="ast">
+      <![CDATA[
+LogicalSort(sort0=[$1], dir0=[ASC])
++- LogicalFilter(condition=[IN($0, {
+LogicalProject(a=[$0])
+  LogicalFilter(condition=[>($1, 10)])
+    LogicalTableScan(table=[[default_catalog, default_database, A]])
+})])
+   +- LogicalTableScan(table=[[default_catalog, default_database, A]])
+]]>
+    </Resource>
+    <Resource name="optimized exec plan">
+      <![CDATA[
+Sort(orderBy=[b ASC])
++- Exchange(distribution=[single])
+   +- HashJoin(joinType=[LeftSemiJoin], where=[(a = a0)], select=[a, b, c], build=[right])
+      :- Exchange(distribution=[hash[a]])
+      :  +- TableSourceScan(table=[[default_catalog, default_database, A]], fields=[a, b, c])(reuse_id=[1])
+      +- Exchange(distribution=[hash[a]])
+         +- Calc(select=[a], where=[(b > 10)])
+            +- Reused(reference_id=[1])
+]]>
+    </Resource>
+  </TestCase>
   <TestCase name="testInWithFilter">
     <Resource name="ast">
       <![CDATA[
@@ -124,15 +149,15 @@ LogicalProject(b=[$1], c=[$2])
     <Resource name="optimized exec plan">
       <![CDATA[
 Calc(select=[b0 AS b, c0 AS c])
-+- Correlate(invocation=[$REPLICATE_ROWS$1($0, $1, $2)], correlate=[table($REPLICATE_ROWS$1(sum_vcol_marker,b,c))], select=[sum_vcol_marker,b,c,b0,c0], rowType=[RecordType(BIGINT sum_vcol_marker, BIGINT b, VARCHAR(2147483647) c, BIGINT b0, VARCHAR(2147483647) c0)], joinType=[INNER])
-   +- Calc(select=[sum_vcol_marker, b, c], where=[(sum_vcol_marker > 0)])
-      +- HashAggregate(isMerge=[true], groupBy=[b, c], select=[b, c, Final_SUM(sum$0) AS sum_vcol_marker])
-         +- Exchange(distribution=[hash[b, c]])
-            +- LocalHashAggregate(groupBy=[b, c], select=[b, c, Partial_SUM(vcol_marker) AS sum$0])
-               +- Union(all=[true], union=[b, c, vcol_marker])
-                  :- Calc(select=[b, c, 1 AS vcol_marker])
++- Correlate(invocation=[$REPLICATE_ROWS$1($0, $1, $2, $3)], correlate=[table($REPLICATE_ROWS$1(sum_vcol_marker,a,b,c))], select=[sum_vcol_marker,a,b,c,a0,b0,c0], rowType=[RecordType(BIGINT sum_vcol_marker, INTEGER a, BIGINT b, VARCHAR(2147483647) c, INTEGER a0, BIGINT b0, VARCHAR(2147483647) c0)], joinType=[INNER])
+   +- Calc(select=[sum_vcol_marker, a, b, c], where=[(sum_vcol_marker > 0)])
+      +- HashAggregate(isMerge=[true], groupBy=[a, b, c], select=[a, b, c, Final_SUM(sum$0) AS sum_vcol_marker])
+         +- Exchange(distribution=[hash[a, b, c]])
+            +- LocalHashAggregate(groupBy=[a, b, c], select=[a, b, c, Partial_SUM(vcol_marker) AS sum$0])
+               +- Union(all=[true], union=[a, b, c, vcol_marker])
+                  :- Calc(select=[a, b, c, 1 AS vcol_marker])
                   :  +- TableSourceScan(table=[[default_catalog, default_database, left]], fields=[a, b, c])
-                  +- Calc(select=[b, c, -1 AS vcol_marker])
+                  +- Calc(select=[a, b, c, -1 AS vcol_marker])
                      +- TableSourceScan(table=[[default_catalog, default_database, right]], fields=[a, b, c])
 ]]>
     </Resource>

@@ -21,6 +21,7 @@ package org.apache.flink.table.planner.calcite;
 import org.apache.flink.api.java.tuple.Tuple2;
 import org.apache.flink.table.api.TableException;
 import org.apache.flink.table.api.ValidationException;
+import org.apache.flink.table.functions.FunctionKind;
 import org.apache.flink.table.planner.functions.sql.FlinkSqlOperatorTable;
 import org.apache.flink.table.planner.plan.metadata.FlinkRelMetadataQuery;
 import org.apache.flink.table.planner.plan.nodes.logical.FlinkLogicalAggregate;
@@ -30,6 +31,7 @@ import org.apache.flink.table.planner.plan.nodes.logical.FlinkLogicalDistributio
 import org.apache.flink.table.planner.plan.nodes.logical.FlinkLogicalExpand;
 import org.apache.flink.table.planner.plan.nodes.logical.FlinkLogicalIntersect;
 import org.apache.flink.table.planner.plan.nodes.logical.FlinkLogicalJoin;
+import org.apache.flink.table.planner.plan.nodes.logical.FlinkLogicalLateralSnapshotJoin;
 import org.apache.flink.table.planner.plan.nodes.logical.FlinkLogicalLegacySink;
 import org.apache.flink.table.planner.plan.nodes.logical.FlinkLogicalMatch;
 import org.apache.flink.table.planner.plan.nodes.logical.FlinkLogicalMinus;
@@ -51,6 +53,7 @@ import org.apache.flink.table.planner.plan.schema.TimeIndicatorRelDataType;
 import org.apache.flink.table.planner.plan.trait.RelWindowProperties;
 import org.apache.flink.table.planner.plan.utils.JoinUtil;
 import org.apache.flink.table.planner.plan.utils.TemporalJoinUtil;
+import org.apache.flink.table.planner.utils.ShortcutUtils;
 import org.apache.flink.table.types.logical.LocalZonedTimestampType;
 import org.apache.flink.table.types.logical.LogicalType;
 import org.apache.flink.table.types.logical.TimestampType;
@@ -139,8 +142,9 @@ public final class RelTimeIndicatorConverter extends RelHomogeneousShuttle {
                 || node instanceof FlinkLogicalUnion
                 || node instanceof FlinkLogicalMinus) {
             return visitSetOp((SetOp) node);
-        } else if (node instanceof FlinkLogicalTableFunctionScan
-                || node instanceof FlinkLogicalSnapshot
+        } else if (node instanceof FlinkLogicalTableFunctionScan) {
+            return visitTableFunctionScan((FlinkLogicalTableFunctionScan) node);
+        } else if (node instanceof FlinkLogicalSnapshot
                 || node instanceof FlinkLogicalRank
                 || node instanceof FlinkLogicalDistribution
                 || node instanceof FlinkLogicalWatermarkAssigner
@@ -164,6 +168,8 @@ public final class RelTimeIndicatorConverter extends RelHomogeneousShuttle {
             return visitCalc((FlinkLogicalCalc) node);
         } else if (node instanceof FlinkLogicalCorrelate) {
             return visitCorrelate((FlinkLogicalCorrelate) node);
+        } else if (node instanceof FlinkLogicalLateralSnapshotJoin) {
+            return visitLateralSnapshotJoin((FlinkLogicalLateralSnapshotJoin) node);
         } else if (node instanceof FlinkLogicalJoin) {
             return visitJoin((FlinkLogicalJoin) node);
         } else if (node instanceof FlinkLogicalMultiJoin) {
@@ -367,6 +373,44 @@ public final class RelTimeIndicatorConverter extends RelHomogeneousShuttle {
         }
     }
 
+    private RelNode visitLateralSnapshotJoin(FlinkLogicalLateralSnapshotJoin join) {
+        RelNode newLeft = join.getLeft().accept(this);
+        RelNode newRight = join.getRight().accept(this);
+
+        // Materialize the build-side (right) proc-time attributes
+        newRight = materializeProcTime(newRight);
+
+        List<RelDataTypeField> leftRightFields = new ArrayList<>();
+        leftRightFields.addAll(newLeft.getRowType().getFieldList());
+        leftRightFields.addAll(newRight.getRowType().getFieldList());
+
+        RexNode newCondition =
+                join.getCondition()
+                        .accept(
+                                new RexShuttle() {
+                                    @Override
+                                    public RexNode visitInputRef(RexInputRef inputRef) {
+                                        if (isTimeIndicatorType(inputRef.getType())) {
+                                            return RexInputRef.of(
+                                                    inputRef.getIndex(), leftRightFields);
+                                        } else {
+                                            return super.visitInputRef(inputRef);
+                                        }
+                                    }
+                                });
+
+        return FlinkLogicalLateralSnapshotJoin.create(
+                newLeft,
+                newRight,
+                newCondition,
+                join.getJoinType(),
+                join.getRightTimeAttributeIndex(),
+                join.getLoadCompletedCondition(),
+                join.getLoadCompletedTime(),
+                join.getLoadCompletedIdleTimeoutMs(),
+                join.getStateTtlMs());
+    }
+
     private RelNode visitCorrelate(FlinkLogicalCorrelate correlate) {
         // visit children and update inputs
         RelNode newLeft = correlate.getLeft().accept(this);
@@ -398,6 +442,49 @@ public final class RelTimeIndicatorConverter extends RelHomogeneousShuttle {
                 correlate.getCorrelationId(),
                 correlate.getRequiredColumns(),
                 correlate.getJoinType());
+    }
+
+    private RelNode visitTableFunctionScan(FlinkLogicalTableFunctionScan scan) {
+        final FlinkLogicalTableFunctionScan newScan =
+                (FlinkLogicalTableFunctionScan) visitSimpleRel(scan);
+        final RexCall call = (RexCall) newScan.getCall();
+        if (!ShortcutUtils.isFunctionKind(call.getOperator(), FunctionKind.PROCESS_TABLE)
+                || !gatherProcTimeIndices(scan).isEmpty()) {
+            return newScan;
+        }
+        // Proctime is only computed on access, so a PTF that does not forward it needs its value
+        final List<RelNode> newInputs =
+                newScan.getInputs().stream()
+                        .map(this::materializeProcTime)
+                        .collect(Collectors.toList());
+        final List<RexNode> newOperands =
+                call.getOperands().stream()
+                        .map(
+                                operand ->
+                                        operand instanceof RexTableArgCall
+                                                ? adjustTableArg(
+                                                        (RexTableArgCall) operand, newInputs)
+                                                : operand)
+                        .collect(Collectors.toList());
+        return newScan.copy(
+                newScan.getTraitSet(),
+                newInputs,
+                call.clone(call.getType(), newOperands),
+                newScan.getElementType(),
+                newScan.getRowType(),
+                newScan.getColumnMappings());
+    }
+
+    private RexNode adjustTableArg(RexTableArgCall tableArg, List<RelNode> inputs) {
+        final RelDataType inputType = inputs.get(tableArg.getInputIndex()).getRowType();
+        return tableArg.clone(
+                rexBuilder
+                        .getTypeFactory()
+                        .createStructType(
+                                tableArg.getType().getStructKind(),
+                                RelOptUtil.getFieldTypeList(inputType),
+                                tableArg.getType().getFieldNames()),
+                List.of());
     }
 
     private RelNode visitSimpleRel(RelNode node) {
@@ -544,6 +631,7 @@ public final class RelTimeIndicatorConverter extends RelHomogeneousShuttle {
         return new FlinkLogicalWindowAggregate(
                 agg.getCluster(),
                 agg.getTraitSet(),
+                agg.getHints(),
                 newInput,
                 agg.getGroupSet(),
                 updatedAggCalls,
@@ -556,6 +644,7 @@ public final class RelTimeIndicatorConverter extends RelHomogeneousShuttle {
                 new FlinkLogicalWindowAggregate(
                         tableAgg.getCluster(),
                         tableAgg.getTraitSet(),
+                        List.of(),
                         tableAgg.getInput(),
                         tableAgg.getGroupSet(),
                         tableAgg.getAggCallList(),

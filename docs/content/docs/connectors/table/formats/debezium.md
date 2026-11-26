@@ -32,6 +32,9 @@ under the License.
 
 [Debezium](https://debezium.io/) is a CDC (Changelog Data Capture) tool that can stream changes in real-time from MySQL, PostgreSQL, Oracle, Microsoft SQL Server and many other databases into Kafka. Debezium provides a unified format schema for changelog and supports to serialize messages using JSON and [Apache Avro](https://avro.apache.org/).
 
+This format reads change events that Debezium has already written to a system such as Kafka. To
+read changes directly from a database instead, see [Flink CDC](https://nightlies.apache.org/flink/flink-cdc-docs-stable/docs/connectors/flink-sources/overview/).
+
 Flink supports to interpret Debezium JSON and Avro messages as INSERT/UPDATE/DELETE messages into Flink SQL system. This is useful in many cases to leverage this feature, such as
  - synchronizing incremental data from databases to other systems
  - auditing logs
@@ -53,7 +56,7 @@ Dependencies
 {{< sql_download_table "debezium-json" >}}
 
 
-*Note: please refer to [Debezium documentation](https://debezium.io/documentation/reference/1.3/index.html) about how to setup a Debezium Kafka Connect to synchronize changelog to Kafka topics.*
+*Note: please refer to [Debezium documentation](https://debezium.io/documentation/reference/stable/index.html) about how to setup a Debezium Kafka Connect to synchronize changelog to Kafka topics.*
 
 
 How to use Debezium format
@@ -82,7 +85,7 @@ Debezium provides a unified format for changelog, here is a simple example for a
 }
 ```
 
-*Note: please refer to [Debezium documentation](https://debezium.io/documentation/reference/1.3/connectors/mysql.html#mysql-connector-events_debezium) about the meaning of each fields.*
+*Note: please refer to [Debezium documentation](https://debezium.io/documentation/reference/stable/connectors/mysql.html#mysql-events) about the meaning of each fields.*
 
 The MySQL `products` table has 4 columns (`id`, `name`, `description` and `weight`). The above JSON message is an update change event on the `products` table where the `weight` value of the row with `id = 111` is changed from `5.18` to `5.15`.
 Assuming this messages is synchronized to Kafka topic `products_binlog`, then we can use the following DDLs (for Debezium JSON and Debezium Confluent Avro) to consume this topic and interpret the change events.
@@ -471,12 +474,12 @@ Framework will generate an additional stateful operator, and use the primary key
 
 ### Consuming data produced by Debezium Postgres Connector
 
-If you are using [Debezium Connector for PostgreSQL](https://debezium.io/documentation/reference/1.2/connectors/postgresql.html) to capture the changes to Kafka, please make sure the [REPLICA IDENTITY](https://www.postgresql.org/docs/current/sql-altertable.html#SQL-CREATETABLE-REPLICA-IDENTITY) configuration of the monitored PostgreSQL table has been set to `FULL` which is by default `DEFAULT`.
+If you are using [Debezium Connector for PostgreSQL](https://debezium.io/documentation/reference/stable/connectors/postgresql.html) to capture the changes to Kafka, please make sure the [REPLICA IDENTITY](https://www.postgresql.org/docs/current/sql-altertable.html#SQL-CREATETABLE-REPLICA-IDENTITY) configuration of the monitored PostgreSQL table has been set to `FULL` which is by default `DEFAULT`.
 Otherwise, Flink SQL currently will fail to interpret the Debezium data.
 
 In `FULL` strategy, the UPDATE and DELETE events will contain the previous values of all the table’s columns. In other strategies, the "before" field of UPDATE and DELETE events will only contain primary key columns or null if no primary key.
 You can change the `REPLICA IDENTITY` by running `ALTER TABLE <your-table-name> REPLICA IDENTITY FULL`.
-See more details in [Debezium Documentation for PostgreSQL REPLICA IDENTITY](https://debezium.io/documentation/reference/1.2/connectors/postgresql.html#postgresql-replica-identity).
+See more details in [Debezium Documentation for PostgreSQL REPLICA IDENTITY](https://debezium.io/documentation/reference/stable/connectors/postgresql.html#postgresql-replica-identity).
 
 Data Type Mapping
 ----------------

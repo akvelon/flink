@@ -25,7 +25,7 @@ import org.apache.flink.table.data.util.DataFormatConverters.{LocalDateConverter
 import org.apache.flink.table.expressions._
 import org.apache.flink.table.expressions.ApiExpressionUtils._
 import org.apache.flink.table.functions.{BuiltInFunctionDefinition, FunctionIdentifier}
-import org.apache.flink.table.functions.BuiltInFunctionDefinitions.{AND, CAST, OR, TRY_CAST}
+import org.apache.flink.table.functions.BuiltInFunctionDefinitions.{AND, AT, CAST, OR, TRY_CAST}
 import org.apache.flink.table.planner.calcite.FlinkTypeFactory
 import org.apache.flink.table.planner.codegen.CodeGenException
 import org.apache.flink.table.planner.functions.sql.FlinkSqlOperatorTable
@@ -494,6 +494,9 @@ class RexNodeToExpressionConverter(
       case BINARY | VARBINARY =>
         literal.getValueAs(classOf[Array[Byte]])
 
+      case UUID =>
+        literal.getValueAs(classOf[java.util.UUID])
+
       case _ =>
         literal.getValue
     }
@@ -533,6 +536,12 @@ class RexNodeToExpressionConverter(
           Option(
             CallExpression
               .permanent(TRY_CAST, Seq(operands.head, typeLiteral(outputType)).asJava, outputType))
+        case FlinkSqlOperatorTable.ITEM =>
+          operands.head.getOutputDataType.getLogicalType.getTypeRoot match {
+            case ARRAY | MAP | VARIANT =>
+              Option(CallExpression.permanent(AT, operands.asJava, outputType))
+            case _ => None
+          }
         case _: SqlFunction | _: SqlPostfixOperator =>
           val names = new util.ArrayList[String](rexCall.getOperator.getNameAsId.names)
           names.set(names.size() - 1, replace(names.get(names.size() - 1)))

@@ -42,6 +42,7 @@ import org.apache.flink.table.types.logical.BitmapType;
 import org.apache.flink.table.types.logical.BooleanType;
 import org.apache.flink.table.types.logical.CharType;
 import org.apache.flink.table.types.logical.DateType;
+import org.apache.flink.table.types.logical.DayTimeIntervalType;
 import org.apache.flink.table.types.logical.DecimalType;
 import org.apache.flink.table.types.logical.DescriptorType;
 import org.apache.flink.table.types.logical.DoubleType;
@@ -62,9 +63,11 @@ import org.apache.flink.table.types.logical.TimeType;
 import org.apache.flink.table.types.logical.TimestampKind;
 import org.apache.flink.table.types.logical.TimestampType;
 import org.apache.flink.table.types.logical.TinyIntType;
+import org.apache.flink.table.types.logical.UuidType;
 import org.apache.flink.table.types.logical.VarBinaryType;
 import org.apache.flink.table.types.logical.VarCharType;
 import org.apache.flink.table.types.logical.VariantType;
+import org.apache.flink.table.types.logical.utils.LogicalTypeChecks;
 import org.apache.flink.table.typeutils.TimeIndicatorTypeInfo;
 import org.apache.flink.table.utils.TableSchemaUtils;
 import org.apache.flink.util.Preconditions;
@@ -368,6 +371,12 @@ public class FlinkTypeFactory extends JavaTypeFactoryImpl implements ExtendedRel
                 }
                 break;
             default:
+                // The cache key ignores the timestamp kind, so time attributes would leak or get
+                // lost
+                if (LogicalTypeChecks.hasNested(type, LogicalTypeChecks::isTimeAttribute)) {
+                    relType = newRelDataType(type);
+                    break;
+                }
                 final RelDataType seenType = seenTypes.get(type);
                 if (seenType != null) {
                     relType = seenType;
@@ -488,6 +497,9 @@ public class FlinkTypeFactory extends JavaTypeFactoryImpl implements ExtendedRel
 
             case VARIANT:
                 return createSqlType(SqlTypeName.VARIANT);
+
+            case UUID:
+                return createSqlType(SqlTypeName.UUID);
 
             case BITMAP:
                 return new BitmapRelDataType((BitmapType) logicalType);
@@ -798,7 +810,7 @@ public class FlinkTypeFactory extends JavaTypeFactoryImpl implements ExtendedRel
             case INTERVAL_MINUTE:
             case INTERVAL_MINUTE_SECOND:
             case INTERVAL_SECOND:
-                if (relDataType.getPrecision() > 3) {
+                if (relDataType.getPrecision() > DayTimeIntervalType.MAX_DAY_PRECISION) {
                     throw new TableException(
                             "DAY_INTERVAL_TYPES precision is not supported: "
                                     + relDataType.getPrecision());
@@ -859,6 +871,9 @@ public class FlinkTypeFactory extends JavaTypeFactoryImpl implements ExtendedRel
 
             case VARIANT:
                 return new VariantType();
+
+            case UUID:
+                return new UuidType();
 
             case OTHER:
                 if (relDataType instanceof RawRelDataType) {

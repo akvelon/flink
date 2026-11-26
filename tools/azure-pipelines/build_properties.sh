@@ -45,19 +45,36 @@ function github_num_commits() {
 	return $GITHUB_NUM_COMMITS
 }
 
-#
-# Returns 0 if the change is a documentation-only pull request
-#
-function is_docs_only_pullrequest() {
-	github_num_commits
-	GITHUB_NUM_COMMITS=$?
-	if [[ $GITHUB_NUM_COMMITS == 0 ]]; then
+# Returns 0 if the PR only touches ignored paths (IGNORE_PATHS, newline-separated gitignore-style
+# globs). Uses the PR's changed-file list from GitHub, so it is unaffected by ci-bot rebases, and
+# fails open (treats the build as regular) on any API error.
+function is_ignored_pattern_pullrequest() {
+	[[ $BUILD_SOURCEBRANCHNAME == ci_* ]] || return 1
+	local pr_id
+	pr_id=$(cut -f2 -d_ <<< "$BUILD_SOURCEBRANCHNAME")
+	if ! [[ "$pr_id" =~ ^[0-9]+$ ]] ; then
+		echo "ERROR: Extracted PR_ID is not a number, but this: '$pr_id'"
 		return 1
 	fi
 
-	if [[ $(git diff --name-only HEAD..HEAD~$GITHUB_NUM_COMMITS | grep -v "docs/") == "" ]] ; then
-		echo "INFO: This is a docs only change. Changed files:"
-		git diff --name-only HEAD..HEAD~$GITHUB_NUM_COMMITS
+	local files
+	files=$(curl --silent "https://api.github.com/repos/apache/flink/pulls/${pr_id}/files?per_page=100" | jq -r '.[]?.filename')
+	if [[ -z "$files" ]] ; then
+		echo "INFO: Could not determine changed files for PR #${pr_id}; treating as a regular build."
+		return 1
+	fi
+
+	local tmp
+	tmp=$(mktemp)
+	printf '%s\n' "$IGNORE_PATHS" > "$tmp"
+	# --no-index matches tracked files too; a non-ignored file prints a line starting with "::".
+	git -c core.excludesFile="$tmp" check-ignore --no-index -n -v --stdin <<< "$files" | grep -q '^::'
+	local has_non_ignored=$?
+	rm -f "$tmp"
+
+	if (( has_non_ignored != 0 )) ; then
+		echo "INFO: Only ignored paths changed ($IGNORE_PATHS). Changed files:"
+		printf '%s\n' "$files"
 		return 0
 	fi
 	return 1

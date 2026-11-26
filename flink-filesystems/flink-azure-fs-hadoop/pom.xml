@@ -23,7 +23,7 @@ under the License.
 	<parent>
 		<groupId>org.apache.flink</groupId>
 		<artifactId>flink-filesystems</artifactId>
-		<version>2.4-SNAPSHOT</version>
+		<version>2.5-SNAPSHOT</version>
 	</parent>
 
 	<artifactId>flink-azure-fs-hadoop</artifactId>
@@ -88,6 +88,18 @@ under the License.
 					<artifactId>slf4j-reload4j</artifactId>
 				</exclusion>
 			</exclusions>
+		</dependency>
+
+		<!-- Used unshaded by hadoop-azure and azure-storage; hadoop-azure 3.4 no longer pulls it in -->
+		<dependency>
+			<groupId>com.fasterxml.jackson.core</groupId>
+			<artifactId>jackson-core</artifactId>
+			<optional>${flink.markBundledAsOptional}</optional>
+		</dependency>
+		<dependency>
+			<groupId>com.fasterxml.jackson.core</groupId>
+			<artifactId>jackson-databind</artifactId>
+			<optional>${flink.markBundledAsOptional}</optional>
 		</dependency>
 
 		<!-- for Azure IT tests to check if HTTP endpoints are enabled / not -->
@@ -159,9 +171,19 @@ under the License.
 										<exclude>PropertyList-1.0.dtd</exclude>
 										<exclude>mozilla/**</exclude>
 										<exclude>META-INF/LICENSE.txt</exclude>
+										<exclude>META-INF/**/module-info.class</exclude>
 									</excludes>
 								</filter>
 							</filters>
+							<transformers combine.children="append">
+								<!-- Bundled flink-fs-hadoop-shaded carries relocated multi-release (jackson) classes;
+								     mark the resulting jar as multi-release so the JVM honours META-INF/versions entries. -->
+								<transformer implementation="org.apache.maven.plugins.shade.resource.ManifestResourceTransformer">
+									<manifestEntries>
+										<Multi-Release>true</Multi-Release>
+									</manifestEntries>
+								</transformer>
+							</transformers>
 						</configuration>
 					</execution>
 				</executions>

@@ -170,9 +170,9 @@ Local-Global optimization is effective to eliminate data skew for general aggreg
 For example, if we want to analyse how many unique users logined today. We may have the following query:
 
 ```sql
-SELECT day, COUNT(DISTINCT user_id)
+SELECT `day`, COUNT(DISTINCT user_id)
 FROM T
-GROUP BY day
+GROUP BY `day`
 ```
 
 COUNT DISTINCT is not good at reducing records if the value of distinct key (i.e. user_id) is sparse. Even if local-global optimization is enabled, it doesn't help much. Because the accumulator still contain almost all the raw records, and the global aggregation will be the bottleneck (most of the heavy accumulators are processed by one task, i.e. on the same day).
@@ -184,13 +184,13 @@ The bucket key plays the role of an additional group key to share the burden of 
 After split distinct aggregate, the above query will be rewritten into the following query automatically:
 
 ```sql
-SELECT day, SUM(cnt)
+SELECT `day`, SUM(cnt)
 FROM (
-    SELECT day, COUNT(DISTINCT user_id) as cnt
+    SELECT `day`, COUNT(DISTINCT user_id) as cnt
     FROM T
-    GROUP BY day, MOD(HASH_CODE(user_id), 1024)
+    GROUP BY `day`, MOD(HASH_CODE(user_id), 1024)
 )
-GROUP BY day
+GROUP BY `day`
 ```
 
 
@@ -242,12 +242,12 @@ Many users will choose `CASE WHEN` to support this, for example:
 
 ```sql
 SELECT
- day,
+ `day`,
  COUNT(DISTINCT user_id) AS total_uv,
  COUNT(DISTINCT CASE WHEN flag IN ('android', 'iphone') THEN user_id ELSE NULL END) AS app_uv,
  COUNT(DISTINCT CASE WHEN flag IN ('wap', 'other') THEN user_id ELSE NULL END) AS web_uv
 FROM T
-GROUP BY day
+GROUP BY `day`
 ```
 
 However, it is recommended to use `FILTER` syntax instead of CASE WHEN in this case. Because `FILTER` is more compliant with the SQL standard and will get much more performance improvement.
@@ -255,12 +255,12 @@ However, it is recommended to use `FILTER` syntax instead of CASE WHEN in this c
 
 ```sql
 SELECT
- day,
+ `day`,
  COUNT(DISTINCT user_id) AS total_uv,
  COUNT(DISTINCT user_id) FILTER (WHERE flag IN ('android', 'iphone')) AS app_uv,
  COUNT(DISTINCT user_id) FILTER (WHERE flag IN ('wap', 'other')) AS web_uv
 FROM T
-GROUP BY day
+GROUP BY `day`
 ```
 
 Flink SQL optimizer can recognize the different filter arguments on the same distinct key. For example, in the above example, all the three COUNT DISTINCT are on `user_id` column.
@@ -395,7 +395,7 @@ To mitigate these challenges, Flink introduces the delta join operator. The key 
 This feature is enabled by default. A regular join will be automatically optimized into a delta join when all the following conditions are met:
 
 1. The sql pattern satisfies the optimization criteria. For details, please refer to [Supported Features and Limitations]({{< ref "docs/dev/table/tuning" >}}#supported-features-and-limitations)
-2. The external storage system of the source table provides index information for fast querying for delta joins. Currently, [Apache Fluss (Incubating)](https://fluss.apache.org/blog/fluss-open-source/) has provided index information at the table level for Flink, allowing such tables to be used as source tables for delta joins. Please refer to the [Fluss documentation](https://fluss.apache.org/docs/engine-flink/delta-joins/#flink-version-support) for more details.
+2. The external storage system of the source table provides index information for fast querying for delta joins. Currently, [Apache Fluss](https://fluss.apache.org/blog/fluss-open-source/) has provided index information at the table level for Flink, allowing such tables to be used as source tables for delta joins. Please refer to the [Fluss documentation](https://fluss.apache.org/docs/engine-flink/delta-joins/#flink-version-support) for more details.
 
 ### Working Principle
 
@@ -445,5 +445,5 @@ However, Delta Joins also have several **limitations**. Jobs containing any of t
 6. **Non-deterministic functions** are not allowed in projections or filters between the source and the delta join.
 
 {{< hint info >}}
-[1] Flink supports defining a table-level **immutable columns** constraint to enrich the upsert key, enabling delta join optimization in more scenarios. The immutable columns constraint declares that certain columns, once set for a given primary key, cannot be modified. The immutable columns are combined with the primary key to form a new upsert key that is propagated to downstream operators. This information is provided by the external storage system. [Apache Fluss (Incubating)](https://fluss.apache.org/) is planning to support table-level immutable columns constraint in the future.
+[1] Flink supports defining a table-level **immutable columns** constraint to enrich the upsert key, enabling delta join optimization in more scenarios. The immutable columns constraint declares that certain columns, once set for a given primary key, cannot be modified. The immutable columns are combined with the primary key to form a new upsert key that is propagated to downstream operators. This information is provided by the external storage system. [Apache Fluss](https://fluss.apache.org/) is planning to support table-level immutable columns constraint in the future.
 {{< /hint >}}

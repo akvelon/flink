@@ -1285,9 +1285,19 @@ public interface TableEnvironment {
      *
      * @return A list of the names of all registered materialized tables in the current database of
      *     the current catalog.
-     * @see #listTemporaryViews()
+     * @see #listMaterializedTables(String, String)
      */
     String[] listMaterializedTables();
+
+    /**
+     * Gets the names of all materialized tables available in the given namespace (the given
+     * database of the given catalog).
+     *
+     * @return A list of the names of all registered materialized tables in the given database of
+     *     the given catalog.
+     * @see #listMaterializedTables()
+     */
+    String[] listMaterializedTables(String catalogName, String databaseName);
 
     /**
      * Gets the names of all temporary tables and views available in the current namespace (the
@@ -1466,6 +1476,48 @@ public interface TableEnvironment {
      * @return true if a model existed in the given path and was removed
      */
     boolean dropTemporaryModel(String path);
+
+    /**
+     * Drops a materialized table registered in the given path.
+     *
+     * <p>If its continuous refresh job is running, it is cancelled before the materialized table is
+     * removed from the catalog. Dropping a materialized table in full refresh mode requires a
+     * workflow scheduler and fails on a plain {@link TableEnvironment}.
+     *
+     * <p>This method can only drop permanent objects. If a temporary table or view in the given
+     * path shadows the materialized table, a {@link ValidationException} is thrown. Drop the
+     * temporary object first using {@link #dropTemporaryTable} or {@link #dropTemporaryView}.
+     *
+     * <p>Compared to SQL, this method will not throw an error if the materialized table does not
+     * exist. Use {@link #dropMaterializedTable(java.lang.String, boolean)} to change the default
+     * behavior.
+     *
+     * @param path The given path under which the materialized table will be dropped. See also the
+     *     {@link TableEnvironment} class description for the format of the path.
+     * @return true if a materialized table was found in the given path and the drop was executed,
+     *     false if no materialized table exists in the given path.
+     */
+    boolean dropMaterializedTable(String path);
+
+    /**
+     * Drops a materialized table registered in the given path.
+     *
+     * <p>If its continuous refresh job is running, it is cancelled before the materialized table is
+     * removed from the catalog. Dropping a materialized table in full refresh mode requires a
+     * workflow scheduler and fails on a plain {@link TableEnvironment}.
+     *
+     * <p>This method can only drop permanent objects. If a temporary table or view in the given
+     * path shadows the materialized table, a {@link ValidationException} is thrown. Drop the
+     * temporary object first using {@link #dropTemporaryTable} or {@link #dropTemporaryView}.
+     *
+     * @param path The given path under which the materialized table will be dropped. See also the
+     *     {@link TableEnvironment} class description for the format of the path.
+     * @param ignoreIfNotExists If false, an exception is thrown if no materialized table exists in
+     *     the given path, including when a table or view exists there instead.
+     * @return true if a materialized table was found in the given path and the drop was executed,
+     *     false if no materialized table exists in the given path and ignoreIfNotExists is true.
+     */
+    boolean dropMaterializedTable(String path, boolean ignoreIfNotExists);
 
     /**
      * Returns the AST of the specified statement and the execution plan to compute the result of

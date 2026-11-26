@@ -19,13 +19,16 @@
 package org.apache.flink.table.api;
 
 import org.apache.flink.FlinkVersion;
+import org.apache.flink.configuration.MemorySize;
 import org.apache.flink.table.api.config.ExecutionConfigOptions;
 import org.apache.flink.table.api.config.TableConfigOptions;
 import org.apache.flink.table.api.internal.TableResultInternal;
+import org.apache.flink.table.planner.factories.TestValuesTableFactory;
 import org.apache.flink.table.planner.utils.JsonPlanTestBase;
 import org.apache.flink.table.planner.utils.JsonTestUtils;
 import org.apache.flink.table.planner.utils.TableTestUtil;
 import org.apache.flink.testutils.junit.utils.TempDirUtils;
+import org.apache.flink.types.Row;
 
 import org.apache.commons.io.FileUtils;
 import org.junit.jupiter.api.BeforeEach;
@@ -434,6 +437,89 @@ class CompiledPlanITCase extends JsonPlanTestBase {
         assertResult(DATA, sinkPath);
     }
 
+    @Test
+    void testCompileAndExecutePlanBatchModeWithAdaptiveJoin() throws Exception {
+        tableEnv = TableEnvironment.create(EnvironmentSettings.inBatchMode());
+        createAdaptiveJoinTables();
+
+        final String compiledJson =
+                tableEnv.compilePlanSql(
+                                "INSERT INTO sink_t SELECT a, b, y FROM t1 JOIN t2 ON a = x")
+                        .asJsonString();
+        String expected =
+                TableTestUtil.readFromResource(
+                        "/jsonplan/testCompileAndExecutePlanBatchModeWithAdaptiveJoin.out");
+        assertThat(getPreparedToCompareBatchCompiledPlan(compiledJson)).isEqualTo(expected);
+
+        final CompiledPlan restoredPlan =
+                tableEnv.loadPlan(PlanReference.fromJsonString(compiledJson));
+        assertThat(restoredPlan.asJsonString()).isEqualTo(compiledJson);
+
+        restoredPlan.execute().await();
+        assertResult(
+                Arrays.asList("+I[1, 10, one]", "+I[3, 30, three]"),
+                TestValuesTableFactory.getResultsAsStrings("sink_t"));
+    }
+
+    @Test
+    void testExecutePlanWithAdaptiveJoinUsesPersistedExternalBufferMemory() throws Exception {
+        tableEnv = TableEnvironment.create(EnvironmentSettings.inBatchMode());
+        // keep the adaptive join a sort merge join at runtime, which is where the external buffer
+        // is carved out of the join's managed memory
+        tableEnv.getConfig()
+                .set(
+                        ExecutionConfigOptions.TABLE_EXEC_DISABLED_OPERATORS,
+                        "ShuffleHashJoin,BroadcastHashJoin,NestedLoopJoin");
+        createAdaptiveJoinTables();
+
+        // the plan persists the default memory options, giving the join a budget of 266 mb
+        final String compiledJson =
+                tableEnv.compilePlanSql(
+                                "INSERT INTO sink_t SELECT a, b, y FROM t1 JOIN t2 ON a = x")
+                        .asJsonString();
+        String expected =
+                TableTestUtil.readFromResource(
+                        "/jsonplan/testExecutePlanWithAdaptiveJoinUsesPersistedExternalBufferMemory.out");
+        assertThat(getPreparedToCompareBatchCompiledPlan(compiledJson)).isEqualTo(expected);
+
+        // a buffer larger than the persisted budget would make the sort merge join fail on open
+        // with "Memory size is too small", so the job only succeeds if the session value is not
+        // used
+        tableEnv.getConfig()
+                .set(
+                        ExecutionConfigOptions.TABLE_EXEC_RESOURCE_EXTERNAL_BUFFER_MEMORY,
+                        MemorySize.parse("300 mb"));
+        tableEnv.loadPlan(PlanReference.fromJsonString(compiledJson)).execute().await();
+
+        assertResult(
+                Arrays.asList("+I[1, 10, one]", "+I[3, 30, three]"),
+                TestValuesTableFactory.getResultsAsStrings("sink_t"));
+    }
+
+    private void createAdaptiveJoinTables() {
+        // keep the table options, which contain a generated data id, out of the compared plans
+        tableEnv.getConfig()
+                .set(
+                        TableConfigOptions.PLAN_COMPILE_CATALOG_OBJECTS,
+                        TableConfigOptions.CatalogPlanCompilation.SCHEMA);
+        tableEnv.executeSql(
+                String.format(
+                        "CREATE TABLE t1 (a INT, b BIGINT) WITH ("
+                                + "'connector' = 'values', 'bounded' = 'true', 'data-id' = '%s')",
+                        TestValuesTableFactory.registerData(
+                                Arrays.asList(Row.of(1, 10L), Row.of(2, 20L), Row.of(3, 30L)))));
+        tableEnv.executeSql(
+                String.format(
+                        "CREATE TABLE t2 (x INT, y STRING) WITH ("
+                                + "'connector' = 'values', 'bounded' = 'true', 'data-id' = '%s')",
+                        TestValuesTableFactory.registerData(
+                                Arrays.asList(
+                                        Row.of(1, "one"), Row.of(3, "three"), Row.of(4, "four")))));
+        tableEnv.executeSql(
+                "CREATE TABLE sink_t (a INT, b BIGINT, y STRING) WITH ("
+                        + "'connector' = 'values', 'sink-insert-only' = 'false')");
+    }
+
     private File createSourceSinkTables() throws IOException {
         createTestCsvSourceTable("src", DATA, COLUMNS_DEFINITION);
         return createTestCsvSinkTable("sink", COLUMNS_DEFINITION);
@@ -441,5 +527,13 @@ class CompiledPlanITCase extends JsonPlanTestBase {
 
     private String getPreparedToCompareCompiledPlan(final String planAsString) {
         return TableTestUtil.replaceExecNodeId(TableTestUtil.replaceFlinkVersion(planAsString));
+    }
+
+    private String getPreparedToCompareBatchCompiledPlan(final String planAsString) {
+        // batch source scans get a random dynamic filtering listener id
+        return getPreparedToCompareCompiledPlan(planAsString)
+                .replaceAll(
+                        "\"dynamicFilteringDataListenerID\"\\s*:\\s*\"[\\w-]+\"",
+                        "\"dynamicFilteringDataListenerID\" : \"\"");
     }
 }

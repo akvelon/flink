@@ -546,13 +546,15 @@
     },
     "inputProperties" : [ {
       "requiredDistribution" : {
-        "type" : "UNKNOWN"
+        "type" : "HASH",
+        "keys" : [ 1, 2 ]
       },
       "damBehavior" : "PIPELINED",
       "priority" : 0
     }, {
       "requiredDistribution" : {
-        "type" : "UNKNOWN"
+        "type" : "HASH",
+        "keys" : [ 2, 1 ]
       },
       "damBehavior" : "PIPELINED",
       "priority" : 0
@@ -690,14 +692,10 @@
         "type" : "ProjectPushDown",
         "projectedFields" : [ [ 1 ], [ 2 ] ],
         "producedType" : "ROW<`c1` DOUBLE NOT NULL, `c2` VARCHAR(2147483647) NOT NULL> NOT NULL"
-      }, {
-        "type" : "ReadingMetadata",
-        "metadataKeys" : [ ],
-        "producedType" : "ROW<`c1` DOUBLE NOT NULL, `c2` VARCHAR(2147483647) NOT NULL> NOT NULL"
       } ]
     },
     "outputType" : "ROW<`c1` DOUBLE NOT NULL, `c2` VARCHAR(2147483647) NOT NULL>",
-    "description" : "TableSourceScan(table=[[default_catalog, default_database, no_delete_src3, project=[c1, c2], metadata=[]]], fields=[c1, c2])"
+    "description" : "TableSourceScan(table=[[default_catalog, default_database, no_delete_src3, project=[c1, c2]]], fields=[c1, c2])"
   }, {
     "id" : 11,
     "type" : "stream-exec-drop-update-before_1",
@@ -766,14 +764,10 @@
         "type" : "ProjectPushDown",
         "projectedFields" : [ [ 1 ], [ 2 ] ],
         "producedType" : "ROW<`d1` DOUBLE NOT NULL, `d2` VARCHAR(2147483647) NOT NULL> NOT NULL"
-      }, {
-        "type" : "ReadingMetadata",
-        "metadataKeys" : [ ],
-        "producedType" : "ROW<`d1` DOUBLE NOT NULL, `d2` VARCHAR(2147483647) NOT NULL> NOT NULL"
       } ]
     },
     "outputType" : "ROW<`d1` DOUBLE NOT NULL, `d2` VARCHAR(2147483647) NOT NULL>",
-    "description" : "TableSourceScan(table=[[default_catalog, default_database, no_delete_src4, project=[d1, d2], metadata=[]]], fields=[d1, d2])"
+    "description" : "TableSourceScan(table=[[default_catalog, default_database, no_delete_src4, project=[d1, d2]]], fields=[d1, d2])"
   }, {
     "id" : 14,
     "type" : "stream-exec-drop-update-before_1",
@@ -916,10 +910,6 @@
                 "type" : "ProjectPushDown",
                 "projectedFields" : [ [ 1 ], [ 2 ] ],
                 "producedType" : "ROW<`d1` DOUBLE NOT NULL, `d2` VARCHAR(2147483647) NOT NULL> NOT NULL"
-              }, {
-                "type" : "ReadingMetadata",
-                "metadataKeys" : [ ],
-                "producedType" : "ROW<`d1` DOUBLE NOT NULL, `d2` VARCHAR(2147483647) NOT NULL> NOT NULL"
               } ]
             },
             "outputType" : "ROW<`d1` DOUBLE NOT NULL, `d2` VARCHAR(2147483647) NOT NULL> NOT NULL"
@@ -1008,10 +998,6 @@
                 "type" : "ProjectPushDown",
                 "projectedFields" : [ [ 1 ], [ 2 ] ],
                 "producedType" : "ROW<`c1` DOUBLE NOT NULL, `c2` VARCHAR(2147483647) NOT NULL> NOT NULL"
-              }, {
-                "type" : "ReadingMetadata",
-                "metadataKeys" : [ ],
-                "producedType" : "ROW<`c1` DOUBLE NOT NULL, `c2` VARCHAR(2147483647) NOT NULL> NOT NULL"
               } ]
             },
             "outputType" : "ROW<`c1` DOUBLE NOT NULL, `c2` VARCHAR(2147483647) NOT NULL> NOT NULL"
@@ -1095,10 +1081,6 @@
           "type" : "ProjectPushDown",
           "projectedFields" : [ [ 1 ], [ 2 ] ],
           "producedType" : "ROW<`c1` DOUBLE NOT NULL, `c2` VARCHAR(2147483647) NOT NULL> NOT NULL"
-        }, {
-          "type" : "ReadingMetadata",
-          "metadataKeys" : [ ],
-          "producedType" : "ROW<`c1` DOUBLE NOT NULL, `c2` VARCHAR(2147483647) NOT NULL> NOT NULL"
         } ]
       },
       "outputType" : "ROW<`c1` DOUBLE NOT NULL, `c2` VARCHAR(2147483647) NOT NULL> NOT NULL"
@@ -1142,10 +1124,6 @@
         "abilities" : [ {
           "type" : "ProjectPushDown",
           "projectedFields" : [ [ 1 ], [ 2 ] ],
-          "producedType" : "ROW<`d1` DOUBLE NOT NULL, `d2` VARCHAR(2147483647) NOT NULL> NOT NULL"
-        }, {
-          "type" : "ReadingMetadata",
-          "metadataKeys" : [ ],
           "producedType" : "ROW<`d1` DOUBLE NOT NULL, `d2` VARCHAR(2147483647) NOT NULL> NOT NULL"
         } ]
       },
@@ -1235,13 +1213,15 @@
     },
     "inputProperties" : [ {
       "requiredDistribution" : {
-        "type" : "UNKNOWN"
+        "type" : "HASH",
+        "keys" : [ 0, 1 ]
       },
       "damBehavior" : "PIPELINED",
       "priority" : 0
     }, {
       "requiredDistribution" : {
-        "type" : "UNKNOWN"
+        "type" : "HASH",
+        "keys" : [ 0, 1 ]
       },
       "damBehavior" : "PIPELINED",
       "priority" : 0
@@ -1400,10 +1380,6 @@
                 "type" : "ProjectPushDown",
                 "projectedFields" : [ [ 1 ], [ 2 ] ],
                 "producedType" : "ROW<`d1` DOUBLE NOT NULL, `d2` VARCHAR(2147483647) NOT NULL> NOT NULL"
-              }, {
-                "type" : "ReadingMetadata",
-                "metadataKeys" : [ ],
-                "producedType" : "ROW<`d1` DOUBLE NOT NULL, `d2` VARCHAR(2147483647) NOT NULL> NOT NULL"
               } ]
             },
             "outputType" : "ROW<`d1` DOUBLE NOT NULL, `d2` VARCHAR(2147483647) NOT NULL> NOT NULL"
@@ -1468,10 +1444,6 @@
               "abilities" : [ {
                 "type" : "ProjectPushDown",
                 "projectedFields" : [ [ 1 ], [ 2 ] ],
-                "producedType" : "ROW<`c1` DOUBLE NOT NULL, `c2` VARCHAR(2147483647) NOT NULL> NOT NULL"
-              }, {
-                "type" : "ReadingMetadata",
-                "metadataKeys" : [ ],
                 "producedType" : "ROW<`c1` DOUBLE NOT NULL, `c2` VARCHAR(2147483647) NOT NULL> NOT NULL"
               } ]
             },
@@ -1783,10 +1755,6 @@
           "type" : "ProjectPushDown",
           "projectedFields" : [ [ 1 ], [ 2 ] ],
           "producedType" : "ROW<`c1` DOUBLE NOT NULL, `c2` VARCHAR(2147483647) NOT NULL> NOT NULL"
-        }, {
-          "type" : "ReadingMetadata",
-          "metadataKeys" : [ ],
-          "producedType" : "ROW<`c1` DOUBLE NOT NULL, `c2` VARCHAR(2147483647) NOT NULL> NOT NULL"
         } ]
       },
       "outputType" : "ROW<`c1` DOUBLE NOT NULL, `c2` VARCHAR(2147483647) NOT NULL> NOT NULL"
@@ -1830,10 +1798,6 @@
         "abilities" : [ {
           "type" : "ProjectPushDown",
           "projectedFields" : [ [ 1 ], [ 2 ] ],
-          "producedType" : "ROW<`d1` DOUBLE NOT NULL, `d2` VARCHAR(2147483647) NOT NULL> NOT NULL"
-        }, {
-          "type" : "ReadingMetadata",
-          "metadataKeys" : [ ],
           "producedType" : "ROW<`d1` DOUBLE NOT NULL, `d2` VARCHAR(2147483647) NOT NULL> NOT NULL"
         } ]
       },
@@ -2121,13 +2085,15 @@
     },
     "inputProperties" : [ {
       "requiredDistribution" : {
-        "type" : "UNKNOWN"
+        "type" : "HASH",
+        "keys" : [ 4, 5 ]
       },
       "damBehavior" : "PIPELINED",
       "priority" : 0
     }, {
       "requiredDistribution" : {
-        "type" : "UNKNOWN"
+        "type" : "HASH",
+        "keys" : [ 0, 1 ]
       },
       "damBehavior" : "PIPELINED",
       "priority" : 0

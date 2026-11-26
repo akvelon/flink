@@ -254,7 +254,6 @@ DataStream<KeyedState> keyRange = savepoint.readKeyedState(
 * `SavepointKeyFilter.exact(K key)` / `SavepointKeyFilter.exact(Set<K> keys)` — match a single key or a finite set of keys.
 * `SavepointKeyFilter.range(K lower, boolean lowerInclusive, K upper, boolean upperInclusive)` — match a range; `K` must implement `Comparable<K>`. Either bound may be `null` to leave that side unbounded.
 * `SavepointKeyFilter.range(K lower, boolean lowerInclusive, K upper, boolean upperInclusive, SerializableComparator<K> comparator)` — same, but with an explicit comparator for key types that do not implement `Comparable<K>`. The comparator must be serializable because the filter is shipped with the job; lambdas and method references assigned to `SerializableComparator` satisfy this automatically.
-* `SavepointKeyFilter.empty()` — match no keys. Not intended for direct use — it only serves as an internal building block for the Table API filter pushdown.
 
 When the built-in filters are not enough, you can implement the `SavepointKeyFilter<K>` interface yourself.
 For use with the DataStream API, only `test(K key)` has to be implemented; it is called for every key in each opened split and decides whether that key will be read.
@@ -313,8 +312,6 @@ DataStream<KeyedState> firstKeys = savepoint.readKeyedState(
     TypeInformation.of(KeyedState.class),
     new UpToKeyFilter(100));
 ```
-
-The remaining interface methods can be left at their defaults for DataStream API usage, as they are only used internally in the Table API during push-down handling.
 
 ### 窗口状态 Window State
 
@@ -451,12 +448,12 @@ public class SimpleBootstrapFunction extends StateBootstrapFunction<Integer> {
 	
     @Override
     public void initializeState(FunctionInitializationContext context) throws Exception {
-        state = context.getOperatorState().getListState(new ListStateDescriptor<>("state", Types.INT));
+        state = context.getOperatorStateStore().getListState(new ListStateDescriptor<>("state", Types.INT));
     }
 }
 
 StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
-DataStream<Integer> data = env.fromElements(1, 2, 3);
+DataStream<Integer> data = env.fromData(1, 2, 3);
 
 StateBootstrapTransformation transformation = OperatorTransformation
     .bootstrapWith(data)
@@ -472,6 +469,13 @@ public class CurrencyRate {
     public String currency;
 
     public Double rate;
+
+    public CurrencyRate() {}
+
+    public CurrencyRate(String currency, Double rate) {
+        this.currency = currency;
+        this.rate = rate;
+    }
 }
 
 public class CurrencyBootstrapFunction extends BroadcastStateBootstrapFunction<CurrencyRate> {
@@ -485,7 +489,7 @@ public class CurrencyBootstrapFunction extends BroadcastStateBootstrapFunction<C
     }
 }
 
-DataStream<CurrencyRate> currencyDataSet = env.fromCollection(
+DataStream<CurrencyRate> currencyDataSet = env.fromData(
     new CurrencyRate("USD", 1.0), new CurrencyRate("EUR", 1.3));
 
 StateBootstrapTransformation<CurrencyRate> broadcastTransformation = OperatorTransformation
@@ -523,7 +527,7 @@ public class AccountBootstrapper extends KeyedStateBootstrapFunction<Integer, Ac
  
 StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
 
-DataStream<Account> accountDataSet = env.fromCollection(accounts);
+DataStream<Account> accountDataSet = env.fromData(accounts);
 
 StateBootstrapTransformation<Account> transformation = OperatorTransformation
     .bootstrapWith(accountDataSet)
@@ -554,7 +558,7 @@ public class Account {
  
 StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
 
-DataStream<Account> accountDataSet = env.fromCollection(accounts);
+DataStream<Account> accountDataSet = env.fromData(accounts);
 
 StateBootstrapTransformation<Account> transformation = OperatorTransformation
     .bootstrapWith(accountDataSet)
@@ -767,3 +771,167 @@ then it can be overridden with the two mentioned config parameters on a per-colu
 
 SHORTCUT: When a complex java class is defined in a column with STRING SQL type then the class instance
 `toString` method result will be the column value. This can be useful when a quick explanatory query is required.
+
+## State Catalog
+
+The `state` catalog is a read-only catalog that finds savepoints and checkpoints in one or more directories and exposes their state as tables.
+Table schemas are inferred from the snapshot, so you don't need `CREATE TABLE` statements or the job's POJO or Avro classes on the classpath.
+
+The catalog is part of `flink-state-processor-api`. For the SQL Client, copy the jar from `${FLINK_HOME}/opt/` to `${FLINK_HOME}/lib/`.
+
+```sql
+SET 'execution.runtime-mode' = 'batch';
+LOAD MODULE state;  -- needed for the metadata view
+
+CREATE CATALOG state WITH (
+  'type' = 'state',
+  'directory.my-app' = 's3://my-bucket/flink/my-app',
+  'directory.staging' = '/savepoints/staging'
+);
+```
+
+### Catalog Options
+
+| Option                  | Required | Default | Type    | Description |
+|-------------------------|----------|---------|---------|-------------|
+| type                    | required | (none)  | String  | Must be `'state'`. |
+| directory.&lt;label&gt; | required | (none)  | String  | A directory to search for savepoints and checkpoints, on any file system Flink supports. `<label>` becomes the first part of the database names. Set at least one. A directory can't be configured twice or be inside another configured directory. |
+| listing-parallelism     | optional | 10      | Integer | Maximum number of concurrent directory listings while searching for snapshots. Increase it for remote file systems such as S3. |
+| db-name.include-ts      | optional | true    | Boolean | Whether database names include the snapshot creation time, for example `my-app/2026-07-22T10:30:45Z/savepoint-acce1c-1a2b3c4d5e6f` instead of `my-app/savepoint-acce1c-1a2b3c4d5e6f`. |
+
+The directories are searched again every time databases are listed, for example on `SHOW DATABASES`, so new snapshots show up without recreating the catalog.
+
+### Catalog Layout
+
+Each directory that contains a `_metadata` file becomes a database, and each operator state becomes a table:
+
+- `state` (catalog)
+  - `my-app/2026-07-22T10:30:45Z/checkpoints/a1b2c3d4e5f6/chk-42` (database: a checkpoint)
+    - `metadata` (view: one row per operator)
+    - `uid_counter_keyed` (all keyed state of the operator with UID `counter`)
+    - `uid_counter_events_keyed_flat` (keyed `ListState` `events`, one row per element)
+    - `uid_session-window_windowed` (window state of the operator with UID `session-window`)
+    - `uid_source_offsets_list` (operator `ListState` `offsets`)
+    - ...
+  - `my-app/2026-07-23T08:00:00Z/savepoints/savepoint-acce1c-1a2b3c4d5e6f` (database: a savepoint)
+    - ...
+  - `staging/2026-07-21T12:15:00Z/savepoint-bd31a2-6f5e4d3c2b1a` (database from the second directory)
+    - ...
+
+Database names are `<label>/<creation time>/<path relative to the directory>`. The creation time is the modification time of the `_metadata` file in UTC.
+Names contain characters such as `/`, `:` and `-`, so quote them with backticks:
+
+```sql
+USE CATALOG state;
+SHOW DATABASES;
+
+USE `my-app/2026-07-22T10:30:45Z/checkpoints/a1b2c3d4e5f6/chk-42`;
+SHOW TABLES;
+
+SELECT * FROM metadata;
+SELECT * FROM `uid_counter_keyed` WHERE state_key = 42;
+```
+
+### State Type to Table Mapping
+
+`<op>` is `uid_<operator uid>`, or `id_<operator uid hash>` for operators without a UID. `<state>` is the name in the state descriptor.
+
+| State type | Table | Columns | Primary key |
+|------------|-------|---------|-------------|
+| Keyed state | `<op>_keyed` | `state_key`, then one column per state, for example `my_val_state` (`ValueState<T>` as `T`), `my_list_state` (`ListState<T>` as `ARRAY<T>`), `my_map_state` (`MapState<K, V>` as `MAP<K, V>`) | `state_key` |
+| Keyed `ListState`, flattened | `<op>_<state>_keyed_flat` | `state_key`, `list_index`, `list_value` | `state_key`, `list_index` |
+| Keyed `MapState`, flattened | `<op>_<state>_keyed_flat` | `state_key`, `map_key`, `map_value` | `state_key`, `map_key` |
+| Window state | `<op>_windowed` | `state_key`, `state_window`, then one column per state, for example `my_val_state` (`ValueState<T>` as `T`), `my_list_state` (`ListState<T>` as `ARRAY<T>`), `my_map_state` (`MapState<K, V>` as `MAP<K, V>`) | `state_key`, `state_window` |
+| Window `ListState`, flattened | `<op>_<state>_windowed_flat` | `state_key`, `state_window`, `list_index`, `list_value` | `state_key`, `state_window`, `list_index` |
+| Window `MapState`, flattened | `<op>_<state>_windowed_flat` | `state_key`, `state_window`, `map_key`, `map_value` | `state_key`, `state_window`, `map_key` |
+| Operator `ListState` | `<op>_<state>_list` | one row per element | none |
+| Operator union `ListState` | `<op>_<state>_union` | one row per element | none |
+| `BroadcastState` | `<op>_<state>_broadcast` | `map_key`, `map_value` | `map_key` |
+| Snapshot metadata | `metadata` (view) | same as [`savepoint_metadata`](#metadata) | none |
+
+### Examples
+
+**Keyed state**
+
+```java
+stream.keyBy(e -> e.id)
+    .process(new MyKeyedFunction())  // ValueState<Long> "count", ListState<Long> "events", MapState<Long, Long> "attributes"
+    .uid("counter");
+```
+
+```sql
+-- One row per key, ListState and MapState as ARRAY and MAP columns
+SELECT state_key, `count`, events, attributes FROM `uid_counter_keyed`;
+
+-- One row per list element of key 3
+SELECT state_key, list_index, list_value FROM `uid_counter_events_keyed_flat` WHERE state_key = 3;
+
+-- One row per map entry
+SELECT state_key, map_key, map_value FROM `uid_counter_attributes_keyed_flat`;
+```
+
+**Window state**
+
+```java
+stream.keyBy(t -> t.f0)
+    .window(EventTimeSessionWindows.withGap(Duration.ofSeconds(5)))
+    .reduce((a, b) -> Tuple2.of(a.f0, a.f1 + b.f1))
+    .uid("session-window");
+
+stream.keyBy(t -> t.f0)
+    .window(TumblingEventTimeWindows.of(Duration.ofSeconds(5)))
+    .process(new MyProcessWindowFunction())
+    .uid("tumbling-window");
+```
+
+```sql
+-- The reduced value of each open window
+SELECT state_key, state_window, `window-contents` FROM `uid_session-window_windowed`;
+
+-- The buffered elements of each window, one row per element
+SELECT * FROM `uid_tumbling-window_window-contents_windowed_flat` ORDER BY list_index;
+```
+
+**Operator and broadcast state**
+
+```java
+public class MyStatefulMap extends RichMapFunction<Integer, Integer> implements CheckpointedFunction {
+  @Override
+  public void initializeState(FunctionInitializationContext context) throws Exception {
+    OperatorStateStore store = context.getOperatorStateStore();
+    listState = store.getListState(new ListStateDescriptor<>("list-values", Integer.class));
+    unionState = store.getUnionListState(new ListStateDescriptor<>("union-values", MyPojo.class));  // fields: name, score
+    broadcastState = store.getBroadcastState(new MapStateDescriptor<>("broadcast-values", Integer.class, String.class));
+  }
+  ...
+}
+
+stream.map(new MyStatefulMap()).uid("operator-state-writer");
+```
+
+```sql
+SELECT * FROM `uid_operator-state-writer_list-values_list`;
+-- +-------------+
+-- | list-values |
+-- +-------------+
+-- |          10 |
+-- |          20 |
+-- |          30 |
+-- +-------------+
+
+SELECT * FROM `uid_operator-state-writer_union-values_union`;
+-- +------+-------+
+-- | name | score |
+-- +------+-------+
+-- |    a |   100 |
+-- |    b |   200 |
+-- +------+-------+
+
+SELECT * FROM `uid_operator-state-writer_broadcast-values_broadcast` ORDER BY map_key;
+-- +---------+-----------+
+-- | map_key | map_value |
+-- +---------+-----------+
+-- |       1 |       one |
+-- |       2 |       two |
+-- +---------+-----------+
+```

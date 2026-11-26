@@ -23,7 +23,7 @@ under the License.
 	<parent>
 		<groupId>org.apache.flink</groupId>
 		<artifactId>flink-filesystems</artifactId>
-		<version>2.4-SNAPSHOT</version>
+		<version>2.5-SNAPSHOT</version>
 	</parent>
 
 	<artifactId>flink-s3-fs-base</artifactId>
@@ -31,6 +31,8 @@ under the License.
 	<packaging>jar</packaging>
 
 	<properties>
+		<!-- hadoop-aws 3.4 requires AWS SDK v2; stay on Hadoop 3.3 until the S3 filesystems are migrated (FLINK-30975) -->
+		<fs.hadoopshaded.version>3.3.4</fs.hadoopshaded.version>
 		<fs.s3.aws.version>1.12.779</fs.s3.aws.version>
 		<japicmp.skip>true</japicmp.skip>
 		<surefire.module.config> <!--

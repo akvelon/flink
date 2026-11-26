@@ -1,6 +1,6 @@
 ---
 title: "Catalogs"
-weight: 5
+weight: 7
 type: docs
 aliases:
   - /zh/dev/table/catalogs.html
@@ -54,6 +54,11 @@ Flink 的 [Hive 文档]({{< ref "docs/connectors/table/hive/overview" >}}) 提�
 
 
 <span class="label label-danger">警告</span> Hive Metastore 以小写形式存储所有元数据对象名称。而 `GenericInMemoryCatalog` 区分大小写。
+
+### StateCatalog
+
+`StateCatalog` 是一个只读 Catalog，它将 savepoint 和 checkpoint 中的状态以表的形式暴露出来，每个快照对应一个数据库。
+参考 [State Catalog 文档]({{< ref "docs/libs/state_processor_api" >}}#state-catalog) 获取关于配置 State Catalog 的详细信息。
 
 ### 用户自定义 Catalog
 
@@ -122,11 +127,12 @@ public class MyDynamicTableFactory implements DynamicTableSourceFactory {
 ```java
 TableEnvironment tableEnv = ...;
 
-// Create a HiveCatalog 
-Catalog catalog = new HiveCatalog("myhive", null, "<path_of_hive_conf>");
-
-// Register the catalog
-tableEnv.registerCatalog("myhive", catalog);
+// Create and register a HiveCatalog
+tableEnv.createCatalog(
+    "myhive",
+    CatalogDescriptor.of(
+        "myhive",
+        Configuration.fromMap(Map.of("type", "hive", "hive-conf-dir", "<path_of_hive_conf>"))));
 
 // Create a catalog database
 tableEnv.executeSql("CREATE DATABASE mydb WITH (...)");
@@ -202,20 +208,24 @@ mytable
 {{< tabs "f491601e-d053-4ccb-9e14-203154f01b82" >}}
 {{< tab "Java" >}}
 ```java
+import java.util.List;
+import java.util.Map;
+import org.apache.flink.configuration.Configuration;
 import org.apache.flink.table.api.*;
 import org.apache.flink.table.catalog.*;
-import org.apache.flink.table.catalog.hive.HiveCatalog;
 
 TableEnvironment tableEnv = TableEnvironment.create(EnvironmentSettings.inStreamingMode());
 
-// Create a HiveCatalog
-Catalog catalog = new HiveCatalog("myhive", null, "<path_of_hive_conf>");
-
-// Register the catalog
-tableEnv.registerCatalog("myhive", catalog);
+// Create and register a HiveCatalog
+tableEnv.createCatalog(
+    "myhive",
+    CatalogDescriptor.of(
+        "myhive",
+        Configuration.fromMap(Map.of("type", "hive", "hive-conf-dir", "<path_of_hive_conf>"))));
+Catalog catalog = tableEnv.getCatalog("myhive").get();
 
 // Create a catalog database
-catalog.createDatabase("mydb", new CatalogDatabaseImpl(...));
+catalog.createDatabase("mydb", new CatalogDatabaseImpl(...), false);
 
 // Create a catalog table
 final Schema schema = Schema.newBuilder()
@@ -268,7 +278,6 @@ val tables = catalog.listTables("mydb") // tables should contain "mytable"
 ```python
 from pyflink.table import *
 from pyflink.table.catalog import HiveCatalog, CatalogDatabase, ObjectPath, CatalogBaseTable
-from pyflink.table.descriptors import Kafka
 
 settings = EnvironmentSettings.in_batch_mode()
 t_env = TableEnvironment.create(settings)
@@ -328,7 +337,7 @@ catalog.getDatabase("mydb");
 catalog.databaseExists("mydb");
 
 // list databases in a catalog
-catalog.listDatabases("mycatalog");
+catalog.listDatabases();
 ```
 {{< /tab >}}
 {{< tab "Python" >}}
@@ -372,13 +381,13 @@ catalog.dropTable(new ObjectPath("mydb", "mytable"), false);
 catalog.alterTable(new ObjectPath("mydb", "mytable"), CatalogTable.newBuilder()...build(), false);
 
 // rename table
-catalog.renameTable(new ObjectPath("mydb", "mytable"), "my_new_table");
+catalog.renameTable(new ObjectPath("mydb", "mytable"), "my_new_table", false);
 
 // get table
-catalog.getTable("mytable");
+catalog.getTable(new ObjectPath("mydb", "mytable"));
 
 // check if a table exist or not
-catalog.tableExists("mytable");
+catalog.tableExists(new ObjectPath("mydb", "mytable"));
 
 // list tables in a database
 catalog.listTables("mydb");
@@ -388,17 +397,16 @@ catalog.listTables("mydb");
 ```python
 from pyflink.table import *
 from pyflink.table.catalog import CatalogBaseTable, ObjectPath
-from pyflink.table.descriptors import Kafka
 
 table_schema = TableSchema.builder() \
     .field("name", DataTypes.STRING()) \
     .field("age", DataTypes.INT()) \
     .build()
 
-table_properties = Kafka() \
-    .version("0.11") \
-    .start_from_earlist() \
-    .to_properties()
+table_properties = {
+    "connector": "kafka",
+    "scan.startup.mode": "earliest-offset"
+}
 
 catalog_table = CatalogBaseTable.create_table(schema=table_schema, properties=table_properties, comment="my comment")
 
@@ -412,13 +420,13 @@ catalog.drop_table(ObjectPath("mydb", "mytable"), False)
 catalog.alter_table(ObjectPath("mydb", "mytable"), catalog_table, False)
 
 # rename table
-catalog.rename_table(ObjectPath("mydb", "mytable"), "my_new_table")
+catalog.rename_table(ObjectPath("mydb", "mytable"), "my_new_table", False)
 
 # get table
-catalog.get_table("mytable")
+catalog.get_table(ObjectPath("mydb", "mytable"))
 
 # check if a table exist or not
-catalog.table_exists("mytable")
+catalog.table_exists(ObjectPath("mydb", "mytable"))
 
 # list tables in a database
 catalog.list_tables("mydb")
@@ -444,10 +452,10 @@ catalog.alterTable(new ObjectPath("mydb", "mytable"), new CatalogViewImpl(...), 
 catalog.renameTable(new ObjectPath("mydb", "myview"), "my_new_view", false);
 
 // get view
-catalog.getTable("myview");
+catalog.getTable(new ObjectPath("mydb", "myview"));
 
 // check if a view exist or not
-catalog.tableExists("mytable");
+catalog.tableExists(new ObjectPath("mydb", "myview"));
 
 // list views in a database
 catalog.listViews("mydb");
@@ -483,10 +491,10 @@ catalog.alter_table(ObjectPath("mydb", "mytable"), catalog_table, False)
 catalog.rename_table(ObjectPath("mydb", "myview"), "my_new_view", False)
 
 # get view
-catalog.get_table("myview")
+catalog.get_table(ObjectPath("mydb", "myview"))
 
 # check if a view exist or not
-catalog.table_exists("mytable")
+catalog.table_exists(ObjectPath("mydb", "myview"))
 
 # list views in a database
 catalog.list_views("mydb")
@@ -587,10 +595,10 @@ catalog.dropFunction(new ObjectPath("mydb", "myfunc"), false);
 catalog.alterFunction(new ObjectPath("mydb", "myfunc"), new CatalogFunctionImpl(...), false);
 
 // get function
-catalog.getFunction("myfunc");
+catalog.getFunction(new ObjectPath("mydb", "myfunc"));
 
 // check if a function exist or not
-catalog.functionExists("myfunc");
+catalog.functionExists(new ObjectPath("mydb", "myfunc"));
 
 // list functions in a database
 catalog.listFunctions("mydb");
@@ -612,10 +620,10 @@ catalog.drop_function(ObjectPath("mydb", "myfunc"), False)
 catalog.alter_function(ObjectPath("mydb", "myfunc"), catalog_function, False)
 
 # get function
-catalog.get_function("myfunc")
+catalog.get_function(ObjectPath("mydb", "myfunc"))
 
 # check if a function exist or not
-catalog.function_exists("myfunc")
+catalog.function_exists(ObjectPath("mydb", "myfunc"))
 
 # list functions in a database
 catalog.list_functions("mydb")
@@ -634,12 +642,21 @@ catalog.list_functions("mydb")
 {{< tabs "b9ea0237-4684-49cd-9d02-ff3f2487a512" >}}
 {{< tab "Java/Scala" >}}
 ```java
-tableEnv.registerCatalog(new CustomCatalog("myCatalog"));
+tableEnv.createCatalog(
+    "myCatalog",
+    CatalogDescriptor.of(
+        "myCatalog",
+        Configuration.fromMap(Map.of("type", "generic_in_memory"))));
 ```
 {{< /tab >}}
 {{< tab "Python" >}}
 ```python
-t_env.register_catalog(catalog)
+from pyflink.common import Configuration
+from pyflink.table.catalog import CatalogDescriptor
+
+conf = Configuration()
+conf.set_string("type", "generic_in_memory")
+t_env.create_catalog("myCatalog", CatalogDescriptor.of("myCatalog", conf))
 ```
 {{< /tab >}}
 {{< tab "YAML" >}}
@@ -961,7 +978,7 @@ public class CustomCatalogStoreFactory implements CatalogStoreFactory {
     
     @Override
     public CatalogStore createCatalogStore() {
-        return new CustomCatalogStore();
+        return new CustomCatalogStore(client);
     }
 
     @Override
@@ -984,7 +1001,7 @@ public class CustomCatalogStoreFactory implements CatalogStoreFactory {
     @Override
     public Set<ConfigOption<?>> requiredOptions() {
         // define the required options
-        Set<ConfigOption> options = new HashSet();
+        Set<ConfigOption<?>> options = new HashSet<>();
         options.add(OPTION_1);
         options.add(OPTION_2);
         
@@ -999,9 +1016,9 @@ public class CustomCatalogStoreFactory implements CatalogStoreFactory {
 
 public class CustomCatalogStore extends AbstractCatalogStore {
 
-    private Client client;
+    private CustomClient client;
     
-    public CustomCatalogStore(Client client) {
+    public CustomCatalogStore(CustomClient client) {
         this.client = client;
     }
 
